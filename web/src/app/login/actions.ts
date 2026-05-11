@@ -26,3 +26,19 @@ export async function sendMagicLink(formData: FormData) {
   }
   redirect(`/login?sent=${encodeURIComponent(email)}`);
 }
+
+export async function signInWithPassword(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+  if (!email || !password) {
+    redirect("/login?mode=password&error=missing-credentials");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    redirect(`/login?mode=password&error=${encodeURIComponent(error.message)}`);
+  }
+  redirect("/");
+}
