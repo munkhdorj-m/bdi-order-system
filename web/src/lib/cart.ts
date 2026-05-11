@@ -85,6 +85,8 @@ export function totalAmount(items?: CartItem[]): number {
   return (items ?? getCart()).reduce((sum, i) => sum + i.qty * i.unit_price, 0);
 }
 
+export { formatMnt } from "./format";
+
 export function useCart(): CartItem[] {
   const [items, setItems] = useState<CartItem[]>([]);
 
@@ -100,8 +102,4 @@ export function useCart(): CartItem[] {
   }, []);
 
   return items;
-}
-
-export function formatMnt(n: number): string {
-  return new Intl.NumberFormat("mn-MN").format(n) + "₮";
 }

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronRight, ClipboardList } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { formatMnt } from "@/lib/cart";
+import { formatMnt } from "@/lib/format";
 
 type OrderRow = {
   id: string;

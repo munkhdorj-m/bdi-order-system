@@ -4,7 +4,7 @@ import { Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth";
 import { QuickAddButton } from "@/components/buyer/quick-add-button";
-import { formatMnt } from "@/lib/cart";
+import { formatMnt } from "@/lib/format";
 
 type SearchParams = Promise<{ q?: string; category?: string }>;
 

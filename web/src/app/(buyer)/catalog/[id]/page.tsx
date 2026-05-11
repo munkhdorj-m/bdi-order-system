@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth";
 import { AddToCartForm } from "@/components/buyer/add-to-cart-form";
-import { formatMnt } from "@/lib/cart";
+import { formatMnt } from "@/lib/format";
 
 type Params = Promise<{ id: string }>;
 

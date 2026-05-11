@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { formatMnt } from "@/lib/cart";
+import { formatMnt } from "@/lib/format";
 
 type Params = Promise<{ id: string }>;
 
