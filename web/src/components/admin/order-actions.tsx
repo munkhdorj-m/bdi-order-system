@@ -13,8 +13,9 @@ import {
   advanceOrderStatus,
   cancelOrder,
   reopenOrder,
-  type Result,
 } from "@/app/admin/orders/actions";
+
+type Result = { error?: string };
 
 type Props = {
   orderId: string;

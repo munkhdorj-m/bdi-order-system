@@ -2,11 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import {
-  NEXT_STATUS,
-  type OrderStatus,
-  isFinal,
-} from "@/lib/order-status";
+import { NEXT_STATUS, type OrderStatus } from "@/lib/order-status";
 
 type Result = { error?: string };
 
@@ -49,6 +45,3 @@ async function setOrderStatus(
   revalidatePath("/admin");
   return {};
 }
-
-export type { Result };
-export { isFinal };
