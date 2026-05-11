@@ -1,0 +1,33 @@
+# Node / Next.js (web/ has its own .gitignore too)
+node_modules/
+.next/
+out/
+build/
+
+# Env files
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Local Claude Code settings (personal, not project config)
+.claude/settings.local.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Python (for the future xlsx import script)
+__pycache__/
+*.pyc
+.venv/
+venv/
