@@ -79,6 +79,7 @@ create table profiles (
   id              uuid primary key references auth.users(id) on delete cascade,
   full_name       text,
   phone           text,
+  email           text,  -- denormalized from auth.users for admin lookups
   role            user_role not null default 'buyer',
   supermarket_id  uuid references supermarkets(id) on delete set null,  -- buyers only
   active          boolean not null default true,
@@ -245,8 +246,8 @@ security definer
 set search_path = public, pg_temp
 as $$
 begin
-  insert into public.profiles (id, phone, role)
-  values (new.id, new.phone, 'buyer')
+  insert into public.profiles (id, phone, email, role)
+  values (new.id, new.phone, new.email, 'buyer')
   on conflict (id) do nothing;
   return new;
 end;

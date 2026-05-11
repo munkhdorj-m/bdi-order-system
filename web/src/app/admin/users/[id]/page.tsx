@@ -1,0 +1,59 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ChevronLeft } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { getSession } from "@/lib/auth";
+import { UserForm } from "@/components/admin/user-form";
+import { updateUser } from "../actions";
+
+type Params = Promise<{ id: string }>;
+
+export default async function EditUserPage({ params }: { params: Params }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const session = await getSession();
+
+  const [{ data: user }, { data: supermarkets }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, email, phone, full_name, role, supermarket_id, active")
+      .eq("id", id)
+      .single(),
+    supabase
+      .from("supermarkets")
+      .select("id, name")
+      .eq("active", true)
+      .order("name"),
+  ]);
+
+  if (!user) notFound();
+
+  const isSelf = session?.userId === id;
+  const update = updateUser.bind(null, id);
+
+  return (
+    <div className="max-w-2xl">
+      <Link
+        href="/admin/users"
+        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-4"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Хэрэглэгч жагсаалт руу
+      </Link>
+
+      <h1 className="text-2xl font-semibold tracking-tight mb-1">
+        {user.full_name || user.email || user.id.slice(0, 8)}
+      </h1>
+      <p className="text-sm text-muted-foreground mb-6">
+        {isSelf ? "Энэ та өөрөө байна." : "Энэ хэрэглэгчийн эрх, дэлгүүрийг тохируулна."}
+      </p>
+
+      <UserForm
+        defaults={user}
+        supermarkets={supermarkets ?? []}
+        action={update}
+        isSelf={isSelf}
+      />
+    </div>
+  );
+}
