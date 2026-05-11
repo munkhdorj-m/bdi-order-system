@@ -232,19 +232,33 @@ create trigger order_items_recompute_subtotal
 
 
 -- 4.4 auto-create profile row when a user signs up
-create or replace function handle_new_user()
-returns trigger language plpgsql security definer as $$
+--
+-- IMPORTANT: set search_path explicitly. SECURITY DEFINER inherits
+-- the caller's search_path (here: supabase_auth_admin), not the
+-- function owner's. Without this the function can't resolve the
+-- public.profiles reference and Supabase auth signup fails with
+-- "Database error saving new user".
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
 begin
-  insert into profiles (id, phone, role)
+  insert into public.profiles (id, phone, role)
   values (new.id, new.phone, 'buyer')
   on conflict (id) do nothing;
   return new;
 end;
 $$;
 
+-- Triggers on auth.users execute as supabase_auth_admin; it needs
+-- explicit EXECUTE on our trigger function.
+grant execute on function public.handle_new_user() to supabase_auth_admin;
+
 create trigger on_auth_user_created
   after insert on auth.users
-  for each row execute function handle_new_user();
+  for each row execute function public.handle_new_user();
 
 
 -- ============================================================
