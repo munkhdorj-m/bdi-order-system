@@ -1,33 +1,59 @@
-import { redirect } from "next/navigation";
-import { requireSession, homePathForRole } from "@/lib/auth";
-import { SignOutButton } from "@/components/SignOutButton";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { createClient } from "@/lib/supabase/server";
 
-export default async function AdminHome() {
-  const session = await requireSession();
-  if (session.profile.role !== "admin") {
-    redirect(homePathForRole(session.profile));
-  }
+export default async function AdminDashboard() {
+  const supabase = await createClient();
+  const { count: productCount } = await supabase
+    .from("products")
+    .select("*", { count: "exact", head: true });
+  const { count: supermarketCount } = await supabase
+    .from("supermarkets")
+    .select("*", { count: "exact", head: true });
+  const { count: orderCount } = await supabase
+    .from("orders")
+    .select("*", { count: "exact", head: true });
+
+  const stats = [
+    { label: "Бараа", value: productCount ?? 0 },
+    { label: "Дэлгүүр", value: supermarketCount ?? 0 },
+    { label: "Захиалга", value: orderCount ?? 0 },
+  ];
 
   return (
-    <main className="flex-1 px-6 py-12 max-w-3xl mx-auto w-full">
-      <header className="flex justify-between items-start mb-10">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-zinc-500">Admin</p>
-          <h1 className="text-3xl font-semibold tracking-tight">Дашбоард</h1>
-        </div>
-        <SignOutButton />
-      </header>
+    <div className="max-w-5xl">
+      <h1 className="text-2xl font-semibold tracking-tight mb-6">Дашбоард</h1>
 
-      <p className="text-zinc-500 mb-6">
-        Сайн уу, <span className="font-medium text-zinc-900 dark:text-zinc-100">{session.email}</span>.
-        Та admin эрхтэй нэвтэрсэн байна.
-      </p>
-
-      <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-6">
-        <p className="text-sm text-zinc-500">
-          Phase 2: бараа, дэлгүүр, үнэ удирдах хэсэг энд хийгдэнэ.
-        </p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        {stats.map((s) => (
+          <Card key={s.label}>
+            <CardHeader className="pb-2">
+              <CardDescription>{s.label}</CardDescription>
+              <CardTitle className="text-3xl">{s.value}</CardTitle>
+            </CardHeader>
+          </Card>
+        ))}
       </div>
-    </main>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Тавтай морил</CardTitle>
+          <CardDescription>
+            Phase 2 — бараа, дэлгүүр, үнэ удирдах хэсэг бүтэгдэж байна.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          <p>
+            Зүүн талын цэснээс хүссэн хэсгээ сонгоно уу. Эхэлж <strong>Бараа</strong> хэсгээр орох
+            эсвэл импорт хийх бол доорх удирдамжийг үзнэ үү.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

@@ -31,3 +31,6 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Generated SQL from import_xlsx.py (regenerable from the xlsx)
+scripts/products_import.sql
