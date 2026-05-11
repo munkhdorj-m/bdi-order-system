@@ -295,13 +295,33 @@ alter table order_items     enable row level security;
 
 
 -- 6.1 helper functions used by policies
+--
+-- IMPORTANT: both helpers are SECURITY DEFINER so they execute
+-- with the function owner's privileges (postgres) and bypass
+-- RLS. Without this, the RLS policy on profiles would call
+-- current_role_value(), which queries profiles, which triggers
+-- the policy again → infinite recursion → "stack depth limit
+-- exceeded" error.
+--
+-- search_path is locked down to prevent schema-poisoning attacks
+-- (standard Supabase RLS hygiene).
 create or replace function current_role_value()
-returns user_role language sql stable as $$
+returns user_role
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
   select role from profiles where id = auth.uid();
 $$;
 
 create or replace function current_supermarket()
-returns uuid language sql stable as $$
+returns uuid
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
   select supermarket_id from profiles where id = auth.uid();
 $$;
 
