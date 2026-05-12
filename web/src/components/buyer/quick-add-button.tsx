@@ -2,19 +2,20 @@
 
 import { useState } from "react";
 import { Plus, Check } from "lucide-react";
-import { addToCart, type CartItem } from "@/lib/cart";
+import { addToCart, type CartItem, type CartScope } from "@/lib/cart";
 
 type Props = {
   product: Omit<CartItem, "qty">;
+  scope?: CartScope;
 };
 
-export function QuickAddButton({ product }: Props) {
+export function QuickAddButton({ product, scope }: Props) {
   const [added, setAdded] = useState(false);
 
   function handleClick(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    addToCart(product, 1);
+    addToCart(product, 1, scope);
     setAdded(true);
     setTimeout(() => setAdded(false), 1200);
   }

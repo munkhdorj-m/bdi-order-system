@@ -3,26 +3,28 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Minus, Plus, ShoppingCart, Check } from "lucide-react";
-import { addToCart, type CartItem } from "@/lib/cart";
+import { addToCart, type CartItem, type CartScope } from "@/lib/cart";
 
 type Props = {
   product: Omit<CartItem, "qty">;
+  scope?: CartScope;
+  cartHref?: string;
 };
 
-export function AddToCartForm({ product }: Props) {
+export function AddToCartForm({ product, scope, cartHref = "/cart" }: Props) {
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
   const router = useRouter();
 
   function handleAdd() {
-    addToCart(product, qty);
+    addToCart(product, qty, scope);
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
   }
 
   function handleAddAndGoToCart() {
-    addToCart(product, qty);
-    router.push("/cart");
+    addToCart(product, qty, scope);
+    router.push(cartHref);
   }
 
   return (
@@ -81,7 +83,7 @@ export function AddToCartForm({ product }: Props) {
         onClick={handleAddAndGoToCart}
         className="w-full h-10 rounded-full border bg-background hover:bg-muted text-sm font-medium"
       >
-        Сагс руу шилжих
+        Сагсаа харах
       </button>
     </div>
   );
