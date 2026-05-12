@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Minus, Plus, ShoppingCart, Check } from "lucide-react";
+import { Minus, Plus, ShoppingCart } from "lucide-react";
+import { toast } from "sonner";
 import { addToCart, type CartItem, type CartScope } from "@/lib/cart";
 
 type Props = {
@@ -13,13 +14,17 @@ type Props = {
 
 export function AddToCartForm({ product, scope, cartHref = "/cart" }: Props) {
   const [qty, setQty] = useState(1);
-  const [added, setAdded] = useState(false);
   const router = useRouter();
 
   function handleAdd() {
     addToCart(product, qty, scope);
-    setAdded(true);
-    setTimeout(() => setAdded(false), 1500);
+    toast.success(`Сагсанд ${qty} ширхэг нэмлээ`, {
+      description: product.name,
+      action: {
+        label: "Сагс үзэх",
+        onClick: () => router.push(cartHref),
+      },
+    });
   }
 
   function handleAddAndGoToCart() {
@@ -34,7 +39,7 @@ export function AddToCartForm({ product, scope, cartHref = "/cart" }: Props) {
           type="button"
           onClick={() => setQty(Math.max(1, qty - 1))}
           aria-label="Хасах"
-          className="size-10 rounded-full border bg-background flex items-center justify-center hover:bg-muted"
+          className="size-10 rounded-full border bg-background flex items-center justify-center hover:bg-muted active:scale-95 transition-all"
         >
           <Minus className="h-4 w-4" />
         </button>
@@ -50,7 +55,7 @@ export function AddToCartForm({ product, scope, cartHref = "/cart" }: Props) {
           type="button"
           onClick={() => setQty(qty + 1)}
           aria-label="Нэмэх"
-          className="size-10 rounded-full border bg-background flex items-center justify-center hover:bg-muted"
+          className="size-10 rounded-full border bg-background flex items-center justify-center hover:bg-muted active:scale-95 transition-all"
         >
           <Plus className="h-4 w-4" />
         </button>
@@ -59,29 +64,16 @@ export function AddToCartForm({ product, scope, cartHref = "/cart" }: Props) {
       <button
         type="button"
         onClick={handleAdd}
-        className={`w-full h-12 rounded-full font-medium text-sm flex items-center justify-center gap-2 transition-colors ${
-          added
-            ? "bg-emerald-600 text-white"
-            : "bg-primary text-primary-foreground hover:opacity-90"
-        }`}
+        className="w-full h-12 rounded-full font-medium text-sm flex items-center justify-center gap-2 bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all shadow-sm"
       >
-        {added ? (
-          <>
-            <Check className="h-4 w-4" />
-            Нэмэгдлээ
-          </>
-        ) : (
-          <>
-            <ShoppingCart className="h-4 w-4" />
-            Сагсанд нэмэх
-          </>
-        )}
+        <ShoppingCart className="h-4 w-4" />
+        Сагсанд нэмэх
       </button>
 
       <button
         type="button"
         onClick={handleAddAndGoToCart}
-        className="w-full h-10 rounded-full border bg-background hover:bg-muted text-sm font-medium"
+        className="w-full h-10 rounded-full border bg-background hover:bg-muted active:scale-[0.98] text-sm font-medium transition-all"
       >
         Сагсаа харах
       </button>

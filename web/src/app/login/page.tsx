@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Mail, KeyRound, CheckCircle2 } from "lucide-react";
 import { getSession, homePathForRole } from "@/lib/auth";
 import { sendMagicLink, signInWithPassword } from "./actions";
 
@@ -21,106 +22,141 @@ export default async function LoginPage({
   const isPasswordMode = mode === "password";
 
   return (
-    <main className="flex-1 flex items-center justify-center px-6 py-12">
+    <main className="flex-1 flex items-center justify-center px-6 py-12 bg-gradient-to-br from-background via-background to-primary/5">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">BDI Захиалга</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            {isPasswordMode ? "Имэйл & нууц үгээр нэвтрэх" : "Имэйл хаягаараа нэвтрэх"}
+          <div className="size-12 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center mx-auto mb-4 shadow-sm">
+            <span className="text-lg font-bold tracking-tight">BDI</span>
+          </div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Захиалгын систем
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {isPasswordMode
+              ? "Имэйл & нууц үгээр нэвтэрнэ үү"
+              : "Имэйл хаягаараа нэвтэрнэ үү"}
           </p>
         </div>
 
-        {sent ? (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-900 p-4 text-sm text-emerald-800 dark:text-emerald-300">
-            <p className="font-medium mb-1">Холбоосыг илгээлээ ✉️</p>
-            <p>
-              <span className="font-mono">{sent}</span> хаягт нэвтрэх холбоос
-              илгээгдсэн. Имэйлээ шалгана уу.
-            </p>
-          </div>
-        ) : isPasswordMode ? (
-          <form action={signInWithPassword} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium mb-1.5">
-                Имэйл
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                autoFocus
-                placeholder="name@example.com"
-                className="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium mb-1.5">
-                Нууц үг
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                className="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
-              />
-            </div>
-
-            {error && (
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-            )}
-
-            <button
-              type="submit"
-              className="w-full rounded-md bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity"
-            >
-              Нэвтрэх
-            </button>
-
-            <p className="text-center text-xs text-zinc-500 pt-2">
-              <Link href="/login" className="hover:underline">
-                ← Имэйл холбоосоор нэвтрэх
+        <div className="rounded-2xl border bg-background p-6 shadow-sm">
+          {sent ? (
+            <div className="text-center space-y-3 py-2">
+              <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="font-medium">Холбоосыг илгээлээ</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  <span className="font-mono text-foreground">{sent}</span>
+                </p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Имэйлээ нээж нэвтрэх холбоосон дээр дарна уу.
+                </p>
+              </div>
+              <Link
+                href="/login"
+                className="inline-block text-xs text-muted-foreground hover:text-foreground"
+              >
+                ← Дахин илгээх
               </Link>
-            </p>
-          </form>
-        ) : (
-          <form action={sendMagicLink} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium mb-1.5">
-                Имэйл
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                autoFocus
-                placeholder="name@example.com"
-                className="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
-              />
             </div>
+          ) : isPasswordMode ? (
+            <form action={signInWithPassword} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="email"
+                  className="block text-sm font-medium mb-1.5"
+                >
+                  Имэйл
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  autoFocus
+                  placeholder="name@example.com"
+                  className="w-full rounded-md border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="password"
+                  className="block text-sm font-medium mb-1.5"
+                >
+                  Нууц үг
+                </label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  required
+                  className="w-full rounded-md border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                />
+              </div>
 
-            {error && (
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-            )}
+              {error && (
+                <p className="text-sm text-destructive">{error}</p>
+              )}
 
-            <button
-              type="submit"
-              className="w-full rounded-md bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity"
-            >
-              Нэвтрэх холбоос илгээх
-            </button>
+              <button
+                type="submit"
+                className="w-full rounded-md bg-primary text-primary-foreground px-4 py-2.5 text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all"
+              >
+                Нэвтрэх
+              </button>
 
-            <p className="text-center text-xs text-zinc-500 pt-2">
-              <Link href="/login?mode=password" className="hover:underline">
-                Нууц үгээр нэвтрэх →
+              <Link
+                href="/login"
+                className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground hover:text-foreground pt-1"
+              >
+                <Mail className="h-3.5 w-3.5" />
+                Имэйл холбоосоор нэвтрэх
               </Link>
-            </p>
-          </form>
-        )}
+            </form>
+          ) : (
+            <form action={sendMagicLink} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="email"
+                  className="block text-sm font-medium mb-1.5"
+                >
+                  Имэйл
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  autoFocus
+                  placeholder="name@example.com"
+                  className="w-full rounded-md border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                />
+              </div>
 
-        <p className="mt-6 text-xs text-zinc-400 text-center">
+              {error && (
+                <p className="text-sm text-destructive">{error}</p>
+              )}
+
+              <button
+                type="submit"
+                className="w-full rounded-md bg-primary text-primary-foreground px-4 py-2.5 text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all"
+              >
+                Нэвтрэх холбоос илгээх
+              </button>
+
+              <Link
+                href="/login?mode=password"
+                className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground hover:text-foreground pt-1"
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                Нууц үгээр нэвтрэх
+              </Link>
+            </form>
+          )}
+        </div>
+
+        <p className="mt-6 text-xs text-muted-foreground text-center">
           Шинэ бол BDI-н ажилтантай холбогдоно уу.
         </p>
       </div>

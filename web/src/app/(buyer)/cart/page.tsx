@@ -39,7 +39,7 @@ export default function CartPage() {
         return;
       }
       clearCart();
-      if (result.orderId) router.push(`/orders/${result.orderId}`);
+      if (result.orderId) router.push(`/orders/${result.orderId}?new=1`);
     });
   }
 

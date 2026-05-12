@@ -1,8 +1,12 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { Button } from "@/components/ui/button";
 import { formatMnt } from "@/lib/format";
 
 type Params = Promise<{ id: string }>;
+type SearchParams = Promise<{ new?: string }>;
 
 type OrderStatus =
   | "pending"
@@ -61,10 +65,13 @@ function formatDateTime(iso: string) {
 
 export default async function OrderDetailPage({
   params,
+  searchParams,
 }: {
   params: Params;
+  searchParams: SearchParams;
 }) {
   const { id } = await params;
+  const { new: isNew } = await searchParams;
   const supabase = await createClient();
 
   const { data } = await supabase
@@ -80,6 +87,23 @@ export default async function OrderDetailPage({
 
   return (
     <div className="px-3 sm:px-4 py-4 max-w-2xl mx-auto">
+      {isNew && (
+        <div className="mb-4 rounded-xl border-2 border-primary/20 bg-primary/5 p-5 text-center animate-in fade-in zoom-in-95 duration-300">
+          <div className="size-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center mx-auto mb-3">
+            <CheckCircle2 className="h-6 w-6" />
+          </div>
+          <h2 className="text-lg font-semibold mb-1">
+            Захиалга илгээгдлээ!
+          </h2>
+          <p className="text-sm text-muted-foreground mb-3">
+            BDI таны захиалгыг хүлээж авлаа. Удахгүй холбогдоно.
+          </p>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/catalog">Каталог руу буцах</Link>
+          </Button>
+        </div>
+      )}
+
       <div className="mb-4">
         <div className="flex items-center gap-2 flex-wrap mb-1">
           <h1 className="text-xl font-semibold font-mono">
