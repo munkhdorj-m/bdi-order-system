@@ -171,7 +171,7 @@ export function ProductForm({
               name="base_price"
               type="number"
               min={0}
-              step={50}
+              step={1}
               required
               defaultValue={defaults.base_price ?? ""}
             />
@@ -186,7 +186,7 @@ export function ProductForm({
               name="cash_price"
               type="number"
               min={0}
-              step={50}
+              step={1}
               defaultValue={defaults.cash_price ?? ""}
             />
           </Field>

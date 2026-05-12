@@ -100,7 +100,7 @@ export function PriceEditor({ products, action }: Props) {
                     type="number"
                     inputMode="numeric"
                     min={0}
-                    step={50}
+                    step={1}
                     name={`price_${p.id}`}
                     defaultValue={p.custom_price ?? ""}
                     placeholder={String(p.base_price)}
