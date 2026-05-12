@@ -72,7 +72,7 @@ create table supermarkets (
 create index supermarkets_assigned_rep_idx on supermarkets(assigned_rep_id);
 create index supermarkets_active_idx       on supermarkets(active);
 create unique index supermarkets_external_id_uniq
-  on supermarkets(external_id) where external_id is not null;
+  on supermarkets(external_id);  -- NULLs still allowed (distinct by default)
 
 
 -- 3.3 profiles ------------------------------------------------
