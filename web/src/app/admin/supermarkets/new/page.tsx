@@ -7,12 +7,17 @@ import { createSupermarket } from "../actions";
 
 export default async function NewSupermarketPage() {
   const supabase = await createClient();
-  const [{ data: reps }, suggestions] = await Promise.all([
+  const [{ data: reps }, { data: priceLists }, suggestions] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, full_name, email")
       .eq("role", "rep")
       .order("full_name"),
+    supabase
+      .from("price_lists")
+      .select("id, name")
+      .eq("active", true)
+      .order("name"),
     getSupermarketSuggestions(),
   ]);
 
@@ -28,6 +33,7 @@ export default async function NewSupermarketPage() {
       <h1 className="text-2xl font-semibold tracking-tight mb-6">Шинэ дэлгүүр</h1>
       <SupermarketForm
         reps={reps ?? []}
+        priceLists={priceLists ?? []}
         typeSuggestions={suggestions.types}
         districtSuggestions={suggestions.districts}
         action={createSupermarket}

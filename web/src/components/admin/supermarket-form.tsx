@@ -16,6 +16,7 @@ export type SupermarketFormDefaults = {
   address?: string | null;
   contact_phone?: string | null;
   assigned_rep_id?: string | null;
+  price_list_id?: string | null;
   notes?: string | null;
   active?: boolean;
 };
@@ -26,10 +27,16 @@ export type RepOption = {
   email: string | null;
 };
 
+export type PriceListOption = {
+  id: string;
+  name: string;
+};
+
 type ActionState = { error?: string };
 
 type Props = {
   reps: RepOption[];
+  priceLists?: PriceListOption[];
   defaults?: SupermarketFormDefaults;
   /** Distinct values from the DB, used as autocomplete suggestions. */
   typeSuggestions?: string[];
@@ -64,6 +71,7 @@ const DEFAULT_DISTRICTS = [
 
 export function SupermarketForm({
   reps,
+  priceLists = [],
   defaults = {},
   typeSuggestions,
   districtSuggestions,
@@ -157,6 +165,29 @@ export function SupermarketForm({
                 </option>
               ))}
             </select>
+          </Field>
+
+          <Field
+            label="Үнийн жагсаалт"
+            htmlFor="price_list_id"
+            className="md:col-span-2"
+          >
+            <select
+              id="price_list_id"
+              name="price_list_id"
+              defaultValue={defaults.price_list_id ?? ""}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+            >
+              <option value="">— Жишиг үнэ ашиглах —</option>
+              {priceLists.map((pl) => (
+                <option key={pl.id} value={pl.id}>
+                  {pl.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Дэлгүүрт онцгой үнэ оноож амжаагүй бол энэ жагсаалтын үнэ ашиглагдана.
+            </p>
           </Field>
 
           <Field label="Тэмдэглэл" htmlFor="notes" className="md:col-span-2">

@@ -17,11 +17,16 @@ export default async function EditSupermarketPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: supermarket }, { data: reps }, suggestions] = await Promise.all([
+  const [
+    { data: supermarket },
+    { data: reps },
+    { data: priceLists },
+    suggestions,
+  ] = await Promise.all([
     supabase
       .from("supermarkets")
       .select(
-        "id, name, type, district, address, contact_phone, assigned_rep_id, notes, active",
+        "id, name, type, district, address, contact_phone, assigned_rep_id, price_list_id, notes, active",
       )
       .eq("id", id)
       .single(),
@@ -30,6 +35,11 @@ export default async function EditSupermarketPage({
       .select("id, full_name, email")
       .eq("role", "rep")
       .order("full_name"),
+    supabase
+      .from("price_lists")
+      .select("id, name")
+      .eq("active", true)
+      .order("name"),
     getSupermarketSuggestions(),
   ]);
 
@@ -54,13 +64,14 @@ export default async function EditSupermarketPage({
         <Button asChild variant="outline" className="shrink-0">
           <Link href={`/admin/supermarkets/${id}/prices`}>
             <DollarSign className="h-4 w-4" />
-            <span className="hidden sm:inline">Үнийн жагсаалт</span>
+            <span className="hidden sm:inline">Үнийн override</span>
           </Link>
         </Button>
       </div>
 
       <SupermarketForm
         reps={reps ?? []}
+        priceLists={priceLists ?? []}
         defaults={supermarket}
         typeSuggestions={suggestions.types}
         districtSuggestions={suggestions.districts}

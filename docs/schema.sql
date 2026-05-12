@@ -66,6 +66,7 @@ create table supermarkets (
   address          text,
   contact_phone    text,
   assigned_rep_id  uuid,  -- FK added after profiles table exists
+  price_list_id    uuid,  -- FK added after price_lists table exists
   active           boolean not null default true,
   notes            text,
   created_at       timestamptz not null default now()
@@ -130,8 +131,8 @@ create index products_active_idx   on products(active);
 
 
 -- 3.5 customer_prices ----------------------------------------
--- Per-supermarket price override. If a row exists, it wins
--- over products.base_price. Composite PK keeps it unique.
+-- Per-supermarket price override. Highest priority in the 3-tier
+-- resolution: customer_prices > price_list_items > base_price.
 create table customer_prices (
   supermarket_id  uuid not null references supermarkets(id) on delete cascade,
   product_id      uuid not null references products(id)      on delete cascade,
@@ -139,6 +140,34 @@ create table customer_prices (
   updated_at      timestamptz not null default now(),
   primary key (supermarket_id, product_id)
 );
+
+-- 3.5a price_lists ------------------------------------------
+-- Reusable pricing presets. One list can be assigned to many
+-- supermarkets (e.g. all Nomin branches share the "Nomin" list).
+create table price_lists (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null unique,
+  description text,
+  active      boolean not null default true,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+create table price_list_items (
+  price_list_id uuid not null references price_lists(id) on delete cascade,
+  product_id    uuid not null references products(id)    on delete cascade,
+  price         numeric(12,2) not null,
+  updated_at    timestamptz not null default now(),
+  primary key (price_list_id, product_id)
+);
+
+create index price_list_items_product_idx on price_list_items(product_id);
+
+alter table supermarkets
+  add constraint supermarkets_price_list_fk
+  foreign key (price_list_id) references price_lists(id) on delete set null;
+
+create index supermarkets_price_list_idx on supermarkets(price_list_id);
 
 
 -- 3.6 orders --------------------------------------------------
@@ -200,6 +229,10 @@ $$;
 create trigger products_updated_at        before update on products
   for each row execute function set_updated_at();
 create trigger customer_prices_updated_at before update on customer_prices
+  for each row execute function set_updated_at();
+create trigger price_lists_updated_at      before update on price_lists
+  for each row execute function set_updated_at();
+create trigger price_list_items_updated_at before update on price_list_items
   for each row execute function set_updated_at();
 create trigger orders_updated_at          before update on orders
   for each row execute function set_updated_at();
@@ -273,12 +306,15 @@ create trigger on_auth_user_created
 -- 5. HELPER VIEW: supermarket_prices
 -- ============================================================
 -- For a given supermarket, returns every active product with the
--- effective price (override if set, otherwise base_price).
+-- effective price using 3-tier resolution:
+--   1. customer_prices  (per-store override)
+--   2. price_list_items (store's assigned price list)
+--   3. products.base_price (fallback)
 -- The buyer catalog screen queries this view.
 create or replace view supermarket_prices as
 select
-  s.id                                          as supermarket_id,
-  p.id                                          as product_id,
+  s.id                                              as supermarket_id,
+  p.id                                              as product_id,
   p.sku,
   p.name,
   p.category_id,
@@ -289,12 +325,19 @@ select
   p.pack_size,
   p.box_count,
   p.stock,
-  coalesce(cp.price, p.base_price)              as effective_price,
-  cp.price is not null                          as has_custom_price
+  coalesce(cp.price, pli.price, p.base_price)       as effective_price,
+  case
+    when cp.price  is not null then 'override'
+    when pli.price is not null then 'price_list'
+    else 'base'
+  end                                               as price_source,
+  cp.price is not null                              as has_custom_price
 from supermarkets s
 cross join products p
 left join customer_prices cp
   on cp.supermarket_id = s.id and cp.product_id = p.id
+left join price_list_items pli
+  on pli.price_list_id = s.price_list_id and pli.product_id = p.id
 where p.active = true and s.active = true;
 
 
@@ -307,13 +350,15 @@ where p.active = true and s.active = true;
 --   buyer -> reads + writes only their own store's data
 -- ============================================================
 
-alter table categories      enable row level security;
-alter table profiles        enable row level security;
-alter table supermarkets    enable row level security;
-alter table products        enable row level security;
-alter table customer_prices enable row level security;
-alter table orders          enable row level security;
-alter table order_items     enable row level security;
+alter table categories       enable row level security;
+alter table profiles         enable row level security;
+alter table supermarkets     enable row level security;
+alter table products         enable row level security;
+alter table customer_prices  enable row level security;
+alter table price_lists      enable row level security;
+alter table price_list_items enable row level security;
+alter table orders           enable row level security;
+alter table order_items      enable row level security;
 
 
 -- 6.1 helper functions used by policies
@@ -407,6 +452,39 @@ create policy customer_prices_rep_read on customer_prices
 create policy customer_prices_buyer_read on customer_prices
   for select using (
     current_role_value() = 'buyer' and supermarket_id = current_supermarket()
+  );
+
+
+-- 6.6a price_lists & price_list_items
+create policy price_lists_admin_all on price_lists
+  for all using (current_role_value() = 'admin')
+  with check (current_role_value() = 'admin');
+
+create policy price_lists_read on price_lists
+  for select using (auth.uid() is not null);
+
+create policy price_list_items_admin_all on price_list_items
+  for all using (current_role_value() = 'admin')
+  with check (current_role_value() = 'admin');
+
+create policy price_list_items_buyer_read on price_list_items
+  for select using (
+    current_role_value() = 'buyer'
+    and exists (
+      select 1 from supermarkets s
+      where s.id = current_supermarket()
+        and s.price_list_id = price_list_items.price_list_id
+    )
+  );
+
+create policy price_list_items_rep_read on price_list_items
+  for select using (
+    current_role_value() = 'rep'
+    and exists (
+      select 1 from supermarkets s
+      where s.assigned_rep_id = auth.uid()
+        and s.price_list_id = price_list_items.price_list_id
+    )
   );
 
 

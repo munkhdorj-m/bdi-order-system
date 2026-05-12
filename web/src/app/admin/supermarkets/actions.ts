@@ -23,6 +23,7 @@ function buildPayload(formData: FormData) {
       address: parseString(formData.get("address")),
       contact_phone: parseString(formData.get("contact_phone")),
       assigned_rep_id: parseString(formData.get("assigned_rep_id")),
+      price_list_id: parseString(formData.get("price_list_id")),
       notes: parseString(formData.get("notes")),
       active: formData.get("active") === "on",
     },
