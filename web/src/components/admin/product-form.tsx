@@ -213,7 +213,9 @@ export function ProductForm({
             }}
           />
           <p className="text-xs text-muted-foreground">
-            5MB хүртэлх JPG/PNG/WebP. Хоосон үлдээвэл одоогийн зураг хадгалагдана.
+            JPG/PNG/WebP, дээд тал нь 5MB. <strong>Чанартай харагдахын тулд</strong>{" "}
+            ~800–1200 пикселийн өргөнтэй, 500KB орчим хэмжээтэй зураг ачаалбал тохиромжтой.
+            Хоосон үлдээвэл одоогийн зураг хадгалагдана.
           </p>
         </CardContent>
       </Card>

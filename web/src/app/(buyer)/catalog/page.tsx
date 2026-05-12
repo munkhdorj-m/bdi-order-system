@@ -110,7 +110,7 @@ export default async function CatalogPage({
                     alt={p.name}
                     fill
                     sizes="(max-width: 640px) 50vw, 240px"
-                    quality={90}
+                    unoptimized
                     className="object-cover"
                   />
                 ) : (
