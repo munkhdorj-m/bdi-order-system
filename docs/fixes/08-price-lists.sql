@@ -61,8 +61,10 @@ create trigger price_lists_updated_at
   for each row execute function public.set_updated_at();
 
 -- 4. Rewrite the supermarket_prices view with 3-tier resolution -------
+-- CREATE OR REPLACE VIEW can't reorder/rename columns; drop first.
+drop view if exists public.supermarket_prices;
 
-create or replace view public.supermarket_prices as
+create view public.supermarket_prices as
 select
   s.id                                              as supermarket_id,
   p.id                                              as product_id,
