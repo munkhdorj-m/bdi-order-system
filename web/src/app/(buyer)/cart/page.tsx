@@ -21,6 +21,7 @@ export default function CartPage() {
   const cart = useCart();
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -38,12 +39,13 @@ export default function CartPage() {
         setError(result.error);
         return;
       }
-      clearCart();
+      setSubmitted(true);
       if (result.orderId) router.push(`/orders/${result.orderId}?new=1`);
+      clearCart();
     });
   }
 
-  if (cart.length === 0) {
+  if (cart.length === 0 && !submitted && !pending) {
     return (
       <div className="px-4 py-16 text-center max-w-md mx-auto">
         <ShoppingCart className="h-10 w-10 mx-auto text-muted-foreground mb-4" />

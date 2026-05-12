@@ -26,6 +26,7 @@ export default function RepCartPage({ params }: { params: Params }) {
   const cart = useCart(scope);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -44,12 +45,13 @@ export default function RepCartPage({ params }: { params: Params }) {
         setError(result.error);
         return;
       }
-      clearCart(scope);
+      setSubmitted(true);
       if (result.orderId) router.push(`/rep/orders/${result.orderId}`);
+      clearCart(scope);
     });
   }
 
-  if (cart.length === 0) {
+  if (cart.length === 0 && !submitted && !pending) {
     return (
       <div>
         <RepHeader
