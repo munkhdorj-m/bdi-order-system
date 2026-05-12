@@ -199,9 +199,17 @@ def main() -> int:
     print(f"Loading product_list from {src} ...")
     tables = pd.read_html(str(src), encoding="utf-8")
     biggest = max(tables, key=lambda t: t.shape[0])
-    # First row is column headers
-    biggest.columns = biggest.iloc[0]
-    biggest = biggest.iloc[1:].reset_index(drop=True)
+
+    # pandas auto-detects headers when the HTML has <th> cells (product_list)
+    # but falls back to integer column labels when it doesn't (hariltsagchid).
+    # If the current columns already look like real headers, leave them alone;
+    # otherwise promote the first row.
+    def _looks_like_headers(cols) -> bool:
+        return any("арко" in str(c).lower() for c in cols)
+
+    if not _looks_like_headers(biggest.columns):
+        biggest.columns = biggest.iloc[0]
+        biggest = biggest.iloc[1:].reset_index(drop=True)
     print(f"  {biggest.shape[0]} product rows, {biggest.shape[1]} columns.")
 
     # Find the barcode and chain columns
