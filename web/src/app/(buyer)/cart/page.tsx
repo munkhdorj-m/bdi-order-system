@@ -13,30 +13,37 @@ import {
   totalQty,
   clearCart,
   formatMnt,
+  type CartItem,
 } from "@/lib/cart";
 import { placeOrder } from "./actions";
 import { Button } from "@/components/ui/button";
 
 export default function CartPage() {
-  const cart = useCart();
+  const liveCart = useCart();
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [snapshot, setSnapshot] = useState<CartItem[] | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
+  // While we're submitting (or already succeeded), freeze on the snapshot so
+  // the items don't blink to zero before navigation finishes.
+  const cart = pending || submitted ? (snapshot ?? liveCart) : liveCart;
   const total = totalAmount(cart);
   const qty = totalQty(cart);
 
   function handleSubmit() {
     setError(null);
+    setSnapshot([...liveCart]);
     startTransition(async () => {
       const result = await placeOrder({
-        items: cart.map((i) => ({ product_id: i.product_id, qty: i.qty })),
+        items: liveCart.map((i) => ({ product_id: i.product_id, qty: i.qty })),
         notes: notes.trim() || null,
       });
       if (result.error) {
         setError(result.error);
+        setSnapshot(null);
         return;
       }
       setSubmitted(true);
@@ -45,7 +52,7 @@ export default function CartPage() {
     });
   }
 
-  if (cart.length === 0 && !submitted && !pending) {
+  if (liveCart.length === 0 && !submitted && !pending) {
     return (
       <div className="px-4 py-16 text-center max-w-md mx-auto">
         <ShoppingCart className="h-10 w-10 mx-auto text-muted-foreground mb-4" />

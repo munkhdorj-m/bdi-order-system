@@ -13,6 +13,7 @@ import {
   totalQty,
   clearCart,
   formatMnt,
+  type CartItem,
 } from "@/lib/cart";
 import { placeOrderForStore } from "./actions";
 import { Button } from "@/components/ui/button";
@@ -23,26 +24,30 @@ type Params = Promise<{ id: string }>;
 export default function RepCartPage({ params }: { params: Params }) {
   const { id } = use(params);
   const scope = { storeId: id };
-  const cart = useCart(scope);
+  const liveCart = useCart(scope);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [snapshot, setSnapshot] = useState<CartItem[] | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
+  const cart = pending || submitted ? (snapshot ?? liveCart) : liveCart;
   const total = totalAmount(cart);
   const qty = totalQty(cart);
 
   function handleSubmit() {
     setError(null);
+    setSnapshot([...liveCart]);
     startTransition(async () => {
       const result = await placeOrderForStore({
         supermarketId: id,
-        items: cart.map((i) => ({ product_id: i.product_id, qty: i.qty })),
+        items: liveCart.map((i) => ({ product_id: i.product_id, qty: i.qty })),
         notes: notes.trim() || null,
       });
       if (result.error) {
         setError(result.error);
+        setSnapshot(null);
         return;
       }
       setSubmitted(true);
@@ -51,7 +56,7 @@ export default function RepCartPage({ params }: { params: Params }) {
     });
   }
 
-  if (cart.length === 0 && !submitted && !pending) {
+  if (liveCart.length === 0 && !submitted && !pending) {
     return (
       <div>
         <RepHeader
