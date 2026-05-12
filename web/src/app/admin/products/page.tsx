@@ -65,30 +65,31 @@ export default async function AdminProductsPage({
 
   return (
     <div className="max-w-6xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="flex items-start sm:items-center justify-between gap-3 mb-6">
+        <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">Бараа</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Нийт {rows.length} бараа
           </p>
         </div>
-        <Button asChild>
+        <Button asChild className="shrink-0">
           <Link href="/admin/products/new">
             <Plus className="h-4 w-4" />
-            Шинэ бараа
+            <span className="hidden sm:inline">Шинэ бараа</span>
+            <span className="sm:hidden">Шинэ</span>
           </Link>
         </Button>
       </div>
 
-      <Card className="mb-6 p-4">
-        <form className="flex flex-col sm:flex-row gap-3">
+      <Card className="mb-4 p-3 sm:p-4">
+        <form className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <input
               type="search"
               name="q"
               defaultValue={q ?? ""}
-              placeholder="Барааны нэр, SKU, бренд..."
+              placeholder="Нэр, SKU, бренд..."
               className="w-full rounded-md border border-input bg-background pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
@@ -111,86 +112,143 @@ export default async function AdminProductsPage({
       </Card>
 
       {error && (
-        <Card className="p-4 border-destructive/40 bg-destructive/5 text-destructive text-sm">
+        <Card className="p-4 mb-4 border-destructive/40 bg-destructive/5 text-destructive text-sm">
           {error.message}
         </Card>
       )}
 
-      <Card>
-        {rows.length === 0 ? (
-          <div className="p-12 text-center text-muted-foreground">
-            <p className="mb-1">Бараа олдсонгүй.</p>
-            <p className="text-sm">
-              Шинэ бараа нэмэх эсвэл xlsx файлаас импорт хийнэ үү.
-            </p>
+      {rows.length === 0 ? (
+        <Card className="p-12 text-center text-muted-foreground">
+          <p className="mb-1">Бараа олдсонгүй.</p>
+          <p className="text-sm">
+            Шинэ бараа нэмэх эсвэл xlsx файлаас импорт хийнэ үү.
+          </p>
+        </Card>
+      ) : (
+        <>
+          {/* Mobile: card list */}
+          <div className="sm:hidden space-y-2">
+            {rows.map((p) => (
+              <Link
+                key={p.id}
+                href={`/admin/products/${p.id}`}
+                className="flex gap-3 bg-background border rounded-lg p-3 hover:shadow-sm transition-shadow"
+              >
+                <div className="size-14 rounded bg-muted relative shrink-0 overflow-hidden">
+                  {p.image_url ? (
+                    <Image
+                      src={p.image_url}
+                      alt={p.name}
+                      fill
+                      sizes="56px"
+                      quality={85}
+                      className="object-cover"
+                    />
+                  ) : null}
+                </div>
+                <div className="flex-1 min-w-0">
+                  {p.brand && (
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80">
+                      {p.brand}
+                    </div>
+                  )}
+                  <div className="text-sm font-medium leading-tight line-clamp-2">
+                    {p.name}
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="font-mono">{p.sku}</span>
+                    {!p.active && (
+                      <Badge variant="outline" className="h-4 px-1 text-[10px]">
+                        Идэвхгүй
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-sm font-semibold">
+                    {formatMnt(p.base_price)}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    Үлд: {p.stock}
+                  </div>
+                </div>
+              </Link>
+            ))}
           </div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-16"></TableHead>
-                <TableHead>Нэр</TableHead>
-                <TableHead>Ангилал</TableHead>
-                <TableHead>SKU</TableHead>
-                <TableHead className="text-right">Үнэ</TableHead>
-                <TableHead className="text-right">Үлдэгдэл</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((p) => (
-                <TableRow key={p.id} className="cursor-pointer">
-                  <TableCell>
-                    <Link
-                      href={`/admin/products/${p.id}`}
-                      className="block w-12 h-12 rounded bg-muted overflow-hidden relative"
-                    >
-                      {p.image_url ? (
-                        <Image
-                          src={p.image_url}
-                          alt={p.name}
-                          fill
-                          sizes="48px"
-                          quality={85}
-                          className="object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">
-                          —
+
+          {/* Desktop: table */}
+          <Card className="hidden sm:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-16"></TableHead>
+                  <TableHead>Нэр</TableHead>
+                  <TableHead>Ангилал</TableHead>
+                  <TableHead>SKU</TableHead>
+                  <TableHead className="text-right">Үнэ</TableHead>
+                  <TableHead className="text-right">Үлдэгдэл</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((p) => (
+                  <TableRow key={p.id} className="cursor-pointer">
+                    <TableCell>
+                      <Link
+                        href={`/admin/products/${p.id}`}
+                        className="block w-12 h-12 rounded bg-muted overflow-hidden relative"
+                      >
+                        {p.image_url ? (
+                          <Image
+                            src={p.image_url}
+                            alt={p.name}
+                            fill
+                            sizes="48px"
+                            quality={85}
+                            className="object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">
+                            —
+                          </div>
+                        )}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/admin/products/${p.id}`}
+                        className="block font-medium hover:underline"
+                      >
+                        {p.name}
+                      </Link>
+                      {p.brand && (
+                        <div className="text-xs text-muted-foreground">
+                          {p.brand}
                         </div>
                       )}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/admin/products/${p.id}`}
-                      className="block font-medium hover:underline"
-                    >
-                      {p.name}
-                    </Link>
-                    {p.brand && (
-                      <div className="text-xs text-muted-foreground">{p.brand}</div>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {p.categories?.name ?? "—"}
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">{p.sku}</TableCell>
-                  <TableCell className="text-right">{formatMnt(p.base_price)}</TableCell>
-                  <TableCell className="text-right">{p.stock}</TableCell>
-                  <TableCell>
-                    {p.active ? (
-                      <Badge variant="secondary">Идэвхтэй</Badge>
-                    ) : (
-                      <Badge variant="outline">Идэвхгүй</Badge>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </Card>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {p.categories?.name ?? "—"}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{p.sku}</TableCell>
+                    <TableCell className="text-right">
+                      {formatMnt(p.base_price)}
+                    </TableCell>
+                    <TableCell className="text-right">{p.stock}</TableCell>
+                    <TableCell>
+                      {p.active ? (
+                        <Badge variant="secondary">Идэвхтэй</Badge>
+                      ) : (
+                        <Badge variant="outline">Идэвхгүй</Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
