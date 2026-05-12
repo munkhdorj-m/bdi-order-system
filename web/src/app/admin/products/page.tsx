@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Plus, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getCategories } from "@/lib/categories";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -55,11 +56,10 @@ export default async function AdminProductsPage({
     query = query.eq("category_id", category);
   }
 
-  const { data: products, error } = await query;
-  const { data: categories } = await supabase
-    .from("categories")
-    .select("id, name")
-    .order("sort_order");
+  const [{ data: products, error }, categories] = await Promise.all([
+    query,
+    getCategories(),
+  ]);
 
   const rows = (products as unknown as ProductRow[]) ?? [];
 
@@ -99,7 +99,7 @@ export default async function AdminProductsPage({
             className="w-full sm:w-auto sm:max-w-48 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring truncate"
           >
             <option value="">Бүх ангилал</option>
-            {categories?.map((c) => (
+            {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>

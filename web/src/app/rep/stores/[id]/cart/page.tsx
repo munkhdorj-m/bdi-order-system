@@ -101,7 +101,7 @@ export default function RepCartPage({ params }: { params: Params }) {
                     alt={item.name}
                     fill
                     sizes="80px"
-                    unoptimized
+                    quality={85}
                     className="object-cover"
                   />
                 ) : null}

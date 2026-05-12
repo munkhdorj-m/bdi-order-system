@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getCategories } from "@/lib/categories";
 import { QuickAddButton } from "@/components/buyer/quick-add-button";
 import { RepHeader } from "@/components/rep/rep-header";
 import { formatMnt } from "@/lib/format";
@@ -18,8 +19,6 @@ type PriceRow = {
   category_id: string | null;
   effective_price: number;
 };
-
-type Category = { id: string; name: string };
 
 function shortLabel(name: string): string {
   const commaIdx = name.indexOf(",");
@@ -68,13 +67,12 @@ export default async function RepCatalogPage({
   }
   if (category) pricesQuery = pricesQuery.eq("category_id", category);
 
-  const [{ data: products }, { data: categories }] = await Promise.all([
+  const [{ data: products }, cats] = await Promise.all([
     pricesQuery,
-    supabase.from("categories").select("id, name").order("sort_order"),
+    getCategories(),
   ]);
 
   const rows = (products as PriceRow[] | null) ?? [];
-  const cats = (categories as Category[] | null) ?? [];
 
   function chipHref(opts: { category?: string }) {
     const p = new URLSearchParams();
@@ -149,7 +147,7 @@ export default async function RepCatalogPage({
                       alt={p.name}
                       fill
                       sizes="(max-width: 640px) 50vw, 240px"
-                      unoptimized
+                      quality={90}
                       className="object-cover"
                     />
                   ) : (

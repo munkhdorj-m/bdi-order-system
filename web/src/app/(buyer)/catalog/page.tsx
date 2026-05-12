@@ -3,6 +3,7 @@ import Image from "next/image";
 import { PackageSearch, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth";
+import { getCategories } from "@/lib/categories";
 import { QuickAddButton } from "@/components/buyer/quick-add-button";
 import { formatMnt } from "@/lib/format";
 
@@ -16,11 +17,6 @@ type PriceRow = {
   image_url: string | null;
   category_id: string | null;
   effective_price: number;
-};
-
-type Category = {
-  id: string;
-  name: string;
 };
 
 export default async function CatalogPage({
@@ -50,13 +46,9 @@ export default async function CatalogPage({
   }
   if (category) query = query.eq("category_id", category);
 
-  const [{ data: products }, { data: categories }] = await Promise.all([
-    query,
-    supabase.from("categories").select("id, name").order("sort_order"),
-  ]);
+  const [{ data: products }, cats] = await Promise.all([query, getCategories()]);
 
   const rows = (products as PriceRow[] | null) ?? [];
-  const cats = (categories as Category[] | null) ?? [];
 
   return (
     <div>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getCategories } from "@/lib/categories";
 import { ProductForm } from "@/components/admin/product-form";
 import { updateProduct } from "../actions";
 
@@ -11,7 +12,7 @@ export default async function EditProductPage({ params }: { params: Params }) {
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: product }, { data: categories }] = await Promise.all([
+  const [{ data: product }, categories] = await Promise.all([
     supabase
       .from("products")
       .select(
@@ -19,7 +20,7 @@ export default async function EditProductPage({ params }: { params: Params }) {
       )
       .eq("id", id)
       .single(),
-    supabase.from("categories").select("id, name").order("sort_order"),
+    getCategories(),
   ]);
 
   if (!product) notFound();
@@ -39,7 +40,7 @@ export default async function EditProductPage({ params }: { params: Params }) {
       <p className="text-sm text-muted-foreground font-mono mb-6">{product.sku}</p>
 
       <ProductForm
-        categories={categories ?? []}
+        categories={categories}
         defaults={product}
         action={updateProductWithId}
         submitLabel="Хадгалах"

@@ -1,15 +1,11 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { getCategories } from "@/lib/categories";
 import { ProductForm } from "@/components/admin/product-form";
 import { createProduct } from "../actions";
 
 export default async function NewProductPage() {
-  const supabase = await createClient();
-  const { data: categories } = await supabase
-    .from("categories")
-    .select("id, name")
-    .order("sort_order");
+  const categories = await getCategories();
 
   return (
     <div className="max-w-3xl">
@@ -22,7 +18,7 @@ export default async function NewProductPage() {
       </Link>
       <h1 className="text-2xl font-semibold tracking-tight mb-6">Шинэ бараа</h1>
       <ProductForm
-        categories={categories ?? []}
+        categories={categories}
         action={createProduct}
         submitLabel="Хадгалах"
       />

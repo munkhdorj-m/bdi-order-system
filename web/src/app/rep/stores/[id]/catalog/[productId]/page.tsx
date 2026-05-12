@@ -65,7 +65,7 @@ export default async function RepProductDetailPage({
               alt={p.name}
               fill
               sizes="(max-width: 768px) 100vw, 768px"
-              unoptimized
+              quality={95}
               className="object-cover"
               priority
             />
