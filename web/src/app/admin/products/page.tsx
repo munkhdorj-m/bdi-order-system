@@ -82,8 +82,8 @@ export default async function AdminProductsPage({
       </div>
 
       <Card className="mb-4 p-3 sm:p-4">
-        <form className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-          <div className="flex-1 relative">
+        <form className="flex flex-col sm:flex-row gap-2 sm:gap-3 min-w-0">
+          <div className="flex-1 relative min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <input
               type="search"
@@ -96,7 +96,7 @@ export default async function AdminProductsPage({
           <select
             name="category"
             defaultValue={category ?? ""}
-            className="rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="w-full sm:w-auto sm:max-w-48 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring truncate"
           >
             <option value="">Бүх ангилал</option>
             {categories?.map((c) => (
@@ -155,10 +155,10 @@ export default async function AdminProductsPage({
                   <div className="text-sm font-medium leading-tight line-clamp-2">
                     {p.name}
                   </div>
-                  <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="font-mono">{p.sku}</span>
+                  <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground min-w-0">
+                    <span className="font-mono truncate">{p.sku}</span>
                     {!p.active && (
-                      <Badge variant="outline" className="h-4 px-1 text-[10px]">
+                      <Badge variant="outline" className="h-4 px-1 text-[10px] shrink-0">
                         Идэвхгүй
                       </Badge>
                     )}

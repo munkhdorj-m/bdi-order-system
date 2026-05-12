@@ -16,12 +16,14 @@ export default async function AdminLayout({
   return (
     <div className="flex min-h-screen">
       <AdminSidebar />
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         <AdminHeader
           email={session.email}
           name={session.profile.full_name}
         />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 bg-muted/30">{children}</main>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 bg-muted/30 overflow-x-clip">
+          {children}
+        </main>
       </div>
     </div>
   );
