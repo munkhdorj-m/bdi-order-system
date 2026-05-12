@@ -24,6 +24,36 @@ python scripts/import_stores.py              # apply
 Default source: `C:/Users/Munkhdorj/Downloads/hariltsagchid_files/sheet001.htm`.
 First run **fix 05** (adds the `external_id` column) before this script.
 
+## `import_pricelists.py`
+
+The price-list-aware version of `import_chain_prices.py`. For each chain
+column in `product_list.xls` it:
+
+1. Upserts a `price_lists` row named like the column header (e.g. "Nomin",
+   "CU Сүлжээ дэлгүүр").
+2. Fills `price_list_items` with the chain's prices for every product we
+   already carry.
+3. Assigns every supermarket whose name/address/notes matches the chain
+   keywords to that price list (`supermarkets.price_list_id`).
+
+After running, each chain's stores share one list, and the buyer catalog
+will resolve prices via that list automatically (3-tier coalesce in the
+`supermarket_prices` view).
+
+```powershell
+python scripts/import_pricelists.py --dry-run   # preview counts
+python scripts/import_pricelists.py             # apply
+```
+
+**Requires:**
+- `docs/fixes/08-price-lists.sql` already applied
+- Stores already imported (`import_stores.py`)
+- Products already imported (`import_xlsx.py`)
+
+Old per-store rows in `customer_prices` from the earlier import keep
+working as overrides. They're redundant once the lists exist; you can
+purge them with one SQL when you're ready.
+
 ## `import_chain_prices.py`
 
 Reads the chain-pricing matrix in `product_list.xls`, matches each pricing
