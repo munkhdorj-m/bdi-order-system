@@ -1,5 +1,6 @@
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { MobileNav } from "./mobile-nav";
 
 type Props = {
   email: string | null;
@@ -8,12 +9,15 @@ type Props = {
 
 export function AdminHeader({ email, name }: Props) {
   return (
-    <header className="h-14 border-b flex items-center justify-between px-4 lg:px-6 bg-background">
+    <header className="h-14 border-b flex items-center gap-2 px-4 lg:px-6 bg-background">
+      <MobileNav />
       <div className="lg:hidden font-semibold">BDI Admin</div>
       <div className="flex-1" />
       <div className="flex items-center gap-3">
-        <div className="text-right">
-          {name && <div className="text-sm font-medium leading-tight">{name}</div>}
+        <div className="text-right hidden sm:block">
+          {name && (
+            <div className="text-sm font-medium leading-tight">{name}</div>
+          )}
           {email && (
             <div className="text-xs text-muted-foreground leading-tight">
               {email}

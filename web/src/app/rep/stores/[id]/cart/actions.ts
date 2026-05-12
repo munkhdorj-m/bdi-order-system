@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/auth";
+import { sendNewOrderEmail } from "@/lib/notifications";
 
 type PlaceOrderInput = {
   supermarketId: string;
@@ -104,6 +106,36 @@ export async function placeOrderForStore(
     .from("order_items")
     .insert(itemsToInsert);
   if (itemsErr) return { error: itemsErr.message };
+
+  const { data: storeRow } = await supabase
+    .from("supermarkets")
+    .select("name")
+    .eq("id", input.supermarketId)
+    .single();
+
+  const subtotal = itemsToInsert.reduce(
+    (sum, i) => sum + i.qty * i.unit_price,
+    0,
+  );
+
+  after(() =>
+    sendNewOrderEmail({
+      orderId: orderRow.id,
+      orderNumber: orderRow.order_number,
+      storeName: storeRow?.name ?? "",
+      buyerName: session.profile.full_name,
+      buyerEmail: session.email,
+      placedByRole: "rep",
+      notes: input.notes,
+      subtotal,
+      items: itemsToInsert.map((i) => ({
+        product_name_snapshot: i.product_name_snapshot,
+        qty: i.qty,
+        unit_price: i.unit_price,
+        line_total: i.qty * i.unit_price,
+      })),
+    }),
+  );
 
   revalidatePath(`/rep/stores/${input.supermarketId}`);
   revalidatePath(`/rep/orders/${orderRow.id}`);

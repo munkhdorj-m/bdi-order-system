@@ -2,22 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  Package,
-  ShoppingCart,
-  Store,
-  Users,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const navItems = [
-  { href: "/admin", label: "Дашбоард", icon: LayoutDashboard },
-  { href: "/admin/orders", label: "Захиалга", icon: ShoppingCart },
-  { href: "/admin/products", label: "Бараа", icon: Package },
-  { href: "/admin/supermarkets", label: "Дэлгүүр", icon: Store },
-  { href: "/admin/users", label: "Хэрэглэгч", icon: Users },
-];
+import { navItems, isActive } from "./nav-items";
 
 export function AdminSidebar() {
   const pathname = usePathname();
@@ -31,10 +17,7 @@ export function AdminSidebar() {
       </div>
       <nav className="flex-1 px-3 py-4 space-y-1">
         {navItems.map((item) => {
-          const active =
-            item.href === "/admin"
-              ? pathname === "/admin"
-              : pathname.startsWith(item.href);
+          const active = isActive(pathname, item.href);
           const Icon = item.icon;
           return (
             <Link

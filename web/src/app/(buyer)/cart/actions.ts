@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/auth";
+import { sendNewOrderEmail } from "@/lib/notifications";
 
 export type PlaceOrderInput = {
   items: { product_id: string; qty: number }[];
@@ -29,7 +31,6 @@ export async function placeOrder(
   }
   const supermarketId = session.profile.supermarket_id;
 
-  // Validate qtys
   const cleaned = input.items
     .filter((i) => i.product_id && i.qty > 0)
     .map((i) => ({ product_id: i.product_id, qty: Math.floor(i.qty) }));
@@ -47,23 +48,23 @@ export async function placeOrder(
   if (priceErr) return { error: priceErr.message };
 
   const priceMap = new Map<string, { name: string; price: number }>(
-    (priced ?? []).map((p) => [p.product_id, { name: p.name, price: p.effective_price }]),
+    (priced ?? []).map((p) => [
+      p.product_id,
+      { name: p.name, price: p.effective_price },
+    ]),
   );
 
-  // Make sure every cart product was found
   const missing = cleaned.filter((i) => !priceMap.has(i.product_id));
   if (missing.length > 0) {
     return { error: "Зарим бараа боломжгүй болсон байна. Сагсаа шинэчилнэ үү." };
   }
 
-  // Generate human-friendly order_number via the DB function
   const { data: orderNumberRow, error: numErr } = await supabase.rpc(
     "generate_order_number",
   );
   if (numErr) return { error: numErr.message };
   const orderNumber = orderNumberRow as unknown as string;
 
-  // Insert order
   const { data: orderRow, error: orderErr } = await supabase
     .from("orders")
     .insert({
@@ -79,7 +80,6 @@ export async function placeOrder(
     return { error: orderErr?.message ?? "Захиалга үүсгэхэд алдаа." };
   }
 
-  // Insert order_items with snapshot
   const itemsToInsert = cleaned.map((i) => {
     const meta = priceMap.get(i.product_id)!;
     return {
@@ -94,11 +94,40 @@ export async function placeOrder(
   const { error: itemsErr } = await supabase
     .from("order_items")
     .insert(itemsToInsert);
-  if (itemsErr) {
-    // Try to clean up the orphan order row. RLS allows buyer delete of their own order? No, it doesn't.
-    // For v1, leave the empty order as a paper trail; admin can cancel.
-    return { error: itemsErr.message };
-  }
+  if (itemsErr) return { error: itemsErr.message };
+
+  // Look up the store name for the email body (best-effort).
+  const { data: storeRow } = await supabase
+    .from("supermarkets")
+    .select("name")
+    .eq("id", supermarketId)
+    .single();
+
+  const subtotal = itemsToInsert.reduce(
+    (sum, i) => sum + i.qty * i.unit_price,
+    0,
+  );
+
+  // Fire-and-forget email after response is sent. Errors are swallowed
+  // inside sendNewOrderEmail so they can never break the order flow.
+  after(() =>
+    sendNewOrderEmail({
+      orderId: orderRow.id,
+      orderNumber: orderRow.order_number,
+      storeName: storeRow?.name ?? "",
+      buyerName: session.profile.full_name,
+      buyerEmail: session.email,
+      placedByRole: "buyer",
+      notes: input.notes,
+      subtotal,
+      items: itemsToInsert.map((i) => ({
+        product_name_snapshot: i.product_name_snapshot,
+        qty: i.qty,
+        unit_price: i.unit_price,
+        line_total: i.qty * i.unit_price,
+      })),
+    }),
+  );
 
   revalidatePath("/orders");
   return { orderId: orderRow.id, orderNumber: orderRow.order_number };
