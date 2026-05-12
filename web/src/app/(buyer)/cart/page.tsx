@@ -78,6 +78,7 @@ export default function CartPage() {
                   alt={item.name}
                   fill
                   sizes="80px"
+                  quality={85}
                   className="object-cover"
                 />
               ) : null}

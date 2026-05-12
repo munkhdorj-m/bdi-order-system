@@ -151,6 +151,7 @@ export default async function AdminProductsPage({
                           alt={p.name}
                           fill
                           sizes="48px"
+                          quality={85}
                           className="object-cover"
                         />
                       ) : (

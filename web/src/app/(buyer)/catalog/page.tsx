@@ -109,7 +109,8 @@ export default async function CatalogPage({
                     src={p.image_url}
                     alt={p.name}
                     fill
-                    sizes="(max-width: 640px) 50vw, 200px"
+                    sizes="(max-width: 640px) 50vw, 240px"
+                    quality={90}
                     className="object-cover"
                   />
                 ) : (
