@@ -2,6 +2,15 @@
 
 One-off Python utilities, not part of the Next.js app.
 
+## Python deps for the importers
+
+```powershell
+python -m pip install requests pandas openpyxl lxml
+```
+
+(`lxml` is what `pandas.read_html` uses to parse the HTML-disguised .xls
+exports from BDI's customer registry and price list.)
+
 ## `import_stores.py`
 
 Bulk-upserts BDI's customer registry (the `hariltsagchid` export) into the
