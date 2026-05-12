@@ -2,6 +2,37 @@
 
 One-off Python utilities, not part of the Next.js app.
 
+## `import_stores.py`
+
+Bulk-upserts BDI's customer registry (the `hariltsagchid` export) into the
+`supermarkets` table. Matches on `external_id` so re-runs are idempotent.
+
+```powershell
+python scripts/import_stores.py --dry-run    # preview
+python scripts/import_stores.py              # apply
+```
+
+Default source: `C:/Users/Munkhdorj/Downloads/hariltsagchid_files/sheet001.htm`.
+First run **fix 05** (adds the `external_id` column) before this script.
+
+## `import_chain_prices.py`
+
+Reads the chain-pricing matrix in `product_list.xls`, matches each pricing
+column to supermarkets by keyword (e.g. column "CU Сүлжээ дэлгүүр" maps to
+stores whose name/address/notes mention "CU"), and upserts the per-store
+prices into `customer_prices`.
+
+Products not in the DB are skipped (the file has 134 SKUs, we only carry 56).
+
+```powershell
+python scripts/import_chain_prices.py --dry-run    # preview chain→store counts and row totals
+python scripts/import_chain_prices.py              # apply
+```
+
+Run **after** `import_stores.py` so the stores exist to match against.
+
+To tweak how chains are matched, edit `CHAIN_KEYWORDS` at the top of the script.
+
 ## `import_images.py`
 
 Walks a folder of product images on disk, matches each product folder to a

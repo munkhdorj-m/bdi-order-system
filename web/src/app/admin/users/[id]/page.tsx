@@ -21,7 +21,7 @@ export default async function EditUserPage({ params }: { params: Params }) {
       .single(),
     supabase
       .from("supermarkets")
-      .select("id, name")
+      .select("id, name, address")
       .eq("active", true)
       .order("name"),
   ]);

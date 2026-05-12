@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 export type UserFormDefaults = {
   id: string;
@@ -20,6 +21,7 @@ export type UserFormDefaults = {
 export type SupermarketOption = {
   id: string;
   name: string;
+  address?: string | null;
 };
 
 type ActionState = { error?: string };
@@ -43,6 +45,16 @@ export function UserForm({ defaults, supermarkets, action, isSelf }: Props) {
     {},
   );
   const [role, setRole] = useState(defaults.role);
+
+  const storeOptions = useMemo(
+    () =>
+      supermarkets.map((s) => ({
+        value: s.id,
+        label: s.name,
+        description: s.address ?? undefined,
+      })),
+    [supermarkets],
+  );
 
   return (
     <form action={formAction} className="space-y-6 max-w-2xl">
@@ -106,19 +118,19 @@ export function UserForm({ defaults, supermarkets, action, isSelf }: Props) {
               <Label htmlFor="supermarket_id" className="mb-1.5 block">
                 Дэлгүүр
               </Label>
-              <select
-                id="supermarket_id"
+              <SearchableSelect
                 name="supermarket_id"
+                options={storeOptions}
                 defaultValue={defaults.supermarket_id ?? ""}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
-              >
-                <option value="">— Сонгох —</option>
-                {supermarkets.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+                placeholder="Дэлгүүр сонгох"
+                searchPlaceholder="Нэр, хаягаар хайх..."
+                emptyLabel="Дэлгүүр олдсонгүй"
+                allowEmpty
+                emptyOptionLabel="— Сонгоогүй —"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                {storeOptions.length} дэлгүүрээс сонгох
+              </p>
             </div>
           )}
         </CardContent>

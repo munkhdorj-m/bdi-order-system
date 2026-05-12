@@ -59,6 +59,7 @@ create table categories (
 -- BDI's B2B customers. Each can have an assigned sales rep.
 create table supermarkets (
   id               uuid primary key default gen_random_uuid(),
+  external_id      text,  -- BDI's internal customer code (BTGT / hariltsagchid)
   name             text not null,
   address          text,
   contact_phone    text,
@@ -70,6 +71,8 @@ create table supermarkets (
 
 create index supermarkets_assigned_rep_idx on supermarkets(assigned_rep_id);
 create index supermarkets_active_idx       on supermarkets(active);
+create unique index supermarkets_external_id_uniq
+  on supermarkets(external_id) where external_id is not null;
 
 
 -- 3.3 profiles ------------------------------------------------
