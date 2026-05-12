@@ -63,15 +63,8 @@ def norm(value) -> str | None:
     return s if s else None
 
 
-def build_address(district: str | None, address: str | None) -> str | None:
-    parts = [p for p in (district, address) if p]
-    return ", ".join(parts) if parts else None
-
-
-def build_notes(typ: str | None, company: str | None, manager: str | None, internal: str | None) -> str | None:
+def build_notes(company: str | None, manager: str | None, internal: str | None) -> str | None:
     bits: list[str] = []
-    if typ:
-        bits.append(f"Төрөл: {typ}")
     if company:
         bits.append(f"Компани: {company}")
     if internal:
@@ -101,10 +94,11 @@ def parse(df: pd.DataFrame) -> Iterator[dict]:
         yield {
             "external_id": external_id,
             "name": name,
-            "address": build_address(norm(row.get("Дүүрэг")), norm(row.get("Хаяг"))),
+            "type": norm(row.get("Төрөл")),
+            "district": norm(row.get("Дүүрэг")),
+            "address": norm(row.get("Хаяг")),
             "contact_phone": norm(row.get("Утас")),
             "notes": build_notes(
-                norm(row.get("Төрөл")),
                 company if branch else None,  # if we used company as name, don't duplicate it
                 norm(row.get("Менежер")),
                 norm(row.get("дотоод код")),

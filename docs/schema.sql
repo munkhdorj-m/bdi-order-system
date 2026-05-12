@@ -61,6 +61,8 @@ create table supermarkets (
   id               uuid primary key default gen_random_uuid(),
   external_id      text,  -- BDI's internal customer code (BTGT / hariltsagchid)
   name             text not null,
+  type             text,  -- Супермаркет / Сүлжээ / Мини маркет / Зах / Байгууллага / ...
+  district         text,  -- Ulaanbaatar district or aimag name
   address          text,
   contact_phone    text,
   assigned_rep_id  uuid,  -- FK added after profiles table exists
@@ -71,6 +73,8 @@ create table supermarkets (
 
 create index supermarkets_assigned_rep_idx on supermarkets(assigned_rep_id);
 create index supermarkets_active_idx       on supermarkets(active);
+create index supermarkets_type_idx         on supermarkets(type);
+create index supermarkets_district_idx     on supermarkets(district);
 create unique index supermarkets_external_id_uniq
   on supermarkets(external_id);  -- NULLs still allowed (distinct by default)
 
