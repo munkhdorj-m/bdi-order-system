@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export type SupermarketFormDefaults = {
   id?: string;
   name?: string;
+  type?: string | null;
+  district?: string | null;
   address?: string | null;
   contact_phone?: string | null;
   assigned_rep_id?: string | null;
@@ -29,13 +31,42 @@ type ActionState = { error?: string };
 type Props = {
   reps: RepOption[];
   defaults?: SupermarketFormDefaults;
+  /** Distinct values from the DB, used as autocomplete suggestions. */
+  typeSuggestions?: string[];
+  districtSuggestions?: string[];
   action: (prev: ActionState, formData: FormData) => Promise<ActionState>;
   submitLabel: string;
 };
 
+// Sensible defaults if the parent doesn't pass anything from DB.
+const DEFAULT_TYPES = [
+  "Супермаркет",
+  "Сүлжээ",
+  "Мини маркет",
+  "Хүнсний",
+  "Зах",
+  "Байгууллага",
+  "Бөөний төв",
+  "Хувь хүн",
+];
+
+const DEFAULT_DISTRICTS = [
+  "Баянгол  Дүүрэг",
+  "Баянзүрх  Дүүрэг",
+  "Чингэлтэй  Дүүрэг",
+  "Хан-Уул  Дүүрэг",
+  "Сонгино  Хайрхан Дүүрэг",
+  "Сүхбаатар  Дүүрэг",
+  "Налайх  Дүүрэг",
+  "Багануур  Дүүрэг",
+  "Багахангай  Дүүрэг",
+];
+
 export function SupermarketForm({
   reps,
   defaults = {},
+  typeSuggestions,
+  districtSuggestions,
   action,
   submitLabel,
 }: Props) {
@@ -43,6 +74,9 @@ export function SupermarketForm({
     action,
     {},
   );
+
+  const typeOptions = mergeSuggestions(typeSuggestions, DEFAULT_TYPES);
+  const districtOptions = mergeSuggestions(districtSuggestions, DEFAULT_DISTRICTS);
 
   return (
     <form action={formAction} className="space-y-6 max-w-2xl">
@@ -59,6 +93,36 @@ export function SupermarketForm({
               defaultValue={defaults.name ?? ""}
               placeholder="Жишээ нь: Хүнс-Мини дэлгүүр"
             />
+          </Field>
+
+          <Field label="Төрөл" htmlFor="type">
+            <Input
+              id="type"
+              name="type"
+              list="supermarket-type-options"
+              defaultValue={defaults.type ?? ""}
+              placeholder="Супермаркет / Мини маркет ..."
+            />
+            <datalist id="supermarket-type-options">
+              {typeOptions.map((t) => (
+                <option key={t} value={t} />
+              ))}
+            </datalist>
+          </Field>
+
+          <Field label="Дүүрэг" htmlFor="district">
+            <Input
+              id="district"
+              name="district"
+              list="supermarket-district-options"
+              defaultValue={defaults.district ?? ""}
+              placeholder="Жишээ нь: Баянзүрх Дүүрэг"
+            />
+            <datalist id="supermarket-district-options">
+              {districtOptions.map((d) => (
+                <option key={d} value={d} />
+              ))}
+            </datalist>
           </Field>
 
           <Field label="Хаяг" htmlFor="address" className="md:col-span-2">
@@ -137,6 +201,22 @@ export function SupermarketForm({
       </div>
     </form>
   );
+}
+
+function mergeSuggestions(
+  fromDb: string[] | undefined,
+  defaults: string[],
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of [...(fromDb ?? []), ...defaults]) {
+    const trimmed = v?.trim();
+    if (!trimmed) continue;
+    if (seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
 }
 
 function Field({

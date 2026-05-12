@@ -18,6 +18,8 @@ function buildPayload(formData: FormData) {
   return {
     payload: {
       name,
+      type: parseString(formData.get("type")),
+      district: parseString(formData.get("district")),
       address: parseString(formData.get("address")),
       contact_phone: parseString(formData.get("contact_phone")),
       assigned_rep_id: parseString(formData.get("assigned_rep_id")),

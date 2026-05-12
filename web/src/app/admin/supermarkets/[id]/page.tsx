@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, DollarSign } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getSupermarketSuggestions } from "@/lib/supermarket-suggestions";
 import { Button } from "@/components/ui/button";
 import { SupermarketForm } from "@/components/admin/supermarket-form";
 import { updateSupermarket } from "../actions";
@@ -16,11 +17,11 @@ export default async function EditSupermarketPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: supermarket }, { data: reps }] = await Promise.all([
+  const [{ data: supermarket }, { data: reps }, suggestions] = await Promise.all([
     supabase
       .from("supermarkets")
       .select(
-        "id, name, address, contact_phone, assigned_rep_id, notes, active",
+        "id, name, type, district, address, contact_phone, assigned_rep_id, notes, active",
       )
       .eq("id", id)
       .single(),
@@ -29,6 +30,7 @@ export default async function EditSupermarketPage({
       .select("id, full_name, email")
       .eq("role", "rep")
       .order("full_name"),
+    getSupermarketSuggestions(),
   ]);
 
   if (!supermarket) notFound();
@@ -45,12 +47,14 @@ export default async function EditSupermarketPage({
         Дэлгүүр жагсаалт руу
       </Link>
 
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">{supermarket.name}</h1>
-        <Button asChild variant="outline">
+      <div className="flex items-center justify-between mb-6 gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight min-w-0 truncate">
+          {supermarket.name}
+        </h1>
+        <Button asChild variant="outline" className="shrink-0">
           <Link href={`/admin/supermarkets/${id}/prices`}>
             <DollarSign className="h-4 w-4" />
-            Үнийн жагсаалт
+            <span className="hidden sm:inline">Үнийн жагсаалт</span>
           </Link>
         </Button>
       </div>
@@ -58,6 +62,8 @@ export default async function EditSupermarketPage({
       <SupermarketForm
         reps={reps ?? []}
         defaults={supermarket}
+        typeSuggestions={suggestions.types}
+        districtSuggestions={suggestions.districts}
         action={update}
         submitLabel="Хадгалах"
       />
