@@ -34,10 +34,9 @@ create type user_role as enum ('admin', 'rep', 'buyer');
 create type order_status as enum (
   'pending',     -- buyer submitted, BDI hasn't acted yet
   'confirmed',   -- BDI accepted the order
-  'packing',     -- being prepared in warehouse
-  'shipped',    -- out for delivery
+  'shipped',     -- out for delivery (Хүргэлтэнд гарсан)
   'delivered',   -- received by store
-  'cancelled'    -- cancelled by either side
+  'cancelled'    -- side outcome — not part of the forward workflow
 );
 
 

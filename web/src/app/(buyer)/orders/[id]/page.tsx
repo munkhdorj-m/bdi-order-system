@@ -4,17 +4,14 @@ import { CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { formatMnt } from "@/lib/format";
+import {
+  STATUS_COLOR,
+  STATUS_LABELS,
+  type OrderStatus,
+} from "@/lib/order-status";
 
 type Params = Promise<{ id: string }>;
 type SearchParams = Promise<{ new?: string }>;
-
-type OrderStatus =
-  | "pending"
-  | "confirmed"
-  | "packing"
-  | "shipped"
-  | "delivered"
-  | "cancelled";
 
 type OrderDetail = {
   id: string;
@@ -32,25 +29,6 @@ type OrderDetail = {
     unit_price: number;
     line_total: number;
   }[];
-};
-
-const STATUS_LABELS: Record<OrderStatus, string> = {
-  pending: "Хүлээгдэж буй",
-  confirmed: "Баталгаажсан",
-  packing: "Багцлаж буй",
-  shipped: "Илгээсэн",
-  delivered: "Хүргэгдсэн",
-  cancelled: "Цуцлагдсан",
-};
-
-const STATUS_COLOR: Record<OrderStatus, string> = {
-  pending: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
-  confirmed: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
-  packing: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
-  shipped: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200",
-  delivered:
-    "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
-  cancelled: "bg-zinc-100 text-zinc-800 dark:bg-zinc-900 dark:text-zinc-300",
 };
 
 function formatDateTime(iso: string) {

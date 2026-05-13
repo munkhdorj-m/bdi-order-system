@@ -68,7 +68,7 @@ export default async function AdminOrdersPage({
   } else if (
     status &&
     (
-      ["pending", "confirmed", "packing", "shipped", "delivered", "cancelled"] as const
+      ["pending", "confirmed", "shipped", "delivered", "cancelled"] as const
     ).includes(status as OrderStatus)
   ) {
     query = query.eq("status", status);
@@ -82,7 +82,6 @@ export default async function AdminOrdersPage({
     { key: "active", label: "Идэвхтэй" },
     { key: "pending", label: STATUS_LABELS.pending },
     { key: "confirmed", label: STATUS_LABELS.confirmed },
-    { key: "packing", label: STATUS_LABELS.packing },
     { key: "shipped", label: STATUS_LABELS.shipped },
     { key: "delivered", label: STATUS_LABELS.delivered },
     { key: "cancelled", label: STATUS_LABELS.cancelled },

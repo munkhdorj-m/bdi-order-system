@@ -2,32 +2,18 @@ import Link from "next/link";
 import { ChevronRight, ClipboardList } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatMnt } from "@/lib/format";
+import {
+  STATUS_COLOR,
+  STATUS_LABELS,
+  type OrderStatus,
+} from "@/lib/order-status";
 
 type OrderRow = {
   id: string;
   order_number: string;
-  status: "pending" | "confirmed" | "packing" | "shipped" | "delivered" | "cancelled";
+  status: OrderStatus;
   subtotal: number;
   created_at: string;
-};
-
-const STATUS_LABELS: Record<OrderRow["status"], string> = {
-  pending: "Хүлээгдэж буй",
-  confirmed: "Баталгаажсан",
-  packing: "Багцлаж буй",
-  shipped: "Илгээсэн",
-  delivered: "Хүргэгдсэн",
-  cancelled: "Цуцлагдсан",
-};
-
-const STATUS_COLOR: Record<OrderRow["status"], string> = {
-  pending: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
-  confirmed: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
-  packing: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
-  shipped: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200",
-  delivered:
-    "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
-  cancelled: "bg-zinc-100 text-zinc-800 dark:bg-zinc-900 dark:text-zinc-300",
 };
 
 function formatDate(iso: string) {

@@ -1,7 +1,6 @@
 export type OrderStatus =
   | "pending"
   | "confirmed"
-  | "packing"
   | "shipped"
   | "delivered"
   | "cancelled";
@@ -9,8 +8,7 @@ export type OrderStatus =
 export const STATUS_LABELS: Record<OrderStatus, string> = {
   pending: "Хүлээгдэж буй",
   confirmed: "Баталгаажсан",
-  packing: "Багцлаж буй",
-  shipped: "Илгээсэн",
+  shipped: "Хүргэлтэнд гарсан",
   delivered: "Хүргэгдсэн",
   cancelled: "Цуцлагдсан",
 };
@@ -18,7 +16,6 @@ export const STATUS_LABELS: Record<OrderStatus, string> = {
 export const STATUS_COLOR: Record<OrderStatus, string> = {
   pending: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
   confirmed: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
-  packing: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
   shipped: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200",
   delivered:
     "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
@@ -28,22 +25,19 @@ export const STATUS_COLOR: Record<OrderStatus, string> = {
 // Forward workflow for admins
 export const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   pending: "confirmed",
-  confirmed: "packing",
-  packing: "shipped",
+  confirmed: "shipped",
   shipped: "delivered",
 };
 
 export const NEXT_STATUS_LABEL: Partial<Record<OrderStatus, string>> = {
   pending: "Баталгаажуулах",
-  confirmed: "Багцлаж эхлэх",
-  packing: "Илгээх",
+  confirmed: "Хүргэлтэнд гаргах",
   shipped: "Хүргэгдсэн гэж тэмдэглэх",
 };
 
 export const ACTIVE_STATUSES: OrderStatus[] = [
   "pending",
   "confirmed",
-  "packing",
   "shipped",
 ];
 
