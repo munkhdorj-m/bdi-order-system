@@ -13,13 +13,19 @@ export const STATUS_LABELS: Record<OrderStatus, string> = {
   cancelled: "Цуцлагдсан",
 };
 
+// Distinct color per status so admins can scan the orders list at a glance.
+// Each step "warms up" toward emerald (success), with rose for cancelled.
 export const STATUS_COLOR: Record<OrderStatus, string> = {
-  pending: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
-  confirmed: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
-  shipped: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200",
+  pending:
+    "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
+  confirmed:
+    "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200",
+  shipped:
+    "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200",
   delivered:
     "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
-  cancelled: "bg-zinc-100 text-zinc-800 dark:bg-zinc-900 dark:text-zinc-300",
+  cancelled:
+    "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200",
 };
 
 // Forward workflow for admins
