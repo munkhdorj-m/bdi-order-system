@@ -64,7 +64,7 @@ export default async function AdminProductsPage({
   const rows = (products as unknown as ProductRow[]) ?? [];
 
   return (
-    <div className="max-w-6xl">
+    <div className="w-full">
       <div className="flex items-start sm:items-center justify-between gap-3 mb-6">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">Бараа</h1>
@@ -178,22 +178,22 @@ export default async function AdminProductsPage({
 
           {/* Desktop: table */}
           <Card className="hidden sm:block">
-            <Table>
+            <Table className="table-fixed w-full">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-16"></TableHead>
                   <TableHead>Нэр</TableHead>
-                  <TableHead>Ангилал</TableHead>
-                  <TableHead>SKU</TableHead>
-                  <TableHead className="text-right">Үнэ</TableHead>
-                  <TableHead className="text-right">Үлдэгдэл</TableHead>
-                  <TableHead></TableHead>
+                  <TableHead className="w-48 hidden lg:table-cell">Ангилал</TableHead>
+                  <TableHead className="w-36">SKU</TableHead>
+                  <TableHead className="w-28 text-right">Үнэ</TableHead>
+                  <TableHead className="w-20 text-right">Үлдэгдэл</TableHead>
+                  <TableHead className="w-24"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((p) => (
                   <TableRow key={p.id} className="cursor-pointer">
-                    <TableCell>
+                    <TableCell className="align-top">
                       <Link
                         href={`/admin/products/${p.id}`}
                         className="block w-12 h-12 rounded bg-muted overflow-hidden relative"
@@ -214,24 +214,30 @@ export default async function AdminProductsPage({
                         )}
                       </Link>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="align-top">
                       <Link
                         href={`/admin/products/${p.id}`}
-                        className="block font-medium hover:underline"
+                        className="block font-medium hover:underline truncate"
+                        title={p.name}
                       >
                         {p.name}
                       </Link>
                       {p.brand && (
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-xs text-muted-foreground truncate">
                           {p.brand}
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell
+                      className="hidden lg:table-cell text-sm text-muted-foreground truncate"
+                      title={p.categories?.name ?? undefined}
+                    >
                       {p.categories?.name ?? "—"}
                     </TableCell>
-                    <TableCell className="font-mono text-xs">{p.sku}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="font-mono text-xs truncate" title={p.sku}>
+                      {p.sku}
+                    </TableCell>
+                    <TableCell className="text-right whitespace-nowrap">
                       {formatMnt(p.base_price)}
                     </TableCell>
                     <TableCell className="text-right">{p.stock}</TableCell>
