@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronLeft, ClipboardList, LogOut, ShoppingCart, Store } from "lucide-react";
-import { useCart, totalQty } from "@/lib/cart";
+import { ChevronLeft, LogOut, Store } from "lucide-react";
+import { BuyerBottomTabBar } from "./bottom-tab-bar";
 
 type Props = {
   storeName: string;
@@ -11,17 +11,18 @@ type Props = {
   children: React.ReactNode;
 };
 
+// Top-level pages that anchor the bottom tab bar — no back button needed here.
+const ROOT_PATHS = new Set(["/catalog", "/orders", "/cart"]);
+
 export function BuyerShell({ storeName, email, children }: Props) {
-  const cart = useCart();
-  const qty = totalQty(cart);
   const pathname = usePathname();
   const router = useRouter();
-  const showBack = pathname !== "/catalog";
+  const isRoot = ROOT_PATHS.has(pathname);
 
   return (
     <div className="min-h-screen flex flex-col bg-muted/30">
-      <header className="sticky top-0 z-10 h-14 border-b bg-background flex items-center px-3 sm:px-4">
-        {showBack ? (
+      <header className="sticky top-0 z-10 h-14 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 flex items-center px-3 sm:px-4">
+        {!isRoot ? (
           <button
             type="button"
             onClick={() => router.back()}
@@ -31,11 +32,9 @@ export function BuyerShell({ storeName, email, children }: Props) {
             <ChevronLeft className="h-5 w-5" />
           </button>
         ) : (
-          <div className="flex items-center gap-2 text-sm">
-            <Store className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium truncate max-w-[40vw] sm:max-w-xs">
-              {storeName}
-            </span>
+          <div className="flex items-center gap-2 text-sm min-w-0">
+            <Store className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="font-medium truncate">{storeName}</span>
           </div>
         )}
 
@@ -44,27 +43,6 @@ export function BuyerShell({ storeName, email, children }: Props) {
           className="ml-auto mr-1 font-semibold tracking-tight"
         >
           BDI
-        </Link>
-
-        <Link
-          href="/orders"
-          className="ml-2 p-2 rounded-md hover:bg-muted"
-          aria-label="Захиалга"
-        >
-          <ClipboardList className="h-5 w-5" />
-        </Link>
-
-        <Link
-          href="/cart"
-          className="ml-1 relative p-2 rounded-md hover:bg-muted"
-          aria-label="Сагс"
-        >
-          <ShoppingCart className="h-5 w-5" />
-          {qty > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-5 h-5 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-medium flex items-center justify-center">
-              {qty}
-            </span>
-          )}
         </Link>
 
         <form action="/auth/signout" method="post" className="ml-1">
@@ -79,7 +57,9 @@ export function BuyerShell({ storeName, email, children }: Props) {
         </form>
       </header>
 
-      <main className="flex-1">{children}</main>
+      <main className="flex-1 pb-20">{children}</main>
+
+      <BuyerBottomTabBar />
     </div>
   );
 }
