@@ -251,8 +251,18 @@ $$;
 
 
 -- 4.3 auto-recompute order.subtotal whenever its items change
+--
+-- SECURITY DEFINER + locked search_path so the UPDATE on orders
+-- bypasses RLS. Without this, buyer/rep INSERTs into order_items
+-- fire the trigger but the UPDATE on orders is denied (their RLS
+-- only allows INSERT/SELECT on orders, not UPDATE), so subtotal
+-- silently stays at 0.
 create or replace function recompute_order_subtotal()
-returns trigger language plpgsql as $$
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
 declare
   oid uuid;
 begin
