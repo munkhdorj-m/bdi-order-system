@@ -3,12 +3,10 @@ import { notFound } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
+import { OrderStatusPill } from "@/components/admin/order-status-pill";
+import { OrderProgress } from "@/components/order-progress";
 import { formatMnt } from "@/lib/format";
-import {
-  STATUS_COLOR,
-  STATUS_LABELS,
-  type OrderStatus,
-} from "@/lib/order-status";
+import { type OrderStatus } from "@/lib/order-status";
 
 type Params = Promise<{ id: string }>;
 type SearchParams = Promise<{ new?: string }>;
@@ -21,6 +19,7 @@ type OrderDetail = {
   notes: string | null;
   created_at: string;
   confirmed_at: string | null;
+  shipped_at: string | null;
   delivered_at: string | null;
   order_items: {
     id: string;
@@ -55,7 +54,7 @@ export default async function OrderDetailPage({
   const { data } = await supabase
     .from("orders")
     .select(
-      "id, order_number, status, subtotal, notes, created_at, confirmed_at, delivered_at, order_items(id, product_name_snapshot, qty, unit_price, line_total)",
+      "id, order_number, status, subtotal, notes, created_at, confirmed_at, shipped_at, delivered_at, order_items(id, product_name_snapshot, qty, unit_price, line_total)",
     )
     .eq("id", id)
     .single();
@@ -66,8 +65,8 @@ export default async function OrderDetailPage({
   return (
     <div className="px-3 sm:px-4 py-4 max-w-2xl mx-auto">
       {isNew && (
-        <div className="mb-4 rounded-xl border-2 border-primary/20 bg-primary/5 p-5 text-center animate-in fade-in zoom-in-95 duration-300">
-          <div className="size-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center mx-auto mb-3">
+        <div className="mb-4 rounded-xl border-2 border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-5 text-center animate-in fade-in zoom-in-95 duration-300">
+          <div className="size-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center mx-auto mb-3 shadow-sm">
             <CheckCircle2 className="h-6 w-6" />
           </div>
           <h2 className="text-lg font-semibold mb-1">
@@ -87,15 +86,23 @@ export default async function OrderDetailPage({
           <h1 className="text-xl font-semibold font-mono">
             {order.order_number}
           </h1>
-          <span
-            className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[order.status]}`}
-          >
-            {STATUS_LABELS[order.status]}
-          </span>
+          <OrderStatusPill status={order.status} size="md" />
         </div>
         <div className="text-xs text-muted-foreground">
           {formatDateTime(order.created_at)}
         </div>
+      </div>
+
+      <div className="bg-background border rounded-xl p-4 mb-4">
+        <OrderProgress
+          status={order.status}
+          timestamps={{
+            pending: order.created_at,
+            confirmed: order.confirmed_at,
+            shipped: order.shipped_at,
+            delivered: order.delivered_at,
+          }}
+        />
       </div>
 
       <div className="bg-background border rounded-lg overflow-hidden mb-4">
@@ -133,30 +140,6 @@ export default async function OrderDetailPage({
           <p className="text-sm whitespace-pre-wrap">{order.notes}</p>
         </div>
       )}
-
-      <div className="bg-background border rounded-lg p-4">
-        <div className="text-xs font-medium text-muted-foreground mb-2">
-          Төлвийн түүх
-        </div>
-        <div className="space-y-1.5 text-sm">
-          <TimelineRow label="Үүсгэсэн" at={order.created_at} />
-          {order.confirmed_at && (
-            <TimelineRow label="Баталгаажсан" at={order.confirmed_at} />
-          )}
-          {order.delivered_at && (
-            <TimelineRow label="Хүргэгдсэн" at={order.delivered_at} />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TimelineRow({ label, at }: { label: string; at: string }) {
-  return (
-    <div className="flex justify-between">
-      <span>{label}</span>
-      <span className="text-muted-foreground text-xs">{formatDateTime(at)}</span>
     </div>
   );
 }

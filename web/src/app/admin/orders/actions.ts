@@ -32,6 +32,7 @@ async function setOrderStatus(
   const update: Record<string, unknown> = { status };
   const now = new Date().toISOString();
   if (status === "confirmed") update.confirmed_at = now;
+  if (status === "shipped") update.shipped_at = now;
   if (status === "delivered") update.delivered_at = now;
 
   const { error } = await supabase

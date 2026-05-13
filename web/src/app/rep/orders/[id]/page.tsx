@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OrderStatusPill } from "@/components/admin/order-status-pill";
+import { OrderProgress } from "@/components/order-progress";
 import { type OrderStatus } from "@/lib/order-status";
 import { formatMnt } from "@/lib/format";
 
@@ -17,6 +18,7 @@ type OrderDetail = {
   notes: string | null;
   created_at: string;
   confirmed_at: string | null;
+  shipped_at: string | null;
   delivered_at: string | null;
   supermarkets: { id: string; name: string } | null;
   order_items: {
@@ -49,7 +51,7 @@ export default async function RepOrderDetailPage({
   const { data } = await supabase
     .from("orders")
     .select(
-      `id, order_number, status, subtotal, notes, created_at, confirmed_at, delivered_at,
+      `id, order_number, status, subtotal, notes, created_at, confirmed_at, shipped_at, delivered_at,
        supermarkets:supermarket_id(id, name),
        order_items(id, product_name_snapshot, qty, unit_price, line_total)`,
     )
@@ -83,11 +85,25 @@ export default async function RepOrderDetailPage({
 
       <main className="px-3 sm:px-4 py-4 max-w-2xl mx-auto">
         <div className="flex items-center gap-2 flex-wrap mb-1">
-          <OrderStatusPill status={order.status} />
+          <OrderStatusPill status={order.status} size="md" />
         </div>
         <p className="text-xs text-muted-foreground mb-4">
           {formatDateTime(order.created_at)}
         </p>
+
+        <Card className="mb-4">
+          <CardContent className="pt-6 pb-5">
+            <OrderProgress
+              status={order.status}
+              timestamps={{
+                pending: order.created_at,
+                confirmed: order.confirmed_at,
+                shipped: order.shipped_at,
+                delivered: order.delivered_at,
+              }}
+            />
+          </CardContent>
+        </Card>
 
         <Card className="mb-4">
           <CardHeader>
@@ -133,31 +149,7 @@ export default async function RepOrderDetailPage({
             </CardContent>
           </Card>
         )}
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Төлвийн түүх</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1 text-sm">
-            <Row label="Үүсгэсэн" at={order.created_at} />
-            {order.confirmed_at && (
-              <Row label="Баталгаажсан" at={order.confirmed_at} />
-            )}
-            {order.delivered_at && (
-              <Row label="Хүргэгдсэн" at={order.delivered_at} />
-            )}
-          </CardContent>
-        </Card>
       </main>
-    </div>
-  );
-}
-
-function Row({ label, at }: { label: string; at: string }) {
-  return (
-    <div className="flex justify-between">
-      <span>{label}</span>
-      <span className="text-muted-foreground text-xs">{formatDateTime(at)}</span>
     </div>
   );
 }

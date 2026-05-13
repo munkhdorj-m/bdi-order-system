@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OrderStatusPill } from "@/components/admin/order-status-pill";
 import { OrderActions } from "@/components/admin/order-actions";
+import { OrderProgress } from "@/components/order-progress";
 import { type OrderStatus } from "@/lib/order-status";
 import { formatMnt } from "@/lib/format";
 
@@ -18,6 +19,7 @@ type OrderDetail = {
   notes: string | null;
   created_at: string;
   confirmed_at: string | null;
+  shipped_at: string | null;
   delivered_at: string | null;
   supermarkets: {
     name: string;
@@ -60,7 +62,7 @@ export default async function AdminOrderDetailPage({
   const { data, error } = await supabase
     .from("orders")
     .select(
-      `id, order_number, status, subtotal, notes, created_at, confirmed_at, delivered_at,
+      `id, order_number, status, subtotal, notes, created_at, confirmed_at, shipped_at, delivered_at,
        supermarkets:supermarket_id(name, address, contact_phone, profiles:assigned_rep_id(full_name, email)),
        buyer:placed_by(full_name, email, phone),
        order_items(id, product_name_snapshot, qty, unit_price, line_total)`,
@@ -85,11 +87,25 @@ export default async function AdminOrderDetailPage({
         <h1 className="text-2xl font-semibold font-mono tracking-tight">
           {order.order_number}
         </h1>
-        <OrderStatusPill status={order.status} />
+        <OrderStatusPill status={order.status} size="md" />
       </div>
       <p className="text-sm text-muted-foreground mb-6">
         {formatDateTime(order.created_at)}
       </p>
+
+      <Card className="mb-6">
+        <CardContent className="pt-6 pb-5">
+          <OrderProgress
+            status={order.status}
+            timestamps={{
+              pending: order.created_at,
+              confirmed: order.confirmed_at,
+              shipped: order.shipped_at,
+              delivered: order.delivered_at,
+            }}
+          />
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <Card>
@@ -183,21 +199,6 @@ export default async function AdminOrderDetailPage({
         </Card>
       )}
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-sm">Төлвийн түүх</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-1 text-sm">
-          <TimelineRow label="Үүсгэсэн" at={order.created_at} />
-          {order.confirmed_at && (
-            <TimelineRow label="Баталгаажсан" at={order.confirmed_at} />
-          )}
-          {order.delivered_at && (
-            <TimelineRow label="Хүргэгдсэн" at={order.delivered_at} />
-          )}
-        </CardContent>
-      </Card>
-
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">Үйлдэл</CardTitle>
@@ -206,15 +207,6 @@ export default async function AdminOrderDetailPage({
           <OrderActions orderId={order.id} status={order.status} />
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-function TimelineRow({ label, at }: { label: string; at: string }) {
-  return (
-    <div className="flex justify-between">
-      <span>{label}</span>
-      <span className="text-muted-foreground text-xs">{formatDateTime(at)}</span>
     </div>
   );
 }

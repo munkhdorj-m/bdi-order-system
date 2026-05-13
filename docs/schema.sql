@@ -181,6 +181,7 @@ create table orders (
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now(),
   confirmed_at   timestamptz,
+  shipped_at     timestamptz,
   delivered_at   timestamptz
 );
 

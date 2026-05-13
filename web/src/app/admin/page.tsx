@@ -1,5 +1,12 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import {
+  ArrowRight,
+  Bell,
+  ClipboardList,
+  Package,
+  Store as StoreIcon,
+  type LucideIcon,
+} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -33,6 +40,43 @@ function formatRelative(iso: string) {
   return `${day} өдрийн өмнө`;
 }
 
+type Stat = {
+  label: string;
+  value: number;
+  href: string;
+  icon: LucideIcon;
+  /** Token used for the colored ring + icon tint. */
+  tone: "amber" | "primary" | "violet" | "sky";
+  /** Highlight if this stat needs attention (e.g. pending orders > 0). */
+  alert?: boolean;
+};
+
+const TONE_STYLE: Record<
+  Stat["tone"],
+  { icon: string; ring: string; alertBg: string }
+> = {
+  amber: {
+    icon: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-200",
+    ring: "ring-amber-200/60 dark:ring-amber-900/60",
+    alertBg: "from-amber-50/80 via-background to-background dark:from-amber-950/30",
+  },
+  primary: {
+    icon: "bg-primary/15 text-primary",
+    ring: "ring-primary/20",
+    alertBg: "from-primary/10 via-background to-background",
+  },
+  violet: {
+    icon: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-200",
+    ring: "ring-violet-200/60 dark:ring-violet-900/60",
+    alertBg: "from-violet-50/80 via-background to-background dark:from-violet-950/30",
+  },
+  sky: {
+    icon: "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-200",
+    ring: "ring-sky-200/60 dark:ring-sky-900/60",
+    alertBg: "from-sky-50/80 via-background to-background dark:from-sky-950/30",
+  },
+};
+
 export default async function AdminDashboard() {
   const supabase = await createClient();
 
@@ -62,45 +106,79 @@ export default async function AdminDashboard() {
       .limit(8),
   ]);
 
-  const stats = [
+  const stats: Stat[] = [
     {
       label: "Шинэ захиалга",
       value: pendingCount ?? 0,
       href: "/admin/orders?status=pending",
-      accent: (pendingCount ?? 0) > 0,
+      icon: Bell,
+      tone: "amber",
+      alert: (pendingCount ?? 0) > 0,
     },
     {
       label: "Идэвхтэй захиалга",
       value: activeCount ?? 0,
       href: "/admin/orders?status=active",
+      icon: ClipboardList,
+      tone: "violet",
     },
-    { label: "Бараа", value: productCount ?? 0, href: "/admin/products" },
-    { label: "Дэлгүүр", value: supermarketCount ?? 0, href: "/admin/supermarkets" },
+    {
+      label: "Бараа",
+      value: productCount ?? 0,
+      href: "/admin/products",
+      icon: Package,
+      tone: "primary",
+    },
+    {
+      label: "Дэлгүүр",
+      value: supermarketCount ?? 0,
+      href: "/admin/supermarkets",
+      icon: StoreIcon,
+      tone: "sky",
+    },
   ];
 
   const recentOrders = (recent as unknown as RecentOrder[]) ?? [];
 
   return (
-    <div className="max-w-5xl">
+    <div className="max-w-6xl">
       <h1 className="text-2xl font-semibold tracking-tight mb-6">Дашбоард</h1>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-        {stats.map((s) => (
-          <Link key={s.label} href={s.href}>
-            <Card
-              className={
-                s.accent
-                  ? "border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20 hover:shadow-sm transition-shadow"
-                  : "hover:shadow-sm transition-shadow"
-              }
-            >
-              <CardHeader className="pb-2">
-                <CardDescription>{s.label}</CardDescription>
-                <CardTitle className="text-3xl">{s.value}</CardTitle>
-              </CardHeader>
-            </Card>
-          </Link>
-        ))}
+        {stats.map((s) => {
+          const Icon = s.icon;
+          const tone = TONE_STYLE[s.tone];
+          return (
+            <Link key={s.label} href={s.href}>
+              <Card
+                className={`group relative overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5 duration-200 ${
+                  s.alert
+                    ? `bg-gradient-to-br ${tone.alertBg} ring-1 ${tone.ring}`
+                    : ""
+                }`}
+              >
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div
+                      className={`size-9 rounded-lg flex items-center justify-center ${tone.icon}`}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    {s.alert && (
+                      <span className="inline-flex size-2 rounded-full bg-amber-500 animate-pulse" />
+                    )}
+                  </div>
+                  <div className="mt-3 text-3xl font-semibold tracking-tight">
+                    {s.value.toLocaleString("mn-MN")}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {s.label}
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
       </div>
 
       <Card>
@@ -138,7 +216,7 @@ export default async function AdminDashboard() {
                       </span>
                       <OrderStatusPill status={o.status} />
                     </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
+                    <div className="text-xs text-muted-foreground mt-0.5 truncate">
                       {o.supermarkets?.name ?? "—"} · {formatRelative(o.created_at)}
                     </div>
                   </div>
