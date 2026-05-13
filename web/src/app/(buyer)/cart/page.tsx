@@ -68,7 +68,7 @@ export default function CartPage() {
   }
 
   return (
-    <div className="px-3 sm:px-4 py-4 max-w-2xl mx-auto pb-32">
+    <div className="px-3 sm:px-4 py-4 max-w-2xl mx-auto pb-40 lg:pb-32">
       <div className="mb-4">
         <h1 className="text-xl font-semibold">Миний сагс</h1>
         <p className="text-sm text-muted-foreground">{qty} ширхэг бараа</p>
@@ -168,7 +168,7 @@ export default function CartPage() {
         </div>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 bg-background border-t p-3 sm:p-4">
+      <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] lg:bottom-0 left-0 right-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-t shadow-[0_-4px_12px_-8px_rgba(0,0,0,0.08)] p-3 sm:p-4 z-10">
         <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
           <div>
             <div className="text-xs text-muted-foreground">Нийт</div>

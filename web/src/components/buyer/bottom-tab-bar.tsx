@@ -19,10 +19,6 @@ export function BuyerBottomTabBar() {
   const cart = useCart();
   const cartQty = totalQty(cart);
 
-  // Hide on the cart page itself so it doesn't compete with the sticky
-  // submit bar at the bottom of the cart.
-  if (pathname === "/cart") return null;
-
   const tabs: Tab[] = [
     {
       href: "/catalog",
