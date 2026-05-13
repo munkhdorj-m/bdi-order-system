@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSupermarketSuggestions } from "@/lib/supermarket-suggestions";
 import { Button } from "@/components/ui/button";
 import { SupermarketForm } from "@/components/admin/supermarket-form";
+import { SupermarketDangerZone } from "@/components/admin/supermarket-danger-zone";
 import { updateSupermarket } from "../actions";
 
 type Params = Promise<{ id: string }>;
@@ -77,6 +78,12 @@ export default async function EditSupermarketPage({
         districtSuggestions={suggestions.districts}
         action={update}
         submitLabel="Хадгалах"
+      />
+
+      <SupermarketDangerZone
+        id={supermarket.id}
+        name={supermarket.name}
+        active={supermarket.active}
       />
     </div>
   );

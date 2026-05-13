@@ -123,7 +123,7 @@ export default async function AdminSupermarketsPage({
   );
 
   return (
-    <div className="max-w-6xl">
+    <div className="w-full">
       <div className="flex items-start sm:items-center justify-between gap-3 mb-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">Дэлгүүр</h1>

@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 
 type ActionState = { error?: string };
 
+type DeleteResult = { error?: string };
+
 function parseString(v: FormDataEntryValue | null): string | null {
   if (v === null) return null;
   const s = String(v).trim();
@@ -62,6 +64,41 @@ export async function updateSupermarket(
 
   revalidatePath("/admin/supermarkets");
   revalidatePath(`/admin/supermarkets/${id}`);
+  redirect("/admin/supermarkets");
+}
+
+export async function deactivateSupermarket(id: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("supermarkets")
+    .update({ active: false })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/supermarkets");
+  revalidatePath(`/admin/supermarkets/${id}`);
+}
+
+export async function deleteSupermarket(id: string): Promise<DeleteResult> {
+  const supabase = await createClient();
+
+  // Check for orders first so we can produce a friendlier message than
+  // PostgREST's raw foreign-key error.
+  const { count: orderCount } = await supabase
+    .from("orders")
+    .select("*", { count: "exact", head: true })
+    .eq("supermarket_id", id);
+  if ((orderCount ?? 0) > 0) {
+    return {
+      error: `Энэ дэлгүүрт ${orderCount} захиалга байгаа тул устгах боломжгүй. Идэвхгүй болгох эсвэл захиалгуудыг эхлээд цуцлана уу.`,
+    };
+  }
+
+  const { error } = await supabase.from("supermarkets").delete().eq("id", id);
+  if (error) {
+    return { error: `Устгаж чадсангүй: ${error.message}` };
+  }
+
+  revalidatePath("/admin/supermarkets");
   redirect("/admin/supermarkets");
 }
 
