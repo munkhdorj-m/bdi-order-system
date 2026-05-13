@@ -261,56 +261,78 @@ export default async function AdminSupermarketsPage({
 
           {/* Desktop table */}
           <Card className="hidden sm:block">
-            <Table>
+            <Table className="table-fixed w-full">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Нэр</TableHead>
-                  <TableHead>Төрөл</TableHead>
-                  <TableHead>Дүүрэг</TableHead>
-                  <TableHead>Утас</TableHead>
-                  <TableHead>Хариуцагч</TableHead>
-                  <TableHead></TableHead>
-                  <TableHead className="w-24"></TableHead>
+                  <TableHead className="w-[34%]">Нэр</TableHead>
+                  <TableHead className="w-32">Төрөл</TableHead>
+                  <TableHead className="w-40">Дүүрэг</TableHead>
+                  <TableHead className="w-36">Утас</TableHead>
+                  <TableHead className="hidden xl:table-cell">Хариуцагч</TableHead>
+                  <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((s) => (
                   <TableRow key={s.id}>
-                    <TableCell>
-                      <Link
-                        href={`/admin/supermarkets/${s.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {s.name}
-                      </Link>
-                      {s.address && (
-                        <div className="text-xs text-muted-foreground line-clamp-1">
-                          {s.address}
+                    <TableCell className="align-top">
+                      <div className="flex items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <Link
+                            href={`/admin/supermarkets/${s.id}`}
+                            className="font-medium hover:underline block truncate"
+                            title={s.name}
+                          >
+                            {s.name}
+                          </Link>
+                          {s.address && (
+                            <div
+                              className="text-xs text-muted-foreground truncate"
+                              title={s.address}
+                            >
+                              {s.address}
+                            </div>
+                          )}
                         </div>
-                      )}
+                        {!s.active && (
+                          <Badge variant="outline" className="shrink-0 h-5 text-[10px]">
+                            Идэвхгүй
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell
+                      className="text-sm text-muted-foreground truncate"
+                      title={s.type ?? undefined}
+                    >
                       {s.type ?? "—"}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell
+                      className="text-sm text-muted-foreground truncate"
+                      title={s.district ?? undefined}
+                    >
                       {s.district ?? "—"}
                     </TableCell>
-                    <TableCell className="text-sm font-mono">
+                    <TableCell
+                      className="text-xs font-mono truncate"
+                      title={s.contact_phone ?? undefined}
+                    >
                       {s.contact_phone ?? "—"}
                     </TableCell>
-                    <TableCell className="text-sm">
+                    <TableCell className="hidden xl:table-cell text-sm truncate">
                       {s.profiles?.full_name ?? s.profiles?.email ?? (
                         <span className="text-muted-foreground italic">—</span>
                       )}
                     </TableCell>
                     <TableCell>
-                      {s.active ? null : <Badge variant="outline">Идэвхгүй</Badge>}
-                    </TableCell>
-                    <TableCell>
-                      <Button asChild size="sm" variant="ghost">
+                      <Button
+                        asChild
+                        size="icon"
+                        variant="ghost"
+                        title="Үнийн override"
+                      >
                         <Link href={`/admin/supermarkets/${s.id}/prices`}>
                           <DollarSign className="h-4 w-4" />
-                          Үнэ
                         </Link>
                       </Button>
                     </TableCell>
