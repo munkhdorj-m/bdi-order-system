@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, LogOut, ShoppingCart } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useCart, totalQty, type CartScope } from "@/lib/cart";
 
 type Props = {
@@ -63,6 +64,8 @@ export function RepHeader({
           )}
         </Link>
       )}
+
+      <ThemeToggle variant="admin" />
 
       <form action="/auth/signout" method="post" className="ml-1">
         <button

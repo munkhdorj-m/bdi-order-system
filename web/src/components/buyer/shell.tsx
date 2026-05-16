@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronLeft, LogOut } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { BuyerBottomTabBar } from "./bottom-tab-bar";
 
 type Props = {
@@ -70,6 +71,8 @@ export function BuyerShell({ storeName, email, children }: Props) {
             >
               BDI
             </Link>
+
+            <ThemeToggle variant="buyer" />
 
             <form action="/auth/signout" method="post">
               <button
