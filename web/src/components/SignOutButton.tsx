@@ -3,7 +3,7 @@ export function SignOutButton() {
     <form action="/auth/signout" method="post">
       <button
         type="submit"
-        className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         Гарах
       </button>

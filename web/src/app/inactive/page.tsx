@@ -11,10 +11,10 @@ export default async function InactivePage() {
         <h1 className="text-2xl font-semibold tracking-tight mb-3">
           Бүртгэл идэвхгүй
         </h1>
-        <p className="text-zinc-500 mb-2">
+        <p className="text-muted-foreground mb-2">
           <span className="font-mono text-sm">{session.email}</span>
         </p>
-        <p className="text-sm text-zinc-500 mb-8">
+        <p className="text-sm text-muted-foreground mb-8">
           Таны бүртгэл идэвхгүй болсон байна. BDI-н ажилтантай холбогдоно уу.
         </p>
         <SignOutButton />

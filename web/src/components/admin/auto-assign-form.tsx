@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -38,16 +39,10 @@ export function AutoAssignForm({ action }: Props) {
 
       {/* state.error doubles as the success message holder (returned with ok:true) */}
       {state.error && (
-        <div
-          className={`rounded-md border text-sm p-3 ${
-            state.ok
-              ? "border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300"
-              : "border-destructive/40 bg-destructive/5 text-destructive"
-          }`}
-        >
+        <Callout tone={state.ok ? "success" : "error"}>
           {state.ok ? "✓ " : ""}
           {state.error}
-        </div>
+        </Callout>
       )}
 
       <div className="flex justify-end">
