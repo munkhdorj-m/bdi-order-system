@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Search } from "lucide-react";
+import { ClipboardList, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCategories } from "@/lib/categories";
 import { QuickAddButton } from "@/components/buyer/quick-add-button";
@@ -18,6 +18,16 @@ type PriceRow = {
   image_url: string | null;
   category_id: string | null;
   effective_price: number;
+  /** Same product's catalog list price (without per-store override). Compared
+   *  against effective_price to flag the "Тусгай үнэ" badge. */
+  list_price: number;
+  box_count: number | null;
+};
+
+type StoreContext = {
+  name: string;
+  district: string | null;
+  profiles: { full_name: string | null; email: string | null } | null;
 };
 
 function shortLabel(name: string): string {
@@ -37,24 +47,33 @@ export default async function RepCatalogPage({
   const { q, category } = await searchParams;
   const supabase = await createClient();
 
-  // Validate store access (RLS handles read; just confirm it exists for us)
-  const { data: store } = await supabase
+  // Pull store + the rep's "managed by" so the context banner can name the
+  // buyer the rep is ordering on behalf of.
+  const { data: storeRaw } = await supabase
     .from("supermarkets")
-    .select("name")
+    .select(
+      "name, district, profiles:assigned_rep_id(full_name, email)",
+    )
     .eq("id", id)
     .single();
-  if (!store) {
+
+  if (!storeRaw) {
     return (
       <div className="px-4 py-12 text-center text-sm text-muted-foreground">
         Дэлгүүр олдсонгүй эсвэл хандах эрхгүй.
       </div>
     );
   }
+  const store = storeRaw as unknown as StoreContext;
 
+  // supermarket_prices view exposes effective_price (post-override). We
+  // join the source products row separately to get the base list price so
+  // the "Тусгай үнэ" badge can flag where an override is in effect.
   let pricesQuery = supabase
     .from("supermarket_prices")
     .select(
-      "product_id, sku, name, brand, image_url, category_id, effective_price",
+      `product_id, sku, name, brand, image_url, category_id, effective_price, box_count,
+       products!inner(base_price)`,
     )
     .eq("supermarket_id", id)
     .order("name");
@@ -67,12 +86,33 @@ export default async function RepCatalogPage({
   }
   if (category) pricesQuery = pricesQuery.eq("category_id", category);
 
-  const [{ data: products }, cats] = await Promise.all([
+  const [{ data: rawProducts }, cats] = await Promise.all([
     pricesQuery,
     getCategories(),
   ]);
 
-  const rows = (products as PriceRow[] | null) ?? [];
+  // Normalize the joined shape — Supabase types the joined relation as an
+  // array even when it's a single row, so map it out.
+  const rows: PriceRow[] = (
+    (rawProducts as unknown as Array<
+      Omit<PriceRow, "list_price"> & {
+        products: { base_price: number } | { base_price: number }[];
+      }
+    >) ?? []
+  ).map((p) => {
+    const joined = Array.isArray(p.products) ? p.products[0] : p.products;
+    return {
+      product_id: p.product_id,
+      sku: p.sku,
+      name: p.name,
+      brand: p.brand,
+      image_url: p.image_url,
+      category_id: p.category_id,
+      effective_price: p.effective_price,
+      box_count: p.box_count,
+      list_price: joined?.base_price ?? p.effective_price,
+    };
+  });
 
   function chipHref(opts: { category?: string }) {
     const p = new URLSearchParams();
@@ -82,22 +122,46 @@ export default async function RepCatalogPage({
     return qs ? `/rep/stores/${id}/catalog?${qs}` : `/rep/stores/${id}/catalog`;
   }
 
+  const onBehalfOf =
+    store.profiles?.full_name ?? store.profiles?.email ?? "Худалдан авагч";
+
   return (
     <div>
       <RepHeader
-        title={store.name}
-        subtitle="Захиалга үүсгэж байна"
+        title="Каталог"
+        subtitle={`${store.name} · нэрийн өмнөөс`}
         backHref={`/rep/stores/${id}`}
         cartHref={`/rep/stores/${id}/cart`}
         cartScope={{ storeId: id }}
       />
 
-      <main className="px-3 sm:px-4 py-4 max-w-3xl mx-auto">
-        <div className="mb-3 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2 text-xs">
-          📋 <span className="font-medium">{store.name}</span>-н нэрийн өмнөөс захиалга
+      <main className="px-3 sm:px-4 py-3 max-w-3xl mx-auto pb-6">
+        {/* Persistent amber context banner — the R3 critical UX */}
+        <div className="rounded-2xl ring-2 ring-amber-300 bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/40 dark:to-amber-900/30 dark:ring-amber-700/60 p-3 flex items-center gap-3 shadow-sm">
+          <div className="size-10 rounded-xl bg-white ring-1 ring-amber-300/60 dark:bg-amber-950/60 dark:ring-amber-800/60 flex items-center justify-center text-amber-700 dark:text-amber-300 shrink-0">
+            <ClipboardList className="h-[18px] w-[18px]" strokeWidth={2.2} />
+          </div>
+          <div className="flex-1 min-w-0 leading-tight">
+            <div className="text-[9.5px] uppercase tracking-[0.12em] font-bold text-amber-900/80 dark:text-amber-300/80">
+              Нэрийн өмнөөс захиалж байна
+            </div>
+            <div className="text-[13.5px] font-bold text-amber-950 dark:text-amber-100 truncate">
+              {store.name} · {onBehalfOf}
+            </div>
+            <div className="text-[10.5px] text-amber-900/80 dark:text-amber-300/80">
+              Үнэ нь тус дэлгүүрийн override-ийн дагуу харуулагдаж байна
+            </div>
+          </div>
+          <Link
+            href="/rep"
+            className="text-[11.5px] font-bold text-amber-900 dark:text-amber-200 underline shrink-0"
+          >
+            Солих
+          </Link>
         </div>
 
-        <form method="get" className="mb-4">
+        {/* Search */}
+        <form method="get" className="mt-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <input
@@ -105,7 +169,7 @@ export default async function RepCatalogPage({
               name="q"
               defaultValue={q ?? ""}
               placeholder="Хайх..."
-              className="w-full rounded-full border border-input bg-background pl-10 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full h-10 rounded-xl bg-muted/60 border border-transparent pl-9 pr-3 text-sm placeholder:text-muted-foreground/80 focus:outline-none focus:bg-card focus:border-primary/40 focus:ring-2 focus:ring-primary/15 transition-all"
             />
           </div>
           {category && (
@@ -113,7 +177,8 @@ export default async function RepCatalogPage({
           )}
         </form>
 
-        <div className="flex gap-2 overflow-x-auto pb-3 -mx-3 px-3 mb-4">
+        {/* Category chips */}
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-2 -mx-3 px-3 scrollbar-thin">
           <Chip href={chipHref({})} active={!category}>
             Бүгд
           </Chip>
@@ -133,56 +198,73 @@ export default async function RepCatalogPage({
             Бараа олдсонгүй.
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {rows.map((p) => (
-              <Link
-                key={p.product_id}
-                href={`/rep/stores/${id}/catalog/${p.product_id}`}
-                className="bg-background rounded-lg border overflow-hidden flex flex-col hover:shadow-sm transition-shadow"
-              >
-                <div className="aspect-square bg-muted relative">
-                  {p.image_url ? (
-                    <Image
-                      src={p.image_url}
-                      alt={p.name}
-                      fill
-                      sizes="(max-width: 640px) 50vw, 240px"
-                      quality={90}
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-xs">
-                      Зураг алга
-                    </div>
-                  )}
-                </div>
-                <div className="p-3 flex flex-col flex-1">
-                  {p.brand && (
-                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      {p.brand}
-                    </div>
-                  )}
-                  <div className="text-sm leading-tight line-clamp-2 min-h-[2.5rem]">
-                    {p.name}
+          <div className="mt-3 grid grid-cols-2 gap-2.5">
+            {rows.map((p) => {
+              const hasOverride = p.effective_price !== p.list_price;
+              return (
+                <Link
+                  key={p.product_id}
+                  href={`/rep/stores/${id}/catalog/${p.product_id}`}
+                  className="flex flex-col rounded-2xl overflow-hidden ring-1 ring-border bg-card hover:shadow-md transition-all"
+                >
+                  <div className="aspect-square bg-gradient-to-br from-muted/30 to-muted/60 relative overflow-hidden">
+                    {p.image_url ? (
+                      <Image
+                        src={p.image_url}
+                        alt={p.name}
+                        fill
+                        sizes="(max-width: 640px) 50vw, 240px"
+                        quality={85}
+                        unoptimized
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-xs">
+                        —
+                      </div>
+                    )}
+                    {hasOverride && (
+                      <div className="absolute top-1.5 left-1.5 text-[9px] font-bold bg-white text-primary px-1.5 py-0.5 rounded-full ring-1 ring-[color-mix(in_oklch,var(--primary)_25%,transparent)] dark:bg-card">
+                        Тусгай үнэ
+                      </div>
+                    )}
                   </div>
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <div className="font-semibold text-sm">
-                      {formatMnt(p.effective_price)}
+                  <div className="p-2.5 flex flex-col gap-0.5 flex-1">
+                    {p.brand && (
+                      <div className="text-[9px] uppercase tracking-[0.08em] font-bold text-primary truncate">
+                        {p.brand}
+                      </div>
+                    )}
+                    <div className="text-[11.5px] font-semibold leading-tight line-clamp-2 h-[2.2em]">
+                      {p.name}
                     </div>
-                    <QuickAddButton
-                      scope={{ storeId: id }}
-                      product={{
-                        product_id: p.product_id,
-                        name: p.name,
-                        brand: p.brand,
-                        image_url: p.image_url,
-                        unit_price: p.effective_price,
-                      }}
-                    />
+                    <div className="flex items-baseline gap-1.5 mt-0.5">
+                      <span className="text-[13px] font-bold tabular-nums">
+                        {formatMnt(p.effective_price)}
+                      </span>
+                      {hasOverride && (
+                        <span className="text-[10px] text-muted-foreground line-through tabular-nums">
+                          {formatMnt(p.list_price)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 self-end">
+                      <QuickAddButton
+                        scope={{ storeId: id }}
+                        boxCount={p.box_count}
+                        product={{
+                          product_id: p.product_id,
+                          name: p.name,
+                          brand: p.brand,
+                          image_url: p.image_url,
+                          unit_price: p.effective_price,
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         )}
       </main>
@@ -202,10 +284,10 @@ function Chip({
   return (
     <Link
       href={href}
-      className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs border transition-colors ${
+      className={`whitespace-nowrap shrink-0 h-8 px-3 rounded-full text-[12px] font-semibold transition-all ${
         active
-          ? "bg-primary text-primary-foreground border-primary"
-          : "bg-background hover:bg-muted"
+          ? "bg-primary text-primary-foreground shadow-sm shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)]"
+          : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-[oklch(0.95_0.005_264)] hover:text-foreground"
       }`}
     >
       {children}

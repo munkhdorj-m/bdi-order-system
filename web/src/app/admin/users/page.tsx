@@ -1,15 +1,9 @@
 import Link from "next/link";
+import { Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { ApproveUserButton } from "@/components/admin/approve-user-button";
 
 type UserRow = {
   id: string;
@@ -21,48 +15,182 @@ type UserRow = {
   supermarkets: { name: string } | null;
 };
 
+type FilterKey = "all" | "pending" | "admin" | "rep" | "buyer";
+
+type SearchParams = Promise<{ role?: string }>;
+
 const ROLE_LABELS: Record<UserRow["role"], string> = {
   admin: "Админ",
   rep: "Төлөөлөгч",
   buyer: "Худалдан авагч",
 };
 
-const ROLE_VARIANT: Record<UserRow["role"], "default" | "secondary" | "outline"> = {
-  admin: "default",
-  rep: "secondary",
-  buyer: "outline",
+// Hi-Fi tone palette: admin = primary indigo, rep = violet, buyer = sky.
+// dark: variants keep contrast in dark mode.
+const ROLE_PILL: Record<UserRow["role"], string> = {
+  admin:
+    "bg-[color-mix(in_oklch,var(--primary)_12%,var(--card))] text-primary ring-[color-mix(in_oklch,var(--primary)_30%,transparent)]",
+  rep: "bg-violet-50 text-violet-700 ring-violet-300/60 dark:bg-violet-950/40 dark:text-violet-300 dark:ring-violet-800/60",
+  buyer:
+    "bg-sky-50 text-sky-700 ring-sky-300/60 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-800/60",
 };
 
-export default async function AdminUsersPage() {
+function avatarInitial(u: UserRow): string {
+  const source = u.full_name || u.email || "?";
+  const trimmed = source.trim();
+  return trimmed[0]?.toUpperCase() ?? "?";
+}
+
+function parseFilter(v: string | undefined): FilterKey {
+  if (
+    v === "admin" ||
+    v === "rep" ||
+    v === "buyer" ||
+    v === "pending"
+  )
+    return v;
+  return "all";
+}
+
+export default async function AdminUsersPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const sp = await searchParams;
+  const filter = parseFilter(sp.role);
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("profiles")
-    .select(
-      "id, full_name, email, phone, role, active, supermarkets:supermarket_id(name)",
-    )
-    .order("role")
-    .order("created_at", { ascending: false });
+
+  // Run base query + per-role counts in parallel so the filter chips can
+  // show honest tallies regardless of the active tab. `pendingCount` is the
+  // number of buyers awaiting admin approval (active=false).
+  const [
+    { data, error },
+    allCount,
+    adminCount,
+    repCount,
+    buyerCount,
+    pendingCount,
+  ] = await Promise.all([
+    (async () => {
+      let q = supabase
+        .from("profiles")
+        .select(
+          "id, full_name, email, phone, role, active, supermarkets:supermarket_id(name)",
+        )
+        .order("role")
+        .order("created_at", { ascending: false });
+      if (filter === "pending") {
+        q = q.eq("active", false);
+      } else if (filter !== "all") {
+        q = q.eq("role", filter);
+      }
+      return q;
+    })(),
+    supabase
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .then((r) => r.count ?? 0),
+    supabase
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .eq("role", "admin")
+      .then((r) => r.count ?? 0),
+    supabase
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .eq("role", "rep")
+      .then((r) => r.count ?? 0),
+    supabase
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .eq("role", "buyer")
+      .then((r) => r.count ?? 0),
+    supabase
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .eq("active", false)
+      .then((r) => r.count ?? 0),
+  ]);
 
   const rows = (data as unknown as UserRow[]) ?? [];
 
+  const tabs: { key: FilterKey; label: string; count: number }[] = [
+    { key: "all", label: "Бүгд", count: allCount },
+    { key: "pending", label: "Хүлээгдсэн", count: pendingCount },
+    { key: "admin", label: "Админ", count: adminCount },
+    { key: "rep", label: "Рөп", count: repCount },
+    { key: "buyer", label: "Худалдан авагч", count: buyerCount },
+  ];
+
   return (
     <div className="max-w-6xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Хэрэглэгчид</h1>
-        <p className="text-sm text-muted-foreground mt-1">Нийт {rows.length}</p>
+      <div className="mb-4">
+        <h1 className="text-[26px] font-bold tracking-tight">Хэрэглэгч</h1>
+        <p className="text-[13px] text-muted-foreground">
+          Нийт {allCount} хэрэглэгч
+        </p>
       </div>
 
-      <Card className="mb-4 p-3 sm:p-4 bg-muted/40 text-sm">
-        <p className="font-medium mb-1">Шинэ хэрэглэгч нэмэхдээ:</p>
+      {/* Helper card */}
+      <Card className="mb-4 p-3 sm:p-4 bg-muted/40 text-[13px]">
+        <p className="font-semibold mb-1">Шинэ хэрэглэгч нэмэхдээ:</p>
         <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
           <li>
-            Тэр хүн <span className="font-mono">/login</span> -ээр өөрийн имэйлээ
-            ашиглан нэвтэрнэ.
+            Тэр хүн <span className="font-mono">/login</span> -ээр өөрийн
+            имэйлээ ашиглан нэвтэрнэ.
           </li>
-          <li>Эхэлж <em>Худалдан авагч</em> (хүлээгдэх) төлөвөөр бүртгэгдэнэ.</li>
-          <li>Та эндээс түүний эрхийг, шаардлагатай бол дэлгүүрийг сонгож хадгална.</li>
+          <li>
+            Эхэлж <em>Худалдан авагч</em> (хүлээгдэх) төлөвөөр бүртгэгдэнэ.
+          </li>
+          <li>
+            Та эндээс түүний эрхийг, шаардлагатай бол дэлгүүрийг сонгож
+            хадгална.
+          </li>
         </ol>
       </Card>
+
+      {/* Role filter chips — "pending" tab gets its own amber styling so the
+          admin's eye lands on awaiting-approval users first. */}
+      <div className="mb-4 flex items-center gap-2 flex-wrap">
+        {tabs.map((t) => {
+          const active = t.key === filter;
+          const href =
+            t.key === "all" ? "/admin/users" : `/admin/users?role=${t.key}`;
+          const isPending = t.key === "pending";
+          let chipClass: string;
+          if (active && isPending) {
+            chipClass =
+              "bg-amber-500 text-white shadow-sm shadow-amber-500/30 dark:bg-amber-600";
+          } else if (active) {
+            chipClass =
+              "bg-primary text-primary-foreground shadow-sm shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)]";
+          } else if (isPending && t.count > 0) {
+            chipClass =
+              "bg-amber-50 text-amber-700 ring-1 ring-amber-300/60 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800/60 dark:hover:bg-amber-950/60";
+          } else {
+            chipClass =
+              "bg-muted text-muted-foreground ring-1 ring-border hover:bg-[oklch(0.95_0.005_264)] hover:text-foreground";
+          }
+          return (
+            <Link
+              key={t.key}
+              href={href}
+              className={`h-8 px-3 rounded-full text-[12px] font-semibold transition-all inline-flex items-center gap-1 ${chipClass}`}
+            >
+              {isPending && (
+                <Clock className="h-3 w-3" strokeWidth={2.5} />
+              )}
+              {t.label}
+              <span
+                className={`tabular-nums ${active ? "opacity-80" : isPending && t.count > 0 ? "text-amber-700/70 dark:text-amber-300/70" : "text-foreground/60"}`}
+              >
+                · {t.count}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
 
       {error && (
         <Card className="p-4 mb-4 border-destructive/40 bg-destructive/5 text-destructive text-sm">
@@ -76,80 +204,120 @@ export default async function AdminUsersPage() {
         </Card>
       ) : (
         <>
-          {/* Mobile: card list */}
+          {/* Mobile cards — Approve button sits OUTSIDE the navigating <Link>
+              to keep HTML valid (no <button> inside <a>). */}
           <div className="sm:hidden space-y-2">
             {rows.map((u) => (
-              <Link
+              <div
                 key={u.id}
-                href={`/admin/users/${u.id}`}
-                className="block bg-background border rounded-lg p-3 hover:shadow-sm transition-shadow"
+                className={`relative bg-card ring-1 ring-border rounded-2xl hover:shadow-sm transition-shadow ${u.active ? "" : "opacity-80"}`}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium leading-tight">
-                      {u.full_name || u.email || u.id.slice(0, 8)}
+                <Link
+                  href={`/admin/users/${u.id}`}
+                  className="block p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="size-9 rounded-full bg-gradient-to-br from-[oklch(0.7_0.13_263)] to-primary text-primary-foreground flex items-center justify-center text-[12px] font-bold shrink-0">
+                      {avatarInitial(u)}
                     </div>
-                    {u.email && u.full_name && (
-                      <div className="text-xs text-muted-foreground font-mono mt-0.5 truncate">
-                        {u.email}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-semibold truncate">
+                        {u.full_name || u.email || u.id.slice(0, 8)}
                       </div>
+                      {u.email && u.full_name && (
+                        <div className="text-[11px] text-muted-foreground font-mono truncate">
+                          {u.email}
+                        </div>
+                      )}
+                    </div>
+                    <span
+                      className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-bold ring-1 ${ROLE_PILL[u.role]}`}
+                    >
+                      {ROLE_LABELS[u.role]}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11.5px]">
+                    {u.role === "buyer" &&
+                      (u.supermarkets?.name ? (
+                        <span className="text-muted-foreground truncate">
+                          🏪 {u.supermarkets.name}
+                        </span>
+                      ) : (
+                        <span className="text-amber-700 dark:text-amber-400 italic">
+                          ⚠ Дэлгүүр тогтоогоогүй
+                        </span>
+                      ))}
+                    {!u.active && (
+                      <Badge
+                        variant="outline"
+                        className="h-4 px-1 text-[10px] border-amber-300 text-amber-700 bg-amber-50 dark:border-amber-800/60 dark:text-amber-300 dark:bg-amber-950/40"
+                      >
+                        Хүлээгдсэн
+                      </Badge>
                     )}
                   </div>
-                  <Badge variant={ROLE_VARIANT[u.role]} className="shrink-0">
-                    {ROLE_LABELS[u.role]}
-                  </Badge>
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  {u.role === "buyer" && (
-                    u.supermarkets?.name ? (
-                      <span className="text-muted-foreground">
-                        🏪 {u.supermarkets.name}
-                      </span>
-                    ) : (
-                      <span className="text-amber-700 dark:text-amber-400 italic">
-                        ⚠ Дэлгүүр тогтоогоогүй
-                      </span>
-                    )
-                  )}
-                  {!u.active && (
-                    <Badge variant="outline" className="h-4 px-1 text-[10px]">
-                      Идэвхгүй
-                    </Badge>
-                  )}
-                </div>
-              </Link>
+                </Link>
+                {!u.active && (
+                  <div className="px-3 pb-3 -mt-1 flex justify-end">
+                    <ApproveUserButton
+                      userId={u.id}
+                      userLabel={u.full_name || u.email || u.id.slice(0, 8)}
+                    />
+                  </div>
+                )}
+              </div>
             ))}
           </div>
 
-          {/* Desktop: table */}
-          <Card className="hidden sm:block">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Нэр</TableHead>
-                  <TableHead>Эрх</TableHead>
-                  <TableHead>Дэлгүүр</TableHead>
-                  <TableHead>Холбоо</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+          {/* Desktop table — Hi-Fi pattern */}
+          <div className="hidden sm:block rounded-2xl bg-card ring-1 ring-border overflow-hidden">
+            <table className="w-full text-[12.5px]">
+              <thead className="bg-muted/60 text-[11px] uppercase tracking-[0.08em] font-bold text-muted-foreground">
+                <tr>
+                  <th className="text-left px-5 py-2.5">Нэр</th>
+                  <th className="text-left px-3 py-2.5 w-32">Үүрэг</th>
+                  <th className="text-left px-3 py-2.5 w-44">Холбоо</th>
+                  <th className="text-left px-3 py-2.5">Дэлгүүр</th>
+                  <th className="px-3 py-2.5 w-36"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
                 {rows.map((u) => (
-                  <TableRow key={u.id}>
-                    <TableCell>
+                  <tr
+                    key={u.id}
+                    className={`hover:bg-muted/40 transition-colors ${u.active ? "" : "opacity-60"}`}
+                  >
+                    <td className="px-5 py-3">
                       <Link
                         href={`/admin/users/${u.id}`}
-                        className="font-medium hover:underline"
+                        className="flex items-center gap-3 group/u"
                       >
-                        {u.full_name || u.email || u.id.slice(0, 8)}
+                        <div className="size-9 rounded-full bg-gradient-to-br from-[oklch(0.7_0.13_263)] to-primary text-primary-foreground flex items-center justify-center text-[12px] font-bold shrink-0">
+                          {avatarInitial(u)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-semibold group-hover/u:underline truncate">
+                            {u.full_name || u.email || u.id.slice(0, 8)}
+                          </div>
+                          {u.email && u.full_name && (
+                            <div className="text-[11px] text-muted-foreground font-mono truncate">
+                              {u.email}
+                            </div>
+                          )}
+                        </div>
                       </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={ROLE_VARIANT[u.role]}>
+                    </td>
+                    <td className="px-3 py-3">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ring-1 ${ROLE_PILL[u.role]}`}
+                      >
                         {ROLE_LABELS[u.role]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 font-mono text-[12px]">
+                      {u.phone ? u.phone : u.email ? u.email : "—"}
+                    </td>
+                    <td className="px-3 py-3 text-[12.5px]">
                       {u.role === "buyer" ? (
                         u.supermarkets?.name ?? (
                           <span className="text-muted-foreground italic">
@@ -159,25 +327,30 @@ export default async function AdminUsersPage() {
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {u.email ? (
-                        <span className="font-mono text-xs">{u.email}</span>
-                      ) : null}
-                      {u.phone && (
-                        <div className="text-xs text-muted-foreground font-mono">
-                          {u.phone}
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      {!u.active && (
+                        <div className="flex items-center justify-end gap-2">
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] border-amber-300 text-amber-700 bg-amber-50 dark:border-amber-800/60 dark:text-amber-300 dark:bg-amber-950/40"
+                          >
+                            Хүлээгдсэн
+                          </Badge>
+                          <ApproveUserButton
+                            userId={u.id}
+                            userLabel={
+                              u.full_name || u.email || u.id.slice(0, 8)
+                            }
+                          />
                         </div>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      {!u.active && <Badge variant="outline">Идэвхгүй</Badge>}
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ))}
-              </TableBody>
-            </Table>
-          </Card>
+              </tbody>
+            </table>
+          </div>
         </>
       )}
     </div>

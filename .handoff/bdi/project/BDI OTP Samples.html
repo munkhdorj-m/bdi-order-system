@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BDI · OTP — 4 sample</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Patrick+Hand&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin:0; padding:0; background:#ece6d5; font-family:'Patrick Hand', cursive; color:#1a1a1a; }
+  .dc-root { background:#ece6d5 !important; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="wireframes/primitives.jsx"></script>
+<script type="text/babel" src="wireframes/otp.jsx"></script>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="text/babel" data-presets="env,react">
+const { DesignCanvas, DCSection, DCArtboard } = window;
+const PW = 280, PH = 580;
+const AW = 480, AH = 660;
+
+function PhoneArt({ children }) {
+  return (
+    <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}>
+      <window.Phone w={PW} h={PH}>{children}</window.Phone>
+    </div>
+  );
+}
+
+function Intro() {
+  return (
+    <div style={{
+      width:700, padding:'32px 40px', fontFamily:"'Patrick Hand', cursive",
+      background:'#faf6ec', border:'2px solid #1a1a1a', borderRadius:10,
+      boxShadow:'3px 4px 0 #1a1a1a',
+    }}>
+      <div style={{ fontFamily:"'Kalam', cursive", fontWeight:700, fontSize:24 }}>OTP — 4 sample</div>
+      <div style={{ fontSize:14, color:'#8a857a', marginTop:4 }}>Кодыг оруулах хэлбэрийн 4 чиглэл</div>
+      <div style={{ marginTop:14, fontSize:13, lineHeight:1.4, color:'#3a3530' }}>
+        <b style={{ fontFamily:"'Kalam', cursive" }}>Хувилбарууд:</b>{' '}
+        <b>① Classic</b> — 4 ширхэг тусдаа box (одоогийн pattern, цэвэр).{' '}
+        <b>② Single pill</b> — нэг том field, том type, paste-ийг харуулсан.{' '}
+        <b>③ Auto-detect</b> — SMS banner-ыг "Бөглөх" товчтой танилцуулна;
+        гар оролт fallback.{' '}
+        <b>④ Numpad inside</b> — апп өөртөө numpad-тай, system keyboard биш.
+        Android-д хурдан, "thumb-only" хэрэглээнд тохиромжтой.
+      </div>
+      <div style={{ marginTop:14, padding:10, background:'#fff5b8', border:'1.2px solid #1a1a1a', borderRadius:6, fontSize:13 }}>
+        <b style={{ fontFamily:"'Kalam', cursive" }}>Зөвлөгөө:</b> ③-ийг ②-той хослуулж болно —
+        SMS auto-fill ажиллавал banner, ажиллахгүй бол том pill field. Энэ нь production-д
+        хамгийн найдвартай хосолбол байх ёстой.
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <DesignCanvas title="OTP — 4 sample" subtitle="Кодыг оруулах хэлбэрүүд" intro={<Intro />}>
+      <DCSection id="otp" title="OTP оруулах" subtitle="4 чиглэл">
+        <DCArtboard id="a" label="① Classic 4-box" width={AW} height={AH}>
+          <PhoneArt><window.Otp1 /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="b" label="② Single pill + paste" width={AW} height={AH}>
+          <PhoneArt><window.Otp2 /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="c" label="③ Auto-detect from SMS" width={AW} height={AH}>
+          <PhoneArt><window.Otp3 /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="d" label="④ Built-in numpad" width={AW + 40} height={AH}>
+          <PhoneArt><window.Otp4 /></PhoneArt>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('app')).render(<App />);
+</script>
+</body>
+</html>

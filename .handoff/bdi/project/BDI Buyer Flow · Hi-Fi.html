@@ -1,0 +1,785 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BDI · Buyer Flow · Hi-Fi (Confident system)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: { fontFamily: { sans: ["Geist", "system-ui", "sans-serif"] } } },
+  };
+</script>
+
+<style>
+  :root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.18 0.02 264);
+    --card: oklch(1 0 0);
+    --muted: oklch(0.97 0.004 264);
+    --muted-foreground: oklch(0.52 0.02 264);
+    --primary: oklch(0.5 0.18 263);
+    --primary-foreground: oklch(0.99 0 0);
+    --accent: oklch(0.96 0.03 263);
+    --accent-foreground: oklch(0.32 0.14 263);
+    --border: oklch(0.92 0.008 264);
+    --ring: oklch(0.5 0.18 263);
+    --chart-coral: oklch(0.7 0.18 30);
+    --chart-amber: oklch(0.78 0.16 75);
+    --chart-emerald: oklch(0.66 0.14 155);
+  }
+  html, body {
+    background: #ece6d5;
+    font-family: "Geist", system-ui, sans-serif;
+    color: var(--foreground);
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .dc-root { background: #ece6d5 !important; }
+  .bg-primary { background: var(--primary); }
+  .text-primary { color: var(--primary); }
+  .text-primary-foreground { color: var(--primary-foreground); }
+  .bg-background { background: var(--background); }
+  .bg-muted { background: var(--muted); }
+  .text-muted-foreground { color: var(--muted-foreground); }
+  .border-border { border-color: var(--border); }
+  .bg-accent { background: var(--accent); }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+</head>
+
+<body>
+<div id="app"></div>
+
+<!-- ========== shared ========== -->
+<script type="text/babel" data-presets="env,react">
+const Icon = ({ d, size = 20, sw = 2, className = "" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {d}
+  </svg>
+);
+const I = {
+  search:  <Icon d={<><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></>} />,
+  cart:    <Icon d={<><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" /></>} />,
+  plus:    <Icon d={<path d="M12 5v14M5 12h14" />} />,
+  minus:   <Icon d={<path d="M5 12h14" />} />,
+  back:    <Icon d={<path d="m15 18-6-6 6-6" />} sw={2.2} />,
+  bag:     <Icon d={<><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><path d="M3 6h18M16 10a4 4 0 0 1-8 0" /></>} />,
+  clip:    <Icon d={<><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" /></>} />,
+  chevR:   <Icon d={<path d="m9 18 6-6-6-6" />} sw={2.4} size={16} />,
+  history: <Icon d={<><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5M12 7v5l3 2" /></>} size={12} sw={2.2} />,
+  package: <Icon d={<><path d="m12 3 9 4.5v9L12 21l-9-4.5v-9z" /><path d="M3.3 7 12 12l8.7-5M12 12v9" /></>} size={12} />,
+  filter:  <Icon d={<path d="M3 6h18M7 12h10M11 18h2" />} />,
+  trash:   <Icon d={<><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /></>} size={16} sw={2.2} />,
+  note:    <Icon d={<><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6M8 13h6M8 17h4" /></>} size={14} />,
+  check:   <Icon d={<path d="M5 12l5 5L20 7" />} sw={2.6} />,
+  truck:   <Icon d={<><path d="M3 7h11v10H3zM14 10h4l3 3v4h-7" /><circle cx="7" cy="18" r="2" /><circle cx="17" cy="18" r="2" /></>} size={14} />,
+  clock:   <Icon d={<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>} size={14} />,
+  spark:   <Icon d={<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />} sw={2} size={14} />,
+  receipt: <Icon d={<><path d="M4 2h16v20l-4-2-4 2-4-2-4 2z" /><path d="M8 7h8M8 11h8M8 15h5" /></>} size={14} />,
+};
+
+const PRODUCTS = [
+  { id: "p1", brand: "Soft Leaf", name: "Ариутгалын нойтон салфетка 10ш",   price: 1220, box: 120, qty: 2, recent: true,  hue: 165 },
+  { id: "p2", brand: "Soft Leaf", name: "Нойтон салфетка 25ш тагтай",       price: 2250, box:  48, qty: 1, recent: true,  hue: 140 },
+  { id: "p3", brand: "Cleanly",   name: "Хөвөн дэвсгэр 50ш багц",            price: 2150, box:  24, qty: 0, recent: false, hue: 215, low: true },
+  { id: "p4", brand: "Persil",    name: "Угаалгын нунтаг 1кг автомат",       price: 8400, box:   8, qty: 0, deal: -10,    hue: 200 },
+  { id: "p5", brand: "Dettol",    name: "Ариутгалын шингэн 500мл",           price: 5650, box:  12, qty: 0,               hue: 25 },
+  { id: "p6", brand: "Lavera",    name: "Шингэн саван 750мл насос",          price: 3900, box:  12, qty: 0, recent: true, hue: 50 },
+];
+
+const CART = [
+  { ...PRODUCTS[0], qty: 2 },
+  { ...PRODUCTS[1], qty: 1 },
+  { ...PRODUCTS[5], qty: 3 },
+];
+const cartTotal = CART.reduce((a, x) => a + x.price * x.qty, 0);
+
+const fmt = (n) => n.toLocaleString("mn-MN") + "₮";
+
+/* Shared product image */
+function ProductImage({ hue, dense = false }) {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center"
+      style={{ background: `radial-gradient(circle at 35% 30%, oklch(0.94 0.04 ${hue}) 0%, oklch(0.88 0.05 ${hue}) 50%, oklch(0.82 0.06 ${hue}) 100%)` }}
+    >
+      <div className="rounded-2xl shadow-md"
+        style={{
+          width: dense ? "44%" : "52%",
+          height: dense ? "62%" : "70%",
+          background: `linear-gradient(160deg, oklch(0.55 0.13 ${hue}), oklch(0.4 0.15 ${hue}))`,
+          boxShadow: `0 10px 20px -8px oklch(0.4 0.15 ${hue} / 0.5)`,
+        }}
+      />
+    </div>
+  );
+}
+
+function QtyStepper({ qty, large = false, onDecrement = "−", onIncrement = "+" }) {
+  return (
+    <div className="flex items-stretch rounded-lg overflow-hidden text-primary-foreground"
+      style={{
+        background: "var(--primary)",
+        height: large ? 40 : 32,
+        boxShadow: "0 1px 0 0 color-mix(in oklch, var(--primary) 30%, transparent), inset 0 0 0 1px color-mix(in oklch, var(--primary) 30%, transparent)",
+      }}
+    >
+      <button className="px-2.5 hover:bg-black/15 active:scale-95 transition-all">{I.minus}</button>
+      <span className={`flex items-center justify-center font-bold tabular-nums ${large ? "text-base px-3 min-w-12" : "text-sm px-2 min-w-10"}`}>{qty}</span>
+      <button className="px-2.5 hover:bg-black/15 active:scale-95 transition-all">{I.plus}</button>
+    </div>
+  );
+}
+
+function AddBtn() {
+  return (
+    <button className="w-full h-10 rounded-lg text-xs font-semibold border border-border bg-white hover:border-primary hover:bg-primary hover:text-primary-foreground active:scale-[0.97] transition-all flex items-center justify-center gap-1.5">
+      <span className="text-primary">{I.plus}</span> Нэмэх
+    </button>
+  );
+}
+
+function StoreHeader({ back, title }) {
+  return (
+    <header className="sticky top-0 z-20 bg-background/85 backdrop-blur-xl">
+      <div className="h-14 flex items-center px-3 gap-2">
+        {back ? (
+          <button className="-ml-1 size-9 rounded-xl flex items-center justify-center bg-muted hover:bg-[oklch(0.94_0.005_264)] ring-1 ring-border">
+            {I.back}
+          </button>
+        ) : (
+          <div className="size-9 rounded-xl bg-gradient-to-br from-primary to-[oklch(0.42_0.18_263)] text-primary-foreground flex items-center justify-center font-bold text-sm shadow-sm">Х</div>
+        )}
+        <div className="flex flex-col items-start min-w-0 leading-tight">
+          <span className="text-[9.5px] uppercase tracking-[0.12em] text-muted-foreground font-semibold">{back ? "Буцах" : "Дэлгүүр"}</span>
+          <span className="text-[13px] font-semibold truncate">{title}</span>
+        </div>
+        <div className="ml-auto flex items-center gap-1">
+          <button className="size-9 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-muted">{I.search}</button>
+        </div>
+      </div>
+      <div className="h-px bg-gradient-to-r from-transparent via-[color-mix(in_oklch,var(--primary)_30%,transparent)] to-transparent" />
+    </header>
+  );
+}
+
+function TabBar({ active = "catalog", cartCount = 3 }) {
+  const tabs = [
+    { k: "catalog", i: I.bag, l: "Каталог" },
+    { k: "orders", i: I.clip, l: "Захиалга" },
+    { k: "cart", i: I.cart, l: "Сагс", badge: cartCount },
+  ];
+  return (
+    <nav className="border-t border-border bg-background/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
+      <ul className="flex min-h-14 max-w-lg mx-auto">
+        {tabs.map((t) => {
+          const a = t.k === active;
+          return (
+            <li key={t.k} className="flex-1">
+              <a className={`flex flex-col items-center justify-center h-full gap-1 py-2 ${a ? "text-primary" : "text-muted-foreground"}`}>
+                <div className="relative">{t.i}
+                  {t.badge && (
+                    <span className="absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center ring-2 ring-background">
+                      {t.badge}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10.5px] font-medium leading-none">{t.l}</span>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
+window.Icon = Icon;
+window.Icons = I;
+window.PRODUCTS = PRODUCTS;
+window.CART = CART;
+window.cartTotal = cartTotal;
+window.fmt = fmt;
+window.ProductImage = ProductImage;
+window.QtyStepper = QtyStepper;
+window.AddBtn = AddBtn;
+window.StoreHeader = StoreHeader;
+window.TabBar = TabBar;
+</script>
+
+<!-- ========== Screen 1: Catalog (B2) — the locked Confident variant ========== -->
+<script type="text/babel" data-presets="env,react">
+const I = window.Icons;
+const { fmt, ProductImage, QtyStepper, AddBtn, StoreHeader, TabBar, Icon } = window;
+
+function ConfidentCard({ p }) {
+  const inCart = p.qty > 0;
+  return (
+    <div className={`group relative flex flex-col rounded-3xl overflow-hidden transition-all ${
+      inCart
+        ? "bg-[color-mix(in_oklch,var(--primary)_6%,white)] ring-1 ring-[color-mix(in_oklch,var(--primary)_30%,transparent)] shadow-md shadow-[color-mix(in_oklch,var(--primary)_15%,transparent)]"
+        : "bg-white ring-1 ring-border"
+    }`}>
+      <div className="aspect-[4/3.4] relative overflow-hidden">
+        <ProductImage hue={p.hue} />
+        {p.recent && !p.deal && (
+          <div className="absolute top-2.5 left-2.5 flex items-center gap-1 text-[10px] font-bold bg-white/90 backdrop-blur text-foreground px-2 py-0.5 rounded-full ring-1 ring-border">
+            {I.history} Сүүлд авсан
+          </div>
+        )}
+        {p.deal && (
+          <div className="absolute top-2.5 left-2.5 text-[11px] font-bold text-white px-2 py-0.5 rounded-full" style={{ background: "var(--chart-coral)" }}>−10%</div>
+        )}
+        {p.low && (
+          <div className="absolute bottom-2.5 left-2.5 text-[10px] font-semibold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full ring-1 ring-amber-300/60">
+            Цөөн үлдсэн
+          </div>
+        )}
+      </div>
+      <div className="p-3 pt-3 flex flex-col gap-1.5">
+        <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-primary">{p.brand}</div>
+        <div className="text-[13.5px] font-semibold leading-snug line-clamp-2 min-h-[2.4rem]">{p.name}</div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[17px] font-bold tabular-nums tracking-tight">{fmt(p.price)}</span>
+          {p.deal && <span className="text-[11px] text-muted-foreground line-through">{fmt(Math.round(p.price / 0.9))}</span>}
+        </div>
+        {p.box && <div className="flex items-center gap-1 text-[10.5px] text-muted-foreground">{I.package} хайрцагт {p.box}ш</div>}
+        <div className="mt-1">{inCart ? <QtyStepper qty={p.qty} large /> : <AddBtn />}</div>
+      </div>
+    </div>
+  );
+}
+
+function CategoryRail({ items, activeIdx = 0 }) {
+  return (
+    <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+      {items.map((it, i) => {
+        const a = i === activeIdx;
+        return (
+          <div key={i} className="snap-start shrink-0 w-[58px] flex flex-col items-center gap-1 select-none">
+            <div className={`size-11 rounded-xl flex items-center justify-center transition-all ${
+              a ? "bg-primary text-primary-foreground ring-1 ring-[color-mix(in_oklch,var(--primary)_40%,transparent)] shadow-sm"
+                : "bg-muted text-foreground/70 ring-1 ring-border"
+            }`}>{it.icon}</div>
+            <span className={`text-[10px] leading-tight text-center font-medium ${a ? "text-foreground" : "text-muted-foreground"}`}>{it.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const CATS = [
+  { icon: I.bag, label: "Бүгд" },
+  { icon: <Icon d={<path d="M3 12h18M3 6h18M3 18h18" />} size={18} />, label: "Цаас" },
+  { icon: <Icon d={<><circle cx="12" cy="12" r="6" /></>} size={18} />, label: "Хөвөн" },
+  { icon: <Icon d={<path d="M3 12c0-5 4-9 9-9s9 4 9 9-4 9-9 9-9-4-9-9z" />} size={18} />, label: "Угаалга" },
+  { icon: <Icon d={<><path d="M12 2v20M2 12h20" /></>} size={18} />, label: "Ариут." },
+];
+
+function ScreenCatalog() {
+  return (
+    <div className="h-full flex flex-col bg-background overflow-hidden">
+      <StoreHeader title="Хүнс-Мини" />
+      <div className="px-3 pt-3">
+        <button className="w-full h-11 rounded-2xl bg-muted/80 ring-1 ring-border flex items-center gap-2 px-4 text-[13px] text-muted-foreground">
+          {I.search} Барааны нэр, бренд…
+        </button>
+      </div>
+      <div className="px-3 pt-3 pb-1 border-b border-border/40">
+        <CategoryRail items={CATS} activeIdx={0} />
+      </div>
+      <div className="px-3 pt-3 pb-2 flex items-center justify-between">
+        <p className="text-[13px]"><span className="font-bold tabular-nums">48</span><span className="text-muted-foreground"> бараа</span></p>
+        <button className="text-[12px] text-muted-foreground flex items-center gap-1 px-2 py-1 rounded-md hover:bg-muted">{I.filter} Үнэ ↓</button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-3 pb-3">
+        <div className="grid grid-cols-2 gap-3">
+          {window.PRODUCTS.slice(0, 6).map((p, i) => <ConfidentCard key={i} p={p} />)}
+        </div>
+      </div>
+      <TabBar active="catalog" cartCount={6} />
+    </div>
+  );
+}
+window.ScreenCatalog = ScreenCatalog;
+</script>
+
+<!-- ========== Screen 2: Product detail (B3) — Confident-language ========== -->
+<script type="text/babel" data-presets="env,react">
+const I = window.Icons;
+const { fmt, ProductImage, QtyStepper, StoreHeader, TabBar, Icon } = window;
+
+function ScreenProduct() {
+  const p = { brand: "Soft Leaf", name: "Ариутгалын нойтон салфетка 10ш", price: 1220, sku: "4890326012629", box: 120, hue: 165, qty: 2, stock: 48, history: 8 };
+
+  return (
+    <div className="h-full flex flex-col bg-background overflow-hidden">
+      <StoreHeader back title="Бүтээгдэхүүн" />
+
+      <div className="flex-1 overflow-y-auto pb-4">
+        {/* Big imagery card */}
+        <div className="px-3 pt-3">
+          <div className="aspect-[5/4] rounded-3xl overflow-hidden relative ring-1 ring-border">
+            <ProductImage hue={p.hue} />
+            <div className="absolute top-3 left-3 flex items-center gap-1 text-[10px] font-bold bg-white/90 backdrop-blur text-foreground px-2 py-1 rounded-full ring-1 ring-border">
+              {I.history} Сүүлд: 4 өдрийн өмнө
+            </div>
+            <div className="absolute bottom-3 right-3 size-9 rounded-full bg-white/90 backdrop-blur ring-1 ring-border flex items-center justify-center text-muted-foreground">
+              <Icon d={<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z" />} size={16} />
+            </div>
+          </div>
+
+          {/* Image thumb rail */}
+          <div className="flex gap-2 mt-2">
+            {[p.hue, p.hue + 20, p.hue - 30].map((h, i) => (
+              <div key={i} className={`size-12 rounded-xl overflow-hidden relative ring-1 ${i === 0 ? "ring-2 ring-primary" : "ring-border"}`}>
+                <ProductImage hue={h} dense />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Title block */}
+        <div className="px-4 pt-4">
+          <div className="text-[11px] uppercase tracking-[0.1em] font-bold text-primary">{p.brand}</div>
+          <h1 className="text-[20px] font-bold leading-tight tracking-tight mt-1">{p.name}</h1>
+
+          <div className="mt-3 flex items-baseline gap-3">
+            <span className="text-[26px] font-bold tabular-nums tracking-tight">{fmt(p.price)}</span>
+            <span className="text-[12px] text-muted-foreground">/ уут</span>
+          </div>
+
+          <div className="mt-2.5 flex items-center gap-2 text-[12px] flex-wrap">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[color-mix(in_oklch,var(--chart-emerald)_15%,white)] text-[oklch(0.4_0.13_155)] ring-1 ring-[color-mix(in_oklch,var(--chart-emerald)_30%,transparent)] font-semibold">
+              <span className="size-1.5 rounded-full" style={{ background: "var(--chart-emerald)" }} />
+              Үлдэгдэл: {p.stock}
+            </span>
+            <span className="inline-flex items-center gap-1 text-muted-foreground">
+              {I.package} Хайрцагт {p.box}ш
+            </span>
+          </div>
+        </div>
+
+        {/* History strip — bridge from B3 variant B */}
+        <div className="mx-4 mt-5 rounded-2xl ring-1 ring-border bg-accent/40 p-3">
+          <div className="flex items-center justify-between">
+            <div className="text-[11px] uppercase tracking-[0.1em] font-bold text-muted-foreground">Таны түүх</div>
+            <div className="text-[11px] font-semibold text-primary">Бүгд ›</div>
+          </div>
+          <div className="mt-1.5 flex items-baseline gap-2">
+            <span className="text-[18px] font-bold tabular-nums">{p.history}</span>
+            <span className="text-[12.5px] text-muted-foreground">удаа авсан · ~сард 10ш</span>
+          </div>
+          <div className="mt-2.5 flex items-end gap-1 h-7">
+            {[14, 28, 18, 22, 10, 32, 24].map((h, i) => (
+              <div key={i} className="flex-1 rounded-sm" style={{
+                height: h,
+                background: i === 5 ? "var(--primary)" : "color-mix(in oklch, var(--primary) 22%, transparent)",
+              }} />
+            ))}
+          </div>
+        </div>
+
+        {/* Description */}
+        <div className="px-4 pt-5">
+          <div className="text-[11px] uppercase tracking-[0.1em] font-bold text-muted-foreground">Тайлбар</div>
+          <p className="mt-2 text-[13.5px] leading-relaxed text-foreground/85">
+            Нян бактерийн 99.9%-ийг устгадаг, гар болон бараа ариутгахад зориулсан нойтон салфетка. Найрлагад этанол агуулна. SKU: {p.sku}.
+          </p>
+        </div>
+      </div>
+
+      {/* Sticky add-to-cart bar */}
+      <div className="border-t border-border bg-background/95 backdrop-blur px-3 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
+        {/* Unit pill */}
+        <div className="flex items-center gap-2 mb-3">
+          <div className="relative flex bg-muted rounded-full p-1 text-sm font-medium flex-1">
+            <div className="absolute top-1 bottom-1 w-[calc(50%-0.25rem)] rounded-full bg-white shadow-sm" />
+            <button className="relative z-10 flex-1 py-1.5 text-[12px] font-semibold text-foreground">Ширхэг</button>
+            <button className="relative z-10 flex-1 py-1.5 text-[12px] font-semibold text-muted-foreground flex items-center justify-center gap-1.5">
+              {I.package} Хайрцаг
+            </button>
+          </div>
+        </div>
+        <div className="flex items-stretch gap-2">
+          <div className="flex-shrink-0">
+            <div className="h-12 inline-flex items-stretch rounded-2xl border-2 border-border bg-white overflow-hidden">
+              <button className="px-3.5 hover:bg-muted">{I.minus}</button>
+              <span className="px-3.5 flex items-center font-bold tabular-nums text-[15px] min-w-12 justify-center">{p.qty}</span>
+              <button className="px-3.5 hover:bg-muted">{I.plus}</button>
+            </div>
+          </div>
+          <button className="flex-1 h-12 rounded-2xl bg-primary text-primary-foreground font-bold text-[14px] flex items-center justify-center gap-2 shadow-md shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)] active:scale-[0.98] transition-all">
+            <span>Сагсанд нэмэх</span>
+            <span className="text-primary-foreground/85 tabular-nums">· {fmt(p.price * p.qty)}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+window.ScreenProduct = ScreenProduct;
+</script>
+
+<!-- ========== Screen 3: Cart (B4) — Confident-language ========== -->
+<script type="text/babel" data-presets="env,react">
+const I = window.Icons;
+const { fmt, ProductImage, QtyStepper, StoreHeader, Icon } = window;
+
+function CartLine({ p, isLast }) {
+  return (
+    <div className={`flex gap-3 p-3 rounded-2xl bg-white ring-1 ring-border`}>
+      <div className="size-20 rounded-2xl overflow-hidden relative shrink-0 ring-1 ring-border/40">
+        <ProductImage hue={p.hue} dense />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-primary">{p.brand}</div>
+        <div className="text-[13px] font-semibold leading-snug line-clamp-2">{p.name}</div>
+        <div className="mt-1.5 text-[11.5px] text-muted-foreground tabular-nums">
+          {fmt(p.price)} × {p.qty} = <span className="font-bold text-foreground">{fmt(p.price * p.qty)}</span>
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <div className="inline-flex items-center rounded-full bg-muted ring-1 ring-border">
+            <button className="size-7 flex items-center justify-center hover:bg-[oklch(0.94_0.005_264)] rounded-l-full">{I.minus}</button>
+            <span className="px-2 text-[12.5px] font-bold tabular-nums min-w-7 text-center">{p.qty}</span>
+            <button className="size-7 flex items-center justify-center hover:bg-[oklch(0.94_0.005_264)] rounded-r-full">{I.plus}</button>
+          </div>
+          <button className="ml-auto size-7 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-red-50 hover:text-red-600">{I.trash}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScreenCart() {
+  const total = window.cartTotal;
+  const qty = window.CART.reduce((a, x) => a + x.qty, 0);
+  const fee = 0;
+  const ETA = "Маргааш · 09:00 — 11:00";
+
+  return (
+    <div className="h-full flex flex-col bg-background overflow-hidden">
+      <StoreHeader back title="Сагс" />
+
+      <div className="flex-1 overflow-y-auto px-3 pt-3 pb-3">
+        <div className="flex items-baseline justify-between">
+          <h1 className="text-[20px] font-bold tracking-tight">Миний сагс</h1>
+          <span className="text-[12.5px] text-muted-foreground tabular-nums">{qty} ширхэг бараа</span>
+        </div>
+
+        {/* Delivery card */}
+        <div className="mt-3 rounded-2xl ring-1 ring-border bg-accent/40 p-3 flex items-center gap-3">
+          <div className="size-9 rounded-xl bg-white ring-1 ring-border flex items-center justify-center text-primary">
+            {I.truck}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-muted-foreground">Хүргэлт</div>
+            <div className="text-[12.5px] font-semibold">{ETA}</div>
+          </div>
+          <button className="text-[11px] font-semibold text-primary">Өөрчлөх</button>
+        </div>
+
+        {/* Line items */}
+        <div className="mt-3 flex flex-col gap-2">
+          {window.CART.map((p, i) => <CartLine key={p.id} p={p} isLast={i === window.CART.length - 1} />)}
+        </div>
+
+        {/* Suggested — bridge from B4 variant C */}
+        <div className="mt-5">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              {I.spark}
+              <span className="text-[11px] uppercase tracking-[0.1em] font-bold text-muted-foreground">Хамт авдаг</span>
+            </div>
+            <span className="text-[11px] font-semibold text-primary">Бүгд ›</span>
+          </div>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-3 px-3">
+            {window.PRODUCTS.slice(2, 6).map((p) => (
+              <div key={p.id} className="shrink-0 w-[120px] rounded-2xl ring-1 ring-border bg-white p-2">
+                <div className="aspect-square rounded-xl overflow-hidden relative">
+                  <ProductImage hue={p.hue} dense />
+                </div>
+                <div className="text-[10px] uppercase tracking-[0.08em] font-bold text-primary mt-1.5 truncate">{p.brand}</div>
+                <div className="text-[11px] font-semibold leading-tight line-clamp-2 h-[2.2em] mt-0.5">{p.name}</div>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-[12px] font-bold tabular-nums">{fmt(p.price)}</span>
+                  <button className="size-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-sm">{I.plus}</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Notes */}
+        <div className="mt-5">
+          <label className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.1em] font-bold text-muted-foreground mb-2">
+            {I.note} Тэмдэглэл (заавал биш)
+          </label>
+          <div className="rounded-2xl bg-muted/60 ring-1 ring-border px-4 py-3 text-[13px] text-muted-foreground">
+            Жш: Маргааш 10 цаг хүртэл хүргэх боломжтой бол хүргэнэ үү
+          </div>
+        </div>
+      </div>
+
+      {/* Sticky submit */}
+      <div className="border-t border-border bg-background/95 backdrop-blur px-3 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
+        <div className="flex items-baseline justify-between mb-2 px-1">
+          <span className="text-[11px] uppercase tracking-[0.1em] font-bold text-muted-foreground">Нийт</span>
+          <span className="text-[22px] font-bold tabular-nums tracking-tight">{fmt(total)}</span>
+        </div>
+        <button className="w-full h-12 rounded-2xl bg-primary text-primary-foreground font-bold text-[14px] flex items-center justify-center gap-2 shadow-md shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)] active:scale-[0.98] transition-all">
+          Захиалга илгээх
+          <span className="opacity-80">{I.chevR}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+window.ScreenCart = ScreenCart;
+</script>
+
+<!-- ========== Screen 4: Orders (B6) — Confident-language ========== -->
+<script type="text/babel" data-presets="env,react">
+const I = window.Icons;
+const { fmt, StoreHeader, TabBar, Icon } = window;
+
+const ORDERS = [
+  {
+    n: "ORD-2026-00042", d: "5/11 · 14:32", items: 3, total: 4690,
+    status: "pending", statusLabel: "Хүлээгдэж буй", step: 1,
+    eta: "Маргааш 09:00 хүртэл хүргэлт",
+    products: ["Soft Leaf салфетка 10ш ×2", "Soft Leaf 25ш ×1", "Lavera саван ×3"],
+  },
+  {
+    n: "ORD-2026-00040", d: "5/10 · 11:08", items: 5, total: 27400,
+    status: "packing", statusLabel: "Багцлаж байна", step: 2,
+    eta: "Өнөөдөр илгээнэ",
+    products: ["Persil нунтаг 1кг ×3", "Dettol шингэн ×2"],
+  },
+  {
+    n: "ORD-2026-00038", d: "5/08 · 16:20", items: 4, total: 12300,
+    status: "delivered", statusLabel: "Хүргэгдсэн", step: 4,
+    eta: "5/09-нд хүргэгдсэн",
+    products: ["Soft Leaf салфетка 10ш ×3", "Cleanly хөвөн ×1"],
+  },
+  {
+    n: "ORD-2026-00033", d: "5/05 · 09:15", items: 6, total: 8150,
+    status: "delivered", statusLabel: "Хүргэгдсэн", step: 4,
+    eta: "5/06-нд хүргэгдсэн",
+    products: ["Persil нунтаг ×1", "Lavera саван ×2"],
+  },
+];
+
+const STATUS_TONE = {
+  pending:   { bg: "amber",   chip: "bg-amber-100 text-amber-900 ring-amber-300/60" },
+  packing:   { bg: "primary", chip: "bg-[color-mix(in_oklch,var(--primary)_10%,white)] text-primary ring-[color-mix(in_oklch,var(--primary)_30%,transparent)]" },
+  shipped:   { bg: "primary", chip: "bg-[color-mix(in_oklch,var(--primary)_10%,white)] text-primary ring-[color-mix(in_oklch,var(--primary)_30%,transparent)]" },
+  delivered: { bg: "emerald", chip: "bg-[color-mix(in_oklch,var(--chart-emerald)_12%,white)] text-[oklch(0.4_0.13_155)] ring-[color-mix(in_oklch,var(--chart-emerald)_30%,transparent)]" },
+};
+
+function StatusDot({ status }) {
+  const colors = {
+    pending: "var(--chart-amber)",
+    packing: "var(--primary)",
+    shipped: "var(--primary)",
+    delivered: "var(--chart-emerald)",
+  };
+  return <span className="size-1.5 rounded-full" style={{ background: colors[status] }} />;
+}
+
+function ProgressBar({ step }) {
+  return (
+    <div className="flex gap-1">
+      {[1, 2, 3, 4].map((s) => (
+        <div key={s} className="flex-1 h-1 rounded-full" style={{
+          background: s <= step ? "var(--primary)" : "color-mix(in oklch, var(--primary) 14%, var(--muted))",
+        }} />
+      ))}
+    </div>
+  );
+}
+
+function OrderCard({ o, expanded = false }) {
+  const tone = STATUS_TONE[o.status];
+  return (
+    <div className={`rounded-3xl bg-white ring-1 ring-border overflow-hidden transition-all ${expanded ? "shadow-md shadow-[color-mix(in_oklch,var(--primary)_15%,transparent)] ring-[color-mix(in_oklch,var(--primary)_30%,transparent)]" : ""}`}>
+      <div className="p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-muted-foreground">Захиалга</div>
+            <div className="text-[14px] font-bold tracking-tight font-mono">{o.n}</div>
+          </div>
+          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ring-1 text-[11px] font-bold ${tone.chip}`}>
+            <StatusDot status={o.status} />
+            {o.statusLabel}
+          </div>
+        </div>
+
+        <div className="mt-2.5 flex items-center justify-between text-[12px] text-muted-foreground">
+          <span>{o.d} · {o.items} бараа</span>
+          <span className="text-[15px] font-bold text-foreground tabular-nums">{fmt(o.total)}</span>
+        </div>
+
+        <div className="mt-3"><ProgressBar step={o.step} /></div>
+
+        <div className="mt-2.5 flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+          {o.status === "delivered" ? I.check : I.clock}
+          <span>{o.eta}</span>
+        </div>
+
+        {expanded && (
+          <div className="mt-3.5 pt-3.5 border-t border-border/60">
+            <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-muted-foreground mb-1.5">Бараа</div>
+            <ul className="space-y-1 text-[12.5px]">
+              {o.products.map((line, i) => <li key={i} className="flex items-start gap-1.5"><span className="text-muted-foreground/60 mt-0.5">·</span>{line}</li>)}
+            </ul>
+            <div className="mt-3 flex gap-2">
+              <button className="flex-1 h-9 rounded-xl text-[12px] font-semibold border border-border bg-white hover:bg-muted active:scale-[0.98] transition-all flex items-center justify-center gap-1.5">
+                {I.receipt} Дэлгэрэнгүй
+              </button>
+              <button className="flex-1 h-9 rounded-xl text-[12px] font-bold bg-primary text-primary-foreground active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 shadow-sm shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)]">
+                {I.cart} Дахин захиалах
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ScreenOrders() {
+  return (
+    <div className="h-full flex flex-col bg-background overflow-hidden">
+      <StoreHeader title="Хүнс-Мини" />
+
+      <div className="px-3 pt-3">
+        <h1 className="text-[22px] font-bold tracking-tight">Захиалгууд</h1>
+        <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
+          {[
+            { l: "Идэвхтэй · 2", a: true },
+            { l: "Хүргэгдсэн" },
+            { l: "Бүгд" },
+          ].map((t, i) => (
+            <button key={i} className={`shrink-0 h-9 px-3.5 rounded-full text-[12.5px] font-semibold transition-all ${
+              t.a ? "bg-primary text-primary-foreground shadow-sm shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)]"
+                  : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-[oklch(0.95_0.005_264)]"
+            }`}>{t.l}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 pt-3 pb-3 flex flex-col gap-2.5">
+        <OrderCard o={ORDERS[0]} expanded />
+        <OrderCard o={ORDERS[1]} />
+        <div className="mt-3 mb-1 text-[10px] uppercase tracking-[0.1em] font-bold text-muted-foreground px-1">
+          Хүргэгдсэн
+        </div>
+        <OrderCard o={ORDERS[2]} />
+        <OrderCard o={ORDERS[3]} />
+      </div>
+
+      <TabBar active="orders" cartCount={6} />
+    </div>
+  );
+}
+
+window.ScreenOrders = ScreenOrders;
+</script>
+
+<!-- ========== Canvas app ========== -->
+<script type="text/babel" data-presets="env,react">
+const { DesignCanvas, DCSection, DCArtboard, IOSDevice } = window;
+
+function PhoneArt({ children }) {
+  return (
+    <div className="w-full h-full flex items-center justify-center">
+      <IOSDevice width={402} height={874}>{children}</IOSDevice>
+    </div>
+  );
+}
+
+function Intro() {
+  return (
+    <div style={{
+      width: 800, padding: "32px 40px", fontFamily: "Geist, system-ui, sans-serif",
+      background: "#fff", border: "1px solid #e5e0d0", borderRadius: 18,
+      boxShadow: "0 10px 30px -10px rgba(0,0,0,0.15)",
+    }}>
+      <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+        <div style={{
+          width:48, height:48, borderRadius:12,
+          background:"linear-gradient(135deg, var(--primary), oklch(0.4 0.18 263))",
+          color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:18,
+        }}>BDI</div>
+        <div>
+          <div style={{ fontSize:24, fontWeight:700, letterSpacing:"-0.02em" }}>Худалдан авагчийн флоу · Hi-Fi</div>
+          <div style={{ fontSize:14, color:"var(--muted-foreground)" }}>
+            "② Confident" хэлийг каталог→дэлгэрэнгүй→сагс→захиалгууд дээр тавьсан
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop:20, fontSize:13.5, lineHeight:1.55, color:"#3a3530" }}>
+        Confident хэлийн өвөрмөц шинж — том imagery, том prices, in-cart дотогшилсон indigo tint, баталгаажсан badge-ууд
+        (Сүүлд авсан · Цөөн үлдсэн · хямдрал) — флоугийн дөрвөн дэлгэцэн дээр нэг шиг харагдаж байна.
+      </div>
+
+      <div style={{ marginTop:22, display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
+        {[
+          { tag:"① Каталог", d:"Та сонгосон хувилбар. 2-багана grid + inline qty stepper + cart badge." },
+          { tag:"② Дэлгэрэнгүй", d:"Том зургийн карт + thumb rail. Үлдэгдэл, түүхэн bar chart, ширхэг/хайрцаг pill." },
+          { tag:"③ Сагс", d:"Line item-ууд card-чилсэн. Хүргэлтийн card дээр харагдана. 'Хамт авдаг' rail." },
+          { tag:"④ Захиалгууд", d:"Status pill + 4 шаттай progress + reorder CTA. Tab-аар идэвхтэй/хүргэгдсэн ялгасан." },
+        ].map(v => (
+          <div key={v.tag} style={{ padding:12, border:"1px solid var(--border)", borderRadius:12, background:"#fff" }}>
+            <div style={{ fontSize:13, fontWeight:700, color:"var(--primary)" }}>{v.tag}</div>
+            <div style={{ fontSize:12, lineHeight:1.45, color:"#3a3530", marginTop:5 }}>{v.d}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop:18, padding:12, background:"var(--accent)", borderRadius:10, fontSize:12.5, color:"var(--accent-foreground)" }}>
+        <b>Дараагийн алхам:</b> бүгд таалагдвал build-spec гаргая — таны одоогийн <code>CatalogCartControl</code>, <code>buyer/shell.tsx</code>,
+        <code>cart/page.tsx</code> руу шууд буух өөрчлөлтийн жагсаалт.
+      </div>
+    </div>
+  );
+}
+
+const W = 480, H = 980;
+
+function App() {
+  return (
+    <DesignCanvas
+      title="Худалдан авагчийн флоу · Hi-Fi"
+      subtitle="Confident хэлээр бичсэн 4 дэлгэц"
+      intro={<Intro />}
+    >
+      <DCSection id="flow" title="Буюр флоу" subtitle="Каталог → Бүтээгдэхүүн → Сагс → Захиалгууд">
+        <DCArtboard id="catalog"  label="① Каталог (B2)"       width={W} height={H}><PhoneArt><window.ScreenCatalog /></PhoneArt></DCArtboard>
+        <DCArtboard id="product"  label="② Бүтээгдэхүүн (B3)"  width={W} height={H}><PhoneArt><window.ScreenProduct /></PhoneArt></DCArtboard>
+        <DCArtboard id="cart"     label="③ Сагс (B4)"          width={W} height={H}><PhoneArt><window.ScreenCart /></PhoneArt></DCArtboard>
+        <DCArtboard id="orders"   label="④ Захиалгууд (B6)"   width={W} height={H}><PhoneArt><window.ScreenOrders /></PhoneArt></DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("app")).render(<App />);
+</script>
+</body>
+</html>

@@ -7,7 +7,12 @@ export type CartItem = {
   name: string;
   brand: string | null;
   image_url: string | null;
+  /** Catalog list price BEFORE any discount. The cart engine in
+   *  lib/discount.ts re-applies active rules so the buyer can see the
+   *  per-product and cash discounts itemized. */
   unit_price: number;
+  /** Optional — used by the discount engine to match per-category rules. */
+  category_id?: string | null;
   qty: number;
 };
 
@@ -60,6 +65,7 @@ export function addToCart(
     existing.name = item.name;
     existing.brand = item.brand;
     existing.image_url = item.image_url;
+    existing.category_id = item.category_id ?? existing.category_id ?? null;
   } else {
     items.push({ ...item, qty });
   }

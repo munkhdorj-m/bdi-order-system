@@ -528,6 +528,22 @@ create policy orders_buyer_insert on orders
     and supermarket_id = current_supermarket()
   );
 
+-- Buyer self-service edit + cancel — only while status is still pending,
+-- and they can only flip to 'cancelled' (not 'confirmed' etc).
+create policy orders_buyer_update on orders
+  for update
+  using (
+    current_role_value() = 'buyer'
+    and placed_by = auth.uid()
+    and status = 'pending'
+  )
+  with check (
+    current_role_value() = 'buyer'
+    and placed_by = auth.uid()
+    and supermarket_id = current_supermarket()
+    and status in ('pending', 'cancelled')
+  );
+
 
 -- 6.8 order_items (mirror orders)
 create policy order_items_admin_all on order_items
@@ -553,6 +569,37 @@ create policy order_items_insert on order_items
     exists (
       select 1 from orders o
       where o.id = order_items.order_id and o.placed_by = auth.uid()
+    )
+  );
+
+-- Buyer self-service item edit + delete — only while the parent order is pending.
+create policy order_items_buyer_modify on order_items
+  for update
+  using (
+    exists (
+      select 1 from orders o
+      where o.id = order_items.order_id
+        and o.placed_by = auth.uid()
+        and o.status = 'pending'
+    )
+  )
+  with check (
+    exists (
+      select 1 from orders o
+      where o.id = order_items.order_id
+        and o.placed_by = auth.uid()
+        and o.status = 'pending'
+    )
+  );
+
+create policy order_items_buyer_delete on order_items
+  for delete
+  using (
+    exists (
+      select 1 from orders o
+      where o.id = order_items.order_id
+        and o.placed_by = auth.uid()
+        and o.status = 'pending'
     )
   );
 

@@ -6,7 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { ActiveSwitch } from "@/components/ui/active-switch";
 
 export type UserFormDefaults = {
   id: string;
@@ -89,23 +97,30 @@ export function UserForm({ defaults, supermarkets, action, isSelf }: Props) {
             <Label htmlFor="role" className="mb-1.5 block">
               Эрх *
             </Label>
-            <select
-              id="role"
+            <Select
               name="role"
               required
               value={role}
-              onChange={(e) => setRole(e.target.value as typeof role)}
+              onValueChange={(v) => setRole(v as typeof role)}
               disabled={isSelf}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs disabled:opacity-60"
             >
-              {(Object.keys(ROLE_LABELS) as Array<keyof typeof ROLE_LABELS>).map(
-                (r) => (
-                  <option key={r} value={r}>
+              <SelectTrigger
+                id="role"
+                size="default"
+                className="w-full h-10 rounded-xl"
+              >
+                <SelectValue placeholder="Эрх сонгох" />
+              </SelectTrigger>
+              <SelectContent>
+                {(
+                  Object.keys(ROLE_LABELS) as Array<keyof typeof ROLE_LABELS>
+                ).map((r) => (
+                  <SelectItem key={r} value={r}>
                     {ROLE_LABELS[r]}
-                  </option>
-                ),
-              )}
-            </select>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {isSelf && (
               <p className="text-xs text-muted-foreground mt-1">
                 Өөрийн эрхийг өөрчилж болохгүй.
@@ -136,21 +151,13 @@ export function UserForm({ defaults, supermarkets, action, isSelf }: Props) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent className="pt-6 flex items-center gap-3">
-          <input
-            id="active"
-            name="active"
-            type="checkbox"
-            defaultChecked={defaults.active}
-            disabled={isSelf}
-            className="size-4 rounded border-input"
-          />
-          <Label htmlFor="active" className="font-normal">
-            Идэвхтэй
-          </Label>
-        </CardContent>
-      </Card>
+      <ActiveSwitch
+        defaultChecked={defaults.active}
+        disabled={isSelf}
+        activeHint="Хэрэглэгч системд нэвтэрч ажиллах боломжтой."
+        inactiveHint="Нэвтрэх боломжгүй — захиалга үүсгэх, харах боломжгүй."
+        disabledHint="Та өөрийн эрхийн идэвхтэй төлвийг өөрчилж болохгүй."
+      />
 
       {state.error && (
         <div className="rounded-md border border-destructive/40 bg-destructive/5 text-destructive text-sm p-3">

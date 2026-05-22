@@ -1,12 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ActiveSwitch } from "@/components/ui/active-switch";
 
 export type SupermarketFormDefaults = {
   id?: string;
@@ -17,6 +25,8 @@ export type SupermarketFormDefaults = {
   contact_phone?: string | null;
   assigned_rep_id?: string | null;
   price_list_id?: string | null;
+  /** ISO weekday 1-7 (Mon-Sun). null/undefined → use district default. */
+  delivery_day?: number | null;
   notes?: string | null;
   active?: boolean;
 };
@@ -57,16 +67,20 @@ const DEFAULT_TYPES = [
   "Хувь хүн",
 ];
 
+// District names — single-spaced so they match the delivery-day map in
+// lib/delivery.ts. The normalizer in lib/delivery.ts also collapses
+// whitespace defensively, but storing clean strings keeps DB queries
+// predictable.
 const DEFAULT_DISTRICTS = [
-  "Баянгол  Дүүрэг",
-  "Баянзүрх  Дүүрэг",
-  "Чингэлтэй  Дүүрэг",
-  "Хан-Уул  Дүүрэг",
-  "Сонгино  Хайрхан Дүүрэг",
-  "Сүхбаатар  Дүүрэг",
-  "Налайх  Дүүрэг",
-  "Багануур  Дүүрэг",
-  "Багахангай  Дүүрэг",
+  "Баянгол Дүүрэг",
+  "Баянзүрх Дүүрэг",
+  "Чингэлтэй Дүүрэг",
+  "Хан-Уул Дүүрэг",
+  "Сонгино Хайрхан Дүүрэг",
+  "Сүхбаатар Дүүрэг",
+  "Налайх Дүүрэг",
+  "Багануур Дүүрэг",
+  "Багахангай Дүүрэг",
 ];
 
 export function SupermarketForm({
@@ -81,6 +95,19 @@ export function SupermarketForm({
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     action,
     {},
+  );
+
+  // Radix Select disallows "" as an item value. Mirror the chosen
+  // assigned_rep_id / price_list_id through hidden inputs so we can still
+  // submit "" when the user picks the "— none —" option.
+  const [assignedRepId, setAssignedRepId] = useState<string>(
+    defaults.assigned_rep_id ?? "",
+  );
+  const [priceListId, setPriceListId] = useState<string>(
+    defaults.price_list_id ?? "",
+  );
+  const [deliveryDay, setDeliveryDay] = useState<string>(
+    defaults.delivery_day != null ? String(defaults.delivery_day) : "",
   );
 
   const typeOptions = mergeSuggestions(typeSuggestions, DEFAULT_TYPES);
@@ -133,6 +160,39 @@ export function SupermarketForm({
             </datalist>
           </Field>
 
+          {/* Delivery-day override. Empty (default) = "use district default"
+              resolved by lib/delivery.ts. */}
+          <Field label="Хүргэлтийн өдөр" htmlFor="delivery_day">
+            <input
+              type="hidden"
+              name="delivery_day"
+              value={deliveryDay}
+            />
+            <Select
+              value={deliveryDay || "__default"}
+              onValueChange={(v) =>
+                setDeliveryDay(v === "__default" ? "" : v)
+              }
+            >
+              <SelectTrigger
+                id="delivery_day"
+                className="w-full h-10 rounded-xl"
+              >
+                <SelectValue placeholder="Дүүргийн өгөгдмөл" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__default">Дүүргийн өгөгдмөл</SelectItem>
+                <SelectItem value="1">Даваа</SelectItem>
+                <SelectItem value="2">Мягмар</SelectItem>
+                <SelectItem value="3">Лхагва</SelectItem>
+                <SelectItem value="4">Пүрэв</SelectItem>
+                <SelectItem value="5">Баасан</SelectItem>
+                <SelectItem value="6">Бямба</SelectItem>
+                <SelectItem value="7">Ням</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+
           <Field label="Хаяг" htmlFor="address" className="md:col-span-2">
             <Textarea
               id="address"
@@ -152,19 +212,29 @@ export function SupermarketForm({
           </Field>
 
           <Field label="Хариуцагч төлөөлөгч" htmlFor="assigned_rep_id">
-            <select
-              id="assigned_rep_id"
+            <input
+              type="hidden"
               name="assigned_rep_id"
-              defaultValue={defaults.assigned_rep_id ?? ""}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+              value={assignedRepId}
+            />
+            <Select
+              value={assignedRepId || "__none"}
+              onValueChange={(v) =>
+                setAssignedRepId(v === "__none" ? "" : v)
+              }
             >
-              <option value="">— Хариуцагчгүй —</option>
-              {reps.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.full_name || r.email || r.id.slice(0, 8)}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="assigned_rep_id" className="w-full h-10 rounded-xl">
+                <SelectValue placeholder="— Хариуцагчгүй —" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">— Хариуцагчгүй —</SelectItem>
+                {reps.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.full_name || r.email || r.id.slice(0, 8)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Field>
 
           <Field
@@ -172,19 +242,25 @@ export function SupermarketForm({
             htmlFor="price_list_id"
             className="md:col-span-2"
           >
-            <select
-              id="price_list_id"
-              name="price_list_id"
-              defaultValue={defaults.price_list_id ?? ""}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+            <input type="hidden" name="price_list_id" value={priceListId} />
+            <Select
+              value={priceListId || "__none"}
+              onValueChange={(v) =>
+                setPriceListId(v === "__none" ? "" : v)
+              }
             >
-              <option value="">— Жишиг үнэ ашиглах —</option>
-              {priceLists.map((pl) => (
-                <option key={pl.id} value={pl.id}>
-                  {pl.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="price_list_id" className="w-full h-10 rounded-xl">
+                <SelectValue placeholder="— Жишиг үнэ ашиглах —" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">— Жишиг үнэ ашиглах —</SelectItem>
+                {priceLists.map((pl) => (
+                  <SelectItem key={pl.id} value={pl.id}>
+                    {pl.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className="text-xs text-muted-foreground mt-1">
               Дэлгүүрт онцгой үнэ оноож амжаагүй бол энэ жагсаалтын үнэ ашиглагдана.
             </p>
@@ -201,20 +277,11 @@ export function SupermarketForm({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent className="pt-6 flex items-center gap-3">
-          <input
-            id="active"
-            name="active"
-            type="checkbox"
-            defaultChecked={defaults.active ?? true}
-            className="size-4 rounded border-input"
-          />
-          <Label htmlFor="active" className="font-normal">
-            Идэвхтэй
-          </Label>
-        </CardContent>
-      </Card>
+      <ActiveSwitch
+        defaultChecked={defaults.active ?? true}
+        activeHint="Худалдан авагч/төлөөлөгч энэ дэлгүүрт захиалга үүсгэх боломжтой."
+        inactiveHint="Дэлгүүр түр хаалттай — захиалга үүсгэх боломжгүй."
+      />
 
       {state.error && (
         <div className="rounded-md border border-destructive/40 bg-destructive/5 text-destructive text-sm p-3">

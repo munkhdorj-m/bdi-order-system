@@ -5,11 +5,20 @@ import { usePathname, useRouter } from "next/navigation";
 import { ChevronLeft, LogOut } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BuyerBottomTabBar } from "./bottom-tab-bar";
+import { CatalogSearchTrigger } from "./catalog-search-trigger";
 
 type Props = {
   storeName: string;
   email: string | null;
   children: React.ReactNode;
+  /** Slot for the notifications bell — passed in from the async parent
+   *  layout so this client shell stays purely presentational. */
+  bell?: React.ReactNode;
+  /** Slot for the discounts chip (Sparkles icon + count badge). Same
+   *  pattern as `bell`: the async parent layout fetches active discount
+   *  rules and passes the rendered chip JSX in. Click opens a Sheet
+   *  drawer with the two-section deals content. */
+  dealsChip?: React.ReactNode;
 };
 
 // Top-level pages that anchor the bottom tab bar — no back button needed here.
@@ -20,7 +29,13 @@ function storeInitial(name: string): string {
   return trimmed.length > 0 ? trimmed[0].toUpperCase() : "·";
 }
 
-export function BuyerShell({ storeName, email, children }: Props) {
+export function BuyerShell({
+  storeName,
+  email,
+  children,
+  bell,
+  dealsChip,
+}: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const isRoot = ROOT_PATHS.has(pathname);
@@ -64,13 +79,12 @@ export function BuyerShell({ storeName, email, children }: Props) {
           )}
 
           <div className="ml-auto flex items-center gap-1">
-            <Link
-              href="/catalog"
-              aria-label="BDI нүүр"
-              className="font-heading font-bold tracking-tight text-sm px-2.5 py-1 rounded-lg hover:bg-muted/70 transition-colors"
-            >
-              BDI
-            </Link>
+            {/* Mobile only — desktop has the inline search on /catalog. */}
+            <CatalogSearchTrigger />
+
+            {dealsChip}
+
+            {bell}
 
             <ThemeToggle variant="buyer" />
 

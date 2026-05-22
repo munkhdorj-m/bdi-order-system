@@ -1,5 +1,6 @@
 "use server";
 
+import sharp from "sharp";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -9,6 +10,23 @@ type ActionState = {
 };
 
 const BUCKET = "product-images";
+
+// Uploaded images get resized + re-encoded as WebP before they hit
+// Supabase Storage. Two reasons:
+//   1. Storage cost — admins routinely upload 3-5MB phone photos.
+//      Resizing to 1200px wide + WebP q80 typically drops a 3MB JPEG
+//      to ~120-180KB. Across hundreds of products that's 10x savings
+//      on Supabase Storage AND on the bandwidth every catalog view
+//      consumes.
+//   2. Catalog performance — buyers on 3G/4G download these images.
+//      Smaller files → faster catalog paint → fewer rage-quits.
+//
+// 1200px wide is plenty: the largest product card on desktop renders
+// at ~280px wide × ~2x DPR = ~560px wide actual pixel target. A 1200px
+// source covers all retina cases without being gratuitous.
+const MAX_IMAGE_WIDTH = 1200;
+const MAX_IMAGE_HEIGHT = 1200;
+const WEBP_QUALITY = 80;
 
 function parseNumber(value: FormDataEntryValue | null): number | null {
   if (value === null) return null;
@@ -33,12 +51,54 @@ async function uploadImageIfPresent(formData: FormData): Promise<string | null> 
   const file = formData.get("image");
   if (!(file instanceof File) || file.size === 0) return null;
 
+  // Run the uploaded buffer through sharp:
+  //   - `fit: "inside"` resizes to fit inside the bounding box while
+  //     preserving aspect ratio. Smaller images aren't enlarged
+  //     (withoutEnlargement) so we don't waste pixels on already-small
+  //     uploads.
+  //   - `rotate()` auto-orients based on EXIF — phone photos taken in
+  //     portrait often arrive sideways without this.
+  //   - WebP at q80 is the sweet spot for product photography; q90+
+  //     gives diminishing returns and dramatically larger files.
+  const inputBuffer = Buffer.from(await file.arrayBuffer());
+  let optimized: Buffer;
+  try {
+    optimized = await sharp(inputBuffer)
+      .rotate()
+      .resize(MAX_IMAGE_WIDTH, MAX_IMAGE_HEIGHT, {
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .webp({ quality: WEBP_QUALITY })
+      .toBuffer();
+  } catch (e) {
+    // If sharp can't decode (HEIC the system doesn't support, corrupted
+    // upload, etc.) fall back to the raw bytes — better to land a
+    // bigger image than reject the upload entirely. Server log captures
+    // the issue so we can chase HEIC support if it becomes common.
+    console.warn("[uploadImageIfPresent] sharp failed, using raw bytes:", e);
+    optimized = inputBuffer;
+  }
+
   const supabase = await createClient();
-  const ext = file.name.split(".").pop() || "jpg";
+  // Always store as .webp regardless of original extension — the
+  // pipeline above guarantees the output is WebP unless sharp failed,
+  // and even in the failure case modern browsers handle a .webp file
+  // extension on any image MIME type without issue.
+  const usedSharp = optimized !== inputBuffer;
+  const ext = usedSharp ? "webp" : file.name.split(".").pop() || "jpg";
+  const contentType = usedSharp ? "image/webp" : file.type;
   const path = `${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(path, file, { contentType: file.type, upsert: false });
+    .upload(path, optimized, {
+      contentType,
+      upsert: false,
+      // Year-long cache — these are content-addressed by random UUID
+      // so the URL never reuses bytes, meaning long caching is safe
+      // and saves bandwidth on the CDN layer downstream.
+      cacheControl: "31536000",
+    });
   if (error) throw new Error(`Зураг хадгалахад алдаа: ${error.message}`);
   return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }

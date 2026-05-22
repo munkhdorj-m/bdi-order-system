@@ -1,6 +1,8 @@
 import {
+  BarChart3,
   LayoutDashboard,
   Package,
+  Percent,
   ShoppingCart,
   Store,
   Tags,
@@ -26,13 +28,17 @@ export const navSections: NavSection[] = [
   },
   {
     label: "Үйл ажиллагаа",
-    items: [{ href: "/admin/orders", label: "Захиалга", icon: ShoppingCart }],
+    items: [
+      { href: "/admin/orders", label: "Захиалга", icon: ShoppingCart },
+      { href: "/admin/analytics", label: "Аналитик", icon: BarChart3 },
+    ],
   },
   {
     label: "Каталог",
     items: [
       { href: "/admin/products", label: "Бараа", icon: Package },
       { href: "/admin/price-lists", label: "Үнийн жагсаалт", icon: Tags },
+      { href: "/admin/discounts", label: "Хямдрал", icon: Percent },
     ],
   },
   {

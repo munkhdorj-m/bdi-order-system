@@ -14,7 +14,9 @@ type Props = {
 export function CatalogCategoryRail({ categories, activeId, q, sort }: Props) {
   return (
     <div
-      className="flex gap-2 overflow-x-auto pt-3 pb-2 -mx-3 px-3 sm:-mx-4 sm:px-4 scrollbar-thin snap-x snap-proximity"
+      // No bleed margins — parent flex container constrains width so we
+      // scroll within the available space rather than overflow the row.
+      className="flex gap-1.5 overflow-x-auto scrollbar-thin snap-x snap-proximity"
       role="tablist"
       aria-label="Категори"
     >
@@ -53,23 +55,22 @@ function CategoryCard({
       href={href}
       role="tab"
       aria-selected={active}
-      className="group snap-start shrink-0 w-[78px] flex flex-col items-center gap-1.5 select-none focus:outline-none"
+      className="group snap-start shrink-0 w-[58px] flex flex-col items-center gap-1 select-none focus:outline-none"
     >
       <div
-        className={`size-14 rounded-2xl flex items-center justify-center transition-all duration-300 ease-out group-active:scale-95 ${
+        className={`size-11 rounded-xl flex items-center justify-center transition-all duration-300 ease-out group-active:scale-95 ${
           active
-            ? "bg-gradient-to-br from-primary to-primary/85 text-primary-foreground shadow-md shadow-primary/30 ring-1 ring-primary/40 scale-[1.04]"
+            ? "bg-gradient-to-br from-primary to-primary/85 text-primary-foreground shadow-sm shadow-primary/30 ring-1 ring-primary/40 scale-[1.03]"
             : "bg-muted/60 text-foreground/70 ring-1 ring-border/60 group-hover:bg-muted group-hover:text-foreground group-hover:ring-border"
         }`}
       >
-        <Icon
-          className="h-[22px] w-[22px]"
-          strokeWidth={active ? 2.25 : 2}
-        />
+        <Icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.4 : 2} />
       </div>
       <span
-        className={`text-[10.5px] leading-tight text-center line-clamp-2 font-medium transition-colors ${
-          active ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
+        className={`text-[10px] leading-tight text-center line-clamp-2 font-medium transition-colors ${
+          active
+            ? "text-foreground"
+            : "text-muted-foreground group-hover:text-foreground"
         }`}
       >
         {label}

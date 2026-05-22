@@ -5,22 +5,17 @@ import {
   ClipboardList,
   Package,
   Store as StoreIcon,
+  UserCheck,
   type LucideIcon,
 } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { OrderStatusPill } from "@/components/admin/order-status-pill";
 import { ACTIVE_STATUSES, type OrderStatus } from "@/lib/order-status";
 import { formatMnt } from "@/lib/format";
 
-type RecentOrder = {
+type PendingOrder = {
   id: string;
   order_number: string;
   status: OrderStatus;
@@ -42,7 +37,8 @@ function formatRelative(iso: string) {
 
 type Stat = {
   label: string;
-  value: number;
+  value: number | string;
+  sub?: string;
   href: string;
   icon: LucideIcon;
   /** Token used for the colored ring + icon tint. */
@@ -51,29 +47,26 @@ type Stat = {
   alert?: boolean;
 };
 
+// Per-tone color recipes for the stat cards' icon tile + alert ring.
 const TONE_STYLE: Record<
   Stat["tone"],
-  { icon: string; ring: string; alertBg: string }
+  { icon: string; alertRing: string }
 > = {
   amber: {
-    icon: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-200",
-    ring: "ring-amber-200/60 dark:ring-amber-900/60",
-    alertBg: "from-amber-50/80 via-background to-background dark:from-amber-950/30",
+    icon: "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-200",
+    alertRing: "ring-[color-mix(in_oklch,var(--chart-amber)_30%,transparent)]",
   },
   primary: {
-    icon: "bg-primary/15 text-primary",
-    ring: "ring-primary/20",
-    alertBg: "from-primary/10 via-background to-background",
+    icon: "bg-[color-mix(in_oklch,var(--primary)_15%,var(--card))] text-primary",
+    alertRing: "ring-[color-mix(in_oklch,var(--primary)_30%,transparent)]",
   },
   violet: {
-    icon: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-200",
-    ring: "ring-violet-200/60 dark:ring-violet-900/60",
-    alertBg: "from-violet-50/80 via-background to-background dark:from-violet-950/30",
+    icon: "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-200",
+    alertRing: "ring-violet-200/60 dark:ring-violet-900/60",
   },
   sky: {
-    icon: "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-200",
-    ring: "ring-sky-200/60 dark:ring-sky-900/60",
-    alertBg: "from-sky-50/80 via-background to-background dark:from-sky-950/30",
+    icon: "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-200",
+    alertRing: "ring-sky-200/60 dark:ring-sky-900/60",
   },
 };
 
@@ -85,7 +78,8 @@ export default async function AdminDashboard() {
     { count: supermarketCount },
     { count: pendingCount },
     { count: activeCount },
-    { data: recent },
+    { count: pendingUsersCount },
+    { data: pendingOrders },
   ] = await Promise.all([
     supabase.from("products").select("*", { count: "exact", head: true }),
     supabase.from("supermarkets").select("*", { count: "exact", head: true }),
@@ -97,19 +91,31 @@ export default async function AdminDashboard() {
       .from("orders")
       .select("*", { count: "exact", head: true })
       .in("status", ACTIVE_STATUSES),
+    // Users awaiting admin approval. Surfaced as a banner at the top of
+    // the dashboard so a new signup never quietly stays locked out.
+    supabase
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .eq("active", false),
+    // Pending queue — newest first. Capped to 6 per design; the "Бүгд"
+    // link sends the admin to the full filtered list.
     supabase
       .from("orders")
       .select(
         "id, order_number, status, subtotal, created_at, supermarkets:supermarket_id(name)",
       )
+      .eq("status", "pending")
       .order("created_at", { ascending: false })
-      .limit(8),
+      .limit(6),
   ]);
+
+  const pendingUsers = pendingUsersCount ?? 0;
 
   const stats: Stat[] = [
     {
       label: "Шинэ захиалга",
       value: pendingCount ?? 0,
+      sub: pendingCount ? `${pendingCount} хүлээгдсээр` : "Хүлээгдэх алга",
       href: "/admin/orders?status=pending",
       icon: Bell,
       tone: "amber",
@@ -118,62 +124,109 @@ export default async function AdminDashboard() {
     {
       label: "Идэвхтэй захиалга",
       value: activeCount ?? 0,
+      sub: "Шинэ + багцлаж + илгээсэн",
       href: "/admin/orders?status=active",
       icon: ClipboardList,
-      tone: "violet",
+      tone: "primary",
     },
     {
       label: "Бараа",
       value: productCount ?? 0,
+      sub: "Идэвхтэй SKU",
       href: "/admin/products",
       icon: Package,
-      tone: "primary",
+      tone: "violet",
     },
     {
       label: "Дэлгүүр",
       value: supermarketCount ?? 0,
+      sub: "Хариуцагчтай",
       href: "/admin/supermarkets",
       icon: StoreIcon,
       tone: "sky",
     },
   ];
 
-  const recentOrders = (recent as unknown as RecentOrder[]) ?? [];
+  const rows = (pendingOrders as unknown as PendingOrder[]) ?? [];
 
   return (
     <div className="max-w-6xl">
-      <h1 className="text-2xl font-semibold tracking-tight mb-6">Дашбоард</h1>
+      <div className="flex items-baseline justify-between mb-6 flex-wrap gap-2">
+        <div>
+          <h1 className="text-[26px] font-bold tracking-tight">Дашбоард</h1>
+          <p className="text-[13px] text-muted-foreground">
+            Өнөөдөр ·{" "}
+            {new Date().toLocaleDateString("mn-MN", {
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+            })}
+          </p>
+        </div>
+      </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+      {/* Pending-users banner — only renders when there's a queue. Clicking
+          the row navigates to the /admin/users?role=pending filtered list
+          where the admin can approve each row inline. */}
+      {pendingUsers > 0 && (
+        <Link
+          href="/admin/users?role=pending"
+          className="group mb-4 block rounded-2xl bg-amber-50 ring-1 ring-amber-200 hover:ring-amber-300 px-4 py-3 transition-all dark:bg-amber-950/30 dark:ring-amber-800/60 dark:hover:ring-amber-700/80"
+        >
+          <div className="flex items-center gap-3">
+            <div className="size-9 rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-200 flex items-center justify-center shrink-0">
+              <UserCheck className="h-4 w-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13.5px] font-semibold text-amber-900 dark:text-amber-100">
+                {pendingUsers} шинэ хэрэглэгч баталгаажилт хүлээж байна
+              </div>
+              <div className="text-[12px] text-amber-800/80 dark:text-amber-200/70">
+                Зөвшөөрөл өгөхгүй бол тэд нэвтэрч чадахгүй.
+              </div>
+            </div>
+            <ArrowRight className="h-4 w-4 text-amber-700 dark:text-amber-300 group-hover:translate-x-0.5 transition-transform shrink-0" />
+          </div>
+        </Link>
+      )}
+
+      {/* Stat cards — Hi-Fi tone-mapped grid. Big 28px value, icon tile
+          top-left, alert dot top-right when this card needs attention. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         {stats.map((s) => {
           const Icon = s.icon;
           const tone = TONE_STYLE[s.tone];
           return (
-            <Link key={s.label} href={s.href}>
+            <Link key={s.label} href={s.href} className="block">
               <Card
-                className={`group relative overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5 duration-200 ${
-                  s.alert
-                    ? `bg-gradient-to-br ${tone.alertBg} ring-1 ${tone.ring}`
-                    : ""
+                className={`group relative transition-all hover:shadow-md hover:-translate-y-0.5 duration-200 ${
+                  s.alert ? `ring-1 ${tone.alertRing}` : ""
                 }`}
               >
-                <CardContent className="p-5">
+                <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div
-                      className={`size-9 rounded-lg flex items-center justify-center ${tone.icon}`}
+                      className={`size-9 rounded-xl flex items-center justify-center ${tone.icon}`}
                     >
                       <Icon className="h-4 w-4" />
                     </div>
                     {s.alert && (
-                      <span className="inline-flex size-2 rounded-full bg-amber-500 animate-pulse" />
+                      <span className="size-2 rounded-full bg-amber-500 animate-pulse" />
                     )}
                   </div>
-                  <div className="mt-3 text-3xl font-semibold tracking-tight">
-                    {s.value.toLocaleString("mn-MN")}
+                  <div className="mt-3 text-[28px] font-bold tabular-nums tracking-tight leading-none">
+                    {typeof s.value === "number"
+                      ? s.value.toLocaleString("mn-MN")
+                      : s.value}
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
+                  <div className="text-[12.5px] text-muted-foreground mt-1.5">
                     {s.label}
                   </div>
+                  {s.sub && (
+                    <div className="text-[11px] text-muted-foreground/80 mt-0.5">
+                      {s.sub}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </Link>
@@ -181,54 +234,63 @@ export default async function AdminDashboard() {
         })}
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Сүүлийн захиалгууд</CardTitle>
-            <CardDescription>
-              Хамгийн сүүлийн {recentOrders.length} захиалга
-            </CardDescription>
-          </div>
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/admin/orders">
+      {/* Pending queue — action-first list. Hi-Fi pattern: each row has a
+          "Үзэх" link to the detail page where the admin can confirm or
+          cancel. Direct inline confirm without leaving the dashboard is a
+          follow-up (needs a server action wired in).  */}
+      <div className="rounded-2xl bg-card ring-1 ring-border overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-border flex items-center gap-3">
+          <h2 className="text-[15px] font-bold tracking-tight">
+            Хүлээгдэж буй захиалга
+          </h2>
+          {(pendingCount ?? 0) > 0 && (
+            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.1em] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 ring-1 ring-amber-300/60 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-800/60">
+              <span className="size-1.5 rounded-full bg-amber-500" />{" "}
+              {pendingCount}
+            </span>
+          )}
+          <Button asChild variant="ghost" size="sm" className="ml-auto">
+            <Link href="/admin/orders?status=pending">
               Бүгд
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
-        </CardHeader>
-        <CardContent className="p-0">
-          {recentOrders.length === 0 ? (
-            <div className="px-6 py-10 text-center text-sm text-muted-foreground">
-              Захиалга байхгүй байна.
-            </div>
-          ) : (
-            <div className="divide-y">
-              {recentOrders.map((o) => (
-                <Link
-                  key={o.id}
-                  href={`/admin/orders/${o.id}`}
-                  className="flex items-center gap-3 px-6 py-3 hover:bg-muted/40 transition-colors"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-sm font-medium">
-                        {o.order_number}
-                      </span>
-                      <OrderStatusPill status={o.status} />
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                      {o.supermarkets?.name ?? "—"} · {formatRelative(o.created_at)}
-                    </div>
+        </div>
+
+        {rows.length === 0 ? (
+          <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+            Хүлээгдэж буй захиалга алга байна.
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {rows.map((o) => (
+              <div
+                key={o.id}
+                className="px-5 py-3 flex items-center gap-3 hover:bg-muted/40 transition-colors"
+              >
+                <div className="leading-tight min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[12.5px] font-mono font-semibold">
+                      {o.order_number}
+                    </span>
+                    <OrderStatusPill status={o.status} />
                   </div>
-                  <div className="text-sm font-medium shrink-0">
-                    {formatMnt(o.subtotal)}
+                  <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                    {o.supermarkets?.name ?? "—"} ·{" "}
+                    {formatRelative(o.created_at)}
                   </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                </div>
+                <div className="ml-auto text-[14px] font-bold tabular-nums w-24 text-right">
+                  {formatMnt(o.subtotal)}
+                </div>
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/admin/orders/${o.id}`}>Үзэх</Link>
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

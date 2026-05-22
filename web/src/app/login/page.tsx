@@ -1,14 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Mail, KeyRound, CheckCircle2 } from "lucide-react";
 import { getSession, homePathForRole } from "@/lib/auth";
-import { sendMagicLink, signInWithPassword } from "./actions";
+import { signInWithEmail } from "./actions";
 
-type SearchParams = Promise<{
-  error?: string;
-  sent?: string;
-  mode?: string;
-}>;
+type SearchParams = Promise<{ error?: string; success?: string }>;
 
 export default async function LoginPage({
   searchParams,
@@ -17,148 +12,148 @@ export default async function LoginPage({
 }) {
   const session = await getSession();
   if (session) redirect(homePathForRole(session.profile));
-
-  const { error, sent, mode } = await searchParams;
-  const isPasswordMode = mode === "password";
+  const { error, success } = await searchParams;
 
   return (
-    <main className="flex-1 flex items-center justify-center px-6 py-12 bg-gradient-to-br from-background via-background to-primary/5">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <div className="size-12 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center mx-auto mb-4 shadow-sm">
-            <span className="text-lg font-bold tracking-tight">BDI</span>
+    <main className="flex-1 flex flex-col lg:flex-row min-h-screen">
+      {/* Brand panel — full-width hero on mobile, 2/5 column on lg+. Matches
+          Hi-Fi BuyerLogin (mobile gradient hero with curved bottom) and
+          AdminLogin (desktop split-screen with stats sidebar). */}
+      <div
+        className="relative lg:w-2/5 lg:min-h-screen flex flex-col justify-between px-6 pt-12 pb-10 lg:px-12 lg:pt-16 lg:pb-12 text-white overflow-hidden"
+        style={{
+          background:
+            "linear-gradient(155deg, var(--primary) 0%, color-mix(in oklch, var(--primary) 78%, black) 100%)",
+        }}
+      >
+        <div>
+          <div className="size-12 rounded-2xl bg-white/15 backdrop-blur ring-1 ring-white/25 flex items-center justify-center font-bold text-base">
+            BDI
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Захиалгын систем
+          <h1 className="mt-8 lg:mt-12 text-[26px] lg:text-[34px] font-bold tracking-tight leading-tight">
+            Захиалга өгөх<br />
+            хамгийн хялбар арга
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {isPasswordMode
-              ? "Имэйл & нууц үгээр нэвтэрнэ үү"
-              : "Имэйл хаягаараа нэвтэрнэ үү"}
+          <p className="mt-3 text-[14px] lg:text-[14.5px] opacity-85 max-w-[320px] leading-relaxed">
+            BDI-н бөөний бараагаа дэлгүүрээсээ шууд захиалаарай.
           </p>
         </div>
 
-        <div className="rounded-2xl border bg-background p-6 shadow-sm">
-          {sent ? (
-            <div className="text-center space-y-3 py-2">
-              <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto">
-                <CheckCircle2 className="h-6 w-6" />
+        {/* Stats — desktop only. Mobile has more limited vertical space. */}
+        <div className="hidden lg:grid mt-8 grid-cols-3 gap-3 text-white/85">
+          {[
+            { v: "247", l: "Захиалга" },
+            { v: "56", l: "SKU" },
+            { v: "23", l: "Дэлгүүр" },
+          ].map((s) => (
+            <div
+              key={s.l}
+              className="rounded-2xl bg-white/10 ring-1 ring-white/15 backdrop-blur px-4 py-3"
+            >
+              <div className="text-[22px] font-bold tabular-nums tracking-tight">
+                {s.v}
               </div>
-              <div>
-                <p className="font-medium">Холбоосыг илгээлээ</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  <span className="font-mono text-foreground">{sent}</span>
-                </p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Имэйлээ нээж нэвтрэх холбоосон дээр дарна уу.
-                </p>
-              </div>
-              <Link
-                href="/login"
-                className="inline-block text-xs text-muted-foreground hover:text-foreground"
-              >
-                ← Дахин илгээх
-              </Link>
+              <div className="text-[11px] opacity-80">{s.l}</div>
             </div>
-          ) : isPasswordMode ? (
-            <form action={signInWithPassword} className="space-y-4">
-              <div>
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium mb-1.5"
-                >
-                  Имэйл
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  autoFocus
-                  placeholder="name@example.com"
-                  className="w-full rounded-md border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium mb-1.5"
-                >
-                  Нууц үг
-                </label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                  className="w-full rounded-md border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
-                />
-              </div>
-
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
-              )}
-
-              <button
-                type="submit"
-                className="w-full rounded-md bg-primary text-primary-foreground px-4 py-2.5 text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all"
-              >
-                Нэвтрэх
-              </button>
-
-              <Link
-                href="/login"
-                className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground hover:text-foreground pt-1"
-              >
-                <Mail className="h-3.5 w-3.5" />
-                Имэйл холбоосоор нэвтрэх
-              </Link>
-            </form>
-          ) : (
-            <form action={sendMagicLink} className="space-y-4">
-              <div>
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium mb-1.5"
-                >
-                  Имэйл
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  autoFocus
-                  placeholder="name@example.com"
-                  className="w-full rounded-md border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
-                />
-              </div>
-
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
-              )}
-
-              <button
-                type="submit"
-                className="w-full rounded-md bg-primary text-primary-foreground px-4 py-2.5 text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all"
-              >
-                Нэвтрэх холбоос илгээх
-              </button>
-
-              <Link
-                href="/login?mode=password"
-                className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground hover:text-foreground pt-1"
-              >
-                <KeyRound className="h-3.5 w-3.5" />
-                Нууц үгээр нэвтрэх
-              </Link>
-            </form>
-          )}
+          ))}
         </div>
 
-        <p className="mt-6 text-xs text-muted-foreground text-center">
-          Шинэ бол BDI-н ажилтантай холбогдоно уу.
-        </p>
+        {/* Curved bottom transition on mobile — visual handoff into the form. */}
+        <div className="lg:hidden absolute left-0 right-0 -bottom-px h-5 bg-background rounded-t-3xl" />
+      </div>
+
+      {/* Form panel */}
+      <div className="flex-1 flex items-center justify-center bg-background px-6 pt-8 pb-12 lg:p-10">
+        <div className="w-full max-w-sm">
+          <div className="lg:mb-8">
+            <div className="text-[11px] uppercase tracking-[0.1em] font-bold text-primary">
+              Нэвтрэх
+            </div>
+            <h2 className="mt-1 text-[24px] lg:text-[26px] font-bold tracking-tight">
+              Тавтай морил
+            </h2>
+            <p className="text-[13px] text-muted-foreground mt-1">
+              Имэйл болон нууц үгээр нэвтэрнэ үү
+            </p>
+          </div>
+
+          <form action={signInWithEmail} className="space-y-4">
+            <div>
+              <label htmlFor="email" className="input-label">
+                Имэйл
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                required
+                autoFocus
+                autoComplete="email"
+                placeholder="name@example.com"
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label htmlFor="password" className="input-label">
+                Нууц үг
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                required
+                autoComplete="current-password"
+                placeholder="••••••••"
+                className="input-field"
+              />
+            </div>
+
+            {success && (
+              <p className="text-caption rounded-lg px-3 py-2 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                {success === "password-reset"
+                  ? "Нууц үг амжилттай солигдлоо. Шинэ нууц үгээрээ нэвтэрнэ үү."
+                  : success === "phone-verified"
+                    ? "Утас баталгаажлаа. BDI-н ажилтан таны бүртгэлийг идэвхжүүлмэгц нэвтэрч орох боломжтой."
+                    : success}
+              </p>
+            )}
+            {error && (
+              <p
+                className="text-caption rounded-lg px-3 py-2 bg-destructive/10 text-destructive"
+                role="alert"
+              >
+                {error}
+              </p>
+            )}
+
+            <div className="flex justify-end pt-1">
+              <Link
+                href="/forgot-password"
+                className="text-caption2 text-primary hover:underline"
+              >
+                Нууц үг мартсан?
+              </Link>
+            </div>
+
+            <button type="submit" className="btn-primary w-full">
+              Нэвтрэх
+            </button>
+          </form>
+
+          <p className="mt-6 text-caption text-muted-foreground text-center">
+            Шинэ хэрэглэгч үү?{" "}
+            <Link
+              href="/register"
+              className="text-primary font-semibold hover:underline"
+            >
+              Бүртгүүлэх
+            </Link>
+          </p>
+
+          <div className="hidden lg:block mt-12 text-center text-[11px] text-muted-foreground">
+            © {new Date().getFullYear()} BDI · Захиалгын систем
+          </div>
+        </div>
       </div>
     </main>
   );

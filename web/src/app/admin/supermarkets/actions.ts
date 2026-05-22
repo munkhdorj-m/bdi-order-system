@@ -17,6 +17,18 @@ function parseString(v: FormDataEntryValue | null): string | null {
 function buildPayload(formData: FormData) {
   const name = parseString(formData.get("name"));
   if (!name) return { error: "Дэлгүүрийн нэр оруулна уу." };
+  // delivery_day: empty string means "use district default" → null in DB.
+  // Otherwise parse as ISO weekday 1-7; reject anything else so a stray
+  // value can't end up in the column (which has a 1-7 check constraint).
+  const rawDay = parseString(formData.get("delivery_day"));
+  let delivery_day: number | null = null;
+  if (rawDay) {
+    const n = Number(rawDay);
+    if (!Number.isInteger(n) || n < 1 || n > 7) {
+      return { error: "Хүргэлтийн өдөр буруу." };
+    }
+    delivery_day = n;
+  }
   return {
     payload: {
       name,
@@ -26,6 +38,7 @@ function buildPayload(formData: FormData) {
       contact_phone: parseString(formData.get("contact_phone")),
       assigned_rep_id: parseString(formData.get("assigned_rep_id")),
       price_list_id: parseString(formData.get("price_list_id")),
+      delivery_day,
       notes: parseString(formData.get("notes")),
       active: formData.get("active") === "on",
     },

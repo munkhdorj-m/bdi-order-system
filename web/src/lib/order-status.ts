@@ -22,8 +22,9 @@ export const STATUS_LABELS: Record<OrderStatus, string> = {
   cancelled: "Цуцлагдсан",
 };
 
-// Distinct color per status so admins can scan the orders list at a glance.
-// Linear warm-up through the happy path; rose for cancelled.
+// Distinct color per status so the admin can scan the orders list at a glance.
+// Each tone carries an explicit dark-mode pair so pills stay readable when the
+// user flips the theme toggle.
 export const STATUS_COLOR: Record<OrderStatus, string> = {
   pending:
     "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
@@ -38,7 +39,7 @@ export const STATUS_COLOR: Record<OrderStatus, string> = {
 };
 
 // Solid color tokens for the progress-stepper circles (when the step is
-// the current one). Keep in sync with STATUS_COLOR's hue family.
+// the current one). Same hue family as STATUS_COLOR.
 export const STATUS_SOLID: Record<OrderStatus, string> = {
   pending: "bg-amber-500 text-white",
   confirmed: "bg-sky-500 text-white",

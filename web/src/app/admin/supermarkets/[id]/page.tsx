@@ -27,7 +27,7 @@ export default async function EditSupermarketPage({
     supabase
       .from("supermarkets")
       .select(
-        "id, name, type, district, address, contact_phone, assigned_rep_id, price_list_id, notes, active",
+        "id, name, type, district, address, contact_phone, assigned_rep_id, price_list_id, delivery_day, notes, active",
       )
       .eq("id", id)
       .single(),

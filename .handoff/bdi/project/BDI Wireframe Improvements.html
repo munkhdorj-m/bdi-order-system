@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BDI · Сайжруулалт — Wireframes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Patrick+Hand&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin:0; padding:0; background:#ece6d5; font-family:'Patrick Hand', cursive; color:#1a1a1a; }
+  body { min-height:100vh; }
+  /* Override DC backdrop to feel like paper */
+  .dc-root { background: #ece6d5 !important; }
+</style>
+
+<!-- React + Babel -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<!-- Canvas + shared primitives + per-screen wireframes -->
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="wireframes/primitives.jsx"></script>
+<script type="text/babel" src="wireframes/login.jsx"></script>
+<script type="text/babel" src="wireframes/catalog.jsx"></script>
+<script type="text/babel" src="wireframes/product.jsx"></script>
+<script type="text/babel" src="wireframes/cart.jsx"></script>
+<script type="text/babel" src="wireframes/buyer-orders.jsx"></script>
+<script type="text/babel" src="wireframes/admin-dashboard.jsx"></script>
+<script type="text/babel" src="wireframes/admin-orders.jsx"></script>
+<script type="text/babel" src="wireframes/admin-products.jsx"></script>
+<script type="text/babel" src="wireframes/admin-prices.jsx"></script>
+<script type="text/babel" src="wireframes/rep.jsx"></script>
+</head>
+
+<body>
+<div id="app"></div>
+
+<script type="text/babel" data-presets="env,react">
+const { DesignCanvas, DCSection, DCArtboard } = window;
+
+const PW = 280;  // phone width
+const PH = 580;  // phone height
+const DW = 760;  // desktop width
+const DH = 480;  // desktop height
+// Artboards bigger than the phone, leaving room for sticky notes on the sides
+const PB_W = 460, PB_H = 660;
+const DB_W = 800, DB_H = 540;
+
+function PhoneArt({ children }) {
+  return (
+    <div style={{
+      width: '100%', height: '100%',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      position: 'relative',
+    }}>
+      <window.Phone w={PW} h={PH}>{children}</window.Phone>
+    </div>
+  );
+}
+function DesktopArt({ children }) {
+  return (
+    <div style={{
+      width: '100%', height: '100%',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      position: 'relative',
+    }}>
+      <window.Desktop w={DW} h={DH}>{children}</window.Desktop>
+    </div>
+  );
+}
+
+/* Intro card */
+function IntroCard() {
+  return (
+    <div style={{
+      width: 720, padding: '40px 48px',
+      fontFamily: "'Patrick Hand', cursive",
+      background: '#faf6ec',
+      border: '2px solid #1a1a1a',
+      borderRadius: 10,
+      boxShadow: '3px 4px 0 #1a1a1a',
+    }}>
+      <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+        <div style={{
+          width:48, height:48, borderRadius:8, background:'#3a3fbb', color:'#fff',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          fontFamily:"'Kalam', cursive", fontWeight:700, fontSize:18,
+          border:'2px solid #1a1a1a', boxShadow:'1.5px 2px 0 #1a1a1a',
+        }}>BDI</div>
+        <div>
+          <div style={{ fontFamily:"'Kalam', cursive", fontWeight:700, fontSize:26, lineHeight:1.1 }}>
+            Сайжруулалтын газрууд
+          </div>
+          <div style={{ fontSize:15, color:'#8a857a' }}>
+            10 дэлгэц × 3 хувилбар · low-fi wireframes
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop:22, display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:14 }}>
+        {[
+          { tag:'A · Цэгцлэх', desc:'Одоогийн бүтэц, нягтрал нь нэмэгдсэн, type/spacing цэвэр', color:'#1a1a1a' },
+          { tag:'B · Дахин зохиох', desc:'IA нь өөрчлөгдсөн — өөр шийдэл, илүү density эсвэл өөр urgency', color:'#3a3fbb' },
+          { tag:'C · Туршилт', desc:'Жинхэнэ rethink — B2B-д онцлог үнэ цэнэ нэмсэн', color:'#d94e3a' },
+        ].map(v => (
+          <div key={v.tag} style={{
+            padding:12, border:`1.5px solid #1a1a1a`, borderRadius:8, background:'#fff',
+            borderLeft:`5px solid ${v.color}`,
+          }}>
+            <div style={{ fontFamily:"'Kalam', cursive", fontWeight:700, fontSize:14, color:v.color }}>
+              {v.tag}
+            </div>
+            <div style={{ fontSize:12, lineHeight:1.3, marginTop:3 }}>{v.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop:18, fontSize:13, color:'#5a554b', lineHeight:1.4 }}>
+        <b style={{ fontFamily:"'Kalam', cursive" }}>Хэрхэн уншин үзэх:</b>{' '}
+        Section бүр нэг дэлгэцийг 3 өнцгөөс үзүүлж байна — refined / reorganized / exploratory.
+        Дэлгэцийг fullscreen-ээр харахын тулд дээд буланд байгаа ⤢ товчийг дар. Sticky note-ууд нь
+        зөвлөмж эсвэл шалтгаан. Шинэ хувилбар хийх эсвэл хоосон рамд буцаах хүсэлтээ бичнэ үү —
+        дараагийн алхам бол сонгосон чиглэлээ hi-fi болгож, design system-тэй холбох.
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <DesignCanvas
+      title="BDI · Сайжруулалтын wireframes"
+      subtitle="10 дэлгэц × 3 хувилбар (A=цэгцлэх, B=дахин зохиох, C=туршилт)"
+      intro={<IntroCard />}
+    >
+
+      {/* ───────── Login ───────── */}
+      <DCSection id="login" title="① Нэвтрэх / OTP" subtitle="B1 — бүх роль-д ашиглагдана">
+        <DCArtboard id="a" label="A · Цэгцлэсэн (refined)" width={PB_W} height={PB_H}>
+          <PhoneArt><window.LoginA /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="b" label="B · Нэг дэлгэц, OTP inline" width={PB_W + 60} height={PB_H}>
+          <PhoneArt><window.LoginB /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="c" label="C · Role-aware + Viber fallback" width={PB_W + 80} height={PB_H}>
+          <PhoneArt><window.LoginC /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="d" label="Desktop · split layout" width={DB_W} height={DB_H}>
+          <DesktopArt><window.LoginDesktop /></DesktopArt>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ───────── Catalog ───────── */}
+      <DCSection id="catalog" title="② Каталог (B2)" subtitle="Худалдан авагчийн нүүр">
+        <DCArtboard id="a" label="A · Inline qty-stepper" width={PB_W + 60} height={PB_H}>
+          <PhoneArt><window.CatalogA /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="b" label="B · Жагсаалт + sticky cart" width={PB_W + 80} height={PB_H}>
+          <PhoneArt><window.CatalogB /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="c" label="C · Дахин-захиалах rail" width={PB_W + 80} height={PB_H}>
+          <PhoneArt><window.CatalogC /></PhoneArt>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ───────── Product detail ───────── */}
+      <DCSection id="product" title="③ Бүтээгдэхүүн (B3)" subtitle="Каталогийн дэлгэрэнгүй">
+        <DCArtboard id="a" label="A · Sticky add-to-cart" width={PB_W + 60} height={PB_H}>
+          <PhoneArt><window.ProductA /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="b" label="B · Tabs + захиалгын түүх" width={PB_W + 60} height={PB_H}>
+          <PhoneArt><window.ProductB /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="c" label="C · Unit/case + pattern" width={PB_W + 80} height={PB_H}>
+          <PhoneArt><window.ProductC /></PhoneArt>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ───────── Cart ───────── */}
+      <DCSection id="cart" title="④ Сагс (B4)" subtitle="Захиалга илгээх">
+        <DCArtboard id="a" label="A · Тогтсон бүтэц, тулайдаг" width={PB_W + 60} height={PB_H}>
+          <PhoneArt><window.CartA /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="b" label="B · Ангиллаар + sticky сумма" width={PB_W + 60} height={PB_H}>
+          <PhoneArt><window.CartB /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="c" label="C · Хүргэлт + санал болгох" width={PB_W + 80} height={PB_H}>
+          <PhoneArt><window.CartC /></PhoneArt>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ───────── Buyer orders ───────── */}
+      <DCSection id="orders" title="⑤ Захиалгууд (B6)" subtitle="Хуучин захиалгууд + статус">
+        <DCArtboard id="a" label="A · Жагсаалт + хайлт" width={PB_W + 40} height={PB_H}>
+          <PhoneArt><window.OrdersA /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="b" label="B · Tab + progress + reorder" width={PB_W + 60} height={PB_H}>
+          <PhoneArt><window.OrdersB /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="c" label="C · Хуанли + давтамж санал" width={PB_W + 80} height={PB_H}>
+          <PhoneArt><window.OrdersC /></PhoneArt>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ───────── Admin dashboard ───────── */}
+      <DCSection id="dash" title="⑥ Admin дашбоард (A2)" subtitle="BDI ажилтны нүүр">
+        <DCArtboard id="a" label="A · KPI + сүүлийн захиалга" width={DB_W} height={DB_H}>
+          <DesktopArt><window.DashA /></DesktopArt>
+        </DCArtboard>
+        <DCArtboard id="b" label="B · Хүлээгдэж буй queue гол" width={DB_W} height={DB_H}>
+          <DesktopArt><window.DashB /></DesktopArt>
+        </DCArtboard>
+        <DCArtboard id="c" label="C · Kanban самбар" width={DB_W} height={DB_H}>
+          <DesktopArt><window.DashC /></DesktopArt>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ───────── Admin orders ───────── */}
+      <DCSection id="admin-orders" title="⑦ Admin захиалгууд (A3/A4)" subtitle="Жагсаалт + дэлгэрэнгүй">
+        <DCArtboard id="a" label="A · Цэвэр хүснэгт + saved filters" width={DB_W} height={DB_H}>
+          <DesktopArt><window.OrdAdminA /></DesktopArt>
+        </DCArtboard>
+        <DCArtboard id="b" label="B · Master-detail split" width={DB_W} height={DB_H}>
+          <DesktopArt><window.OrdAdminB /></DesktopArt>
+        </DCArtboard>
+        <DCArtboard id="c" label="C · Fulfillment mode (нэг-нэгээр)" width={DB_W} height={DB_H}>
+          <DesktopArt><window.OrdAdminC /></DesktopArt>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ───────── Admin products ───────── */}
+      <DCSection id="admin-products" title="⑧ Admin бараа (A5)" subtitle="SKU удирдлага">
+        <DCArtboard id="a" label="A · Хүснэгт + stock alert" width={DB_W} height={DB_H}>
+          <DesktopArt><window.ProductsA /></DesktopArt>
+        </DCArtboard>
+        <DCArtboard id="b" label="B · Card сүлжээ" width={DB_W} height={DB_H}>
+          <DesktopArt><window.ProductsB /></DesktopArt>
+        </DCArtboard>
+        <DCArtboard id="c" label="C · Bulk spreadsheet editor" width={DB_W} height={DB_H}>
+          <DesktopArt><window.ProductsC /></DesktopArt>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ───────── Admin price list ───────── */}
+      <DCSection id="prices" title="⑨ Үнийн жагсаалт (A7)" subtitle="Per-дэлгүүр override-уудыг засах">
+        <DCArtboard id="a" label="A · Inline + autosave" width={DB_W} height={DB_H}>
+          <DesktopArt><window.PricesA /></DesktopArt>
+        </DCArtboard>
+        <DCArtboard id="b" label="B · Diff view (зөвхөн зөрүү)" width={DB_W} height={DB_H}>
+          <DesktopArt><window.PricesB /></DesktopArt>
+        </DCArtboard>
+        <DCArtboard id="c" label="C · Bulk ops + paste" width={DB_W} height={DB_H}>
+          <DesktopArt><window.PricesC /></DesktopArt>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ───────── Rep ───────── */}
+      <DCSection id="rep" title="⑩ Төлөөлөгчийн флоу (R1–R3)" subtitle="Дэлгүүрийн нэрийн өмнөөс захиалах">
+        <DCArtboard id="a" label="A · Дэлгүүрийн жагсаалт (R1)" width={PB_W + 40} height={PB_H}>
+          <PhoneArt><window.RepA /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="b" label="B · Анхаарах signals" width={PB_W + 80} height={PB_H}>
+          <PhoneArt><window.RepB /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="c" label="C · Өнөөдрийн маршрут" width={PB_W + 80} height={PB_H}>
+          <PhoneArt><window.RepC /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="d" label="R3 · Order-on-behalf context" width={PB_W + 40} height={PB_H}>
+          <PhoneArt><window.RepOrderOnBehalf /></PhoneArt>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('app')).render(<App />);
+</script>
+</body>
+</html>

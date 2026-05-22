@@ -6,6 +6,7 @@ import { Callout } from "@/components/ui/callout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ActiveSwitch } from "@/components/ui/active-switch";
 
 type Defaults = {
   name?: string;
@@ -51,16 +52,11 @@ export function PriceListMetaForm({ defaults = {}, action, submitLabel }: Props)
         />
       </div>
 
-      <div className="flex items-center gap-3">
-        <input
-          id="active"
-          name="active"
-          type="checkbox"
-          defaultChecked={defaults.active ?? true}
-          className="size-4 rounded border-input"
-        />
-        <Label htmlFor="active" className="font-normal">Идэвхтэй</Label>
-      </div>
+      <ActiveSwitch
+        defaultChecked={defaults.active ?? true}
+        activeHint="Энэ үнийн жагсаалт дэлгүүрүүдэд оноогдох боломжтой."
+        inactiveHint="Архивласан — шинэ дэлгүүрт оноогдохгүй."
+      />
 
       {state.error && <Callout tone="error">{state.error}</Callout>}
       {state.ok && !state.error && !pending && (

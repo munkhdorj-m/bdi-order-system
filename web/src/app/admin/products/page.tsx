@@ -1,21 +1,20 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Plus, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCategories } from "@/lib/categories";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-type SearchParams = Promise<{ q?: string; category?: string }>;
+type SearchParams = Promise<{ q?: string; category?: string; page?: string }>;
 
 type ProductRow = {
   id: string;
@@ -29,8 +28,19 @@ type ProductRow = {
   categories: { name: string } | null;
 };
 
+const PAGE_SIZE = 50;
+
 function formatMnt(n: number) {
   return new Intl.NumberFormat("mn-MN").format(n) + "₮";
+}
+
+function buildHref(params: { q?: string; category?: string; page?: number }) {
+  const sp = new URLSearchParams();
+  if (params.q) sp.set("q", params.q);
+  if (params.category) sp.set("category", params.category);
+  if (params.page && params.page > 1) sp.set("page", String(params.page));
+  const qs = sp.toString();
+  return qs ? `/admin/products?${qs}` : "/admin/products";
 }
 
 export default async function AdminProductsPage({
@@ -38,30 +48,46 @@ export default async function AdminProductsPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { q, category } = await searchParams;
+  const sp = await searchParams;
+  const q = sp.q?.trim() || "";
+  const category = sp.category ?? "";
+  const page = Math.max(1, Number(sp.page) || 1);
+  const offset = (page - 1) * PAGE_SIZE;
+
   const supabase = await createClient();
 
+  // count:"exact" gives us the total for pagination chrome.
   let query = supabase
     .from("products")
     .select(
       "id, sku, name, brand, image_url, base_price, stock, active, categories(name)",
+      { count: "exact" },
     )
     .order("created_at", { ascending: false });
 
-  if (q && q.trim().length > 0) {
-    const term = q.trim();
-    query = query.or(`name.ilike.%${term}%,sku.ilike.%${term}%,brand.ilike.%${term}%`);
+  if (q) {
+    const term = q.replace(/[%_]/g, "\\$&"); // escape ILIKE wildcards
+    query = query.or(
+      `name.ilike.%${term}%,sku.ilike.%${term}%,brand.ilike.%${term}%`,
+    );
   }
-  if (category && category.length > 0) {
+  // Radix Select can't bind to an empty value, so the dropdown emits "all"
+  // when the user wants every category. Treat that as "no filter".
+  if (category && category.length > 0 && category !== "all") {
     query = query.eq("category_id", category);
   }
 
-  const [{ data: products, error }, categories] = await Promise.all([
+  query = query.range(offset, offset + PAGE_SIZE - 1);
+
+  const [{ data: products, count, error }, categories] = await Promise.all([
     query,
     getCategories(),
   ]);
 
   const rows = (products as unknown as ProductRow[]) ?? [];
+  const total = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const categoryQS = category && category !== "all" ? category : undefined;
 
   return (
     <div className="w-full">
@@ -69,7 +95,8 @@ export default async function AdminProductsPage({
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">Бараа</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Нийт {rows.length} бараа
+            {total.toLocaleString("mn-MN")} нийт
+            {q || categoryQS ? " (шүүсэн)" : ""}
           </p>
         </div>
         <Button asChild className="shrink-0">
@@ -93,18 +120,25 @@ export default async function AdminProductsPage({
               className="w-full rounded-md border border-input bg-background pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
-          <select
+          <Select
             name="category"
-            defaultValue={category ?? ""}
-            className="w-full sm:w-auto sm:max-w-48 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring truncate"
+            defaultValue={category && category.length > 0 ? category : "all"}
           >
-            <option value="">Бүх ангилал</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              size="default"
+              className="w-full sm:w-48 h-9"
+            >
+              <SelectValue placeholder="Бүх ангилал" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Бүх ангилал</SelectItem>
+              {categories.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button type="submit" variant="secondary">
             Хайх
           </Button>
@@ -126,13 +160,13 @@ export default async function AdminProductsPage({
         </Card>
       ) : (
         <>
-          {/* Mobile: card list */}
+          {/* Mobile: card list (vertical layout, compact) */}
           <div className="sm:hidden space-y-2">
             {rows.map((p) => (
               <Link
                 key={p.id}
                 href={`/admin/products/${p.id}`}
-                className="flex gap-3 bg-background border rounded-lg p-3 hover:shadow-sm transition-shadow"
+                className="flex gap-3 bg-card ring-1 ring-border rounded-2xl p-3 hover:shadow-sm transition-shadow"
               >
                 <div className="size-14 rounded bg-muted relative shrink-0 overflow-hidden">
                   {p.image_url ? (
@@ -176,84 +210,127 @@ export default async function AdminProductsPage({
             ))}
           </div>
 
-          {/* Desktop: table */}
-          <Card className="hidden sm:block">
-            <Table className="table-fixed w-full">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-16"></TableHead>
-                  <TableHead>Нэр</TableHead>
-                  <TableHead className="w-48 hidden lg:table-cell">Ангилал</TableHead>
-                  <TableHead className="w-36">SKU</TableHead>
-                  <TableHead className="w-28 text-right">Үнэ</TableHead>
-                  <TableHead className="w-20 text-right">Үлдэгдэл</TableHead>
-                  <TableHead className="w-24"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((p) => (
-                  <TableRow key={p.id} className="cursor-pointer">
-                    <TableCell className="align-top">
-                      <Link
-                        href={`/admin/products/${p.id}`}
-                        className="block w-12 h-12 rounded bg-muted overflow-hidden relative"
+          {/* Desktop: 3-4 col card grid per Hi-Fi AdminProductsList */}
+          <div className="hidden sm:grid grid-cols-3 lg:grid-cols-4 gap-3">
+            {rows.map((p) => {
+              const out = p.stock <= 0;
+              const low = !out && p.stock < 10;
+              return (
+                <Link
+                  key={p.id}
+                  href={`/admin/products/${p.id}`}
+                  className="rounded-2xl bg-card ring-1 ring-border overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col"
+                >
+                  <div className="aspect-[4/3] relative overflow-hidden bg-muted">
+                    {p.image_url ? (
+                      <Image
+                        src={p.image_url}
+                        alt={p.name}
+                        fill
+                        sizes="240px"
+                        quality={85}
+                        unoptimized
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40 text-xs">
+                        —
+                      </div>
+                    )}
+                    {out && (
+                      <div
+                        className="absolute top-2 left-2 text-[10px] font-bold text-white px-2 py-0.5 rounded-full"
+                        style={{ background: "var(--chart-coral, oklch(0.7 0.18 30))" }}
                       >
-                        {p.image_url ? (
-                          <Image
-                            src={p.image_url}
-                            alt={p.name}
-                            fill
-                            sizes="48px"
-                            quality={85}
-                            className="object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">
-                            —
-                          </div>
-                        )}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="align-top">
-                      <Link
-                        href={`/admin/products/${p.id}`}
-                        className="block font-medium hover:underline truncate"
-                        title={p.name}
+                        Дууссан
+                      </div>
+                    )}
+                    {low && (
+                      <div className="absolute top-2 left-2 text-[10px] font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full ring-1 ring-amber-300/60 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-800/60">
+                        Цөөн
+                      </div>
+                    )}
+                    {!p.active && (
+                      <div className="absolute top-2 right-2 text-[10px] font-bold bg-muted text-muted-foreground px-2 py-0.5 rounded-full ring-1 ring-border">
+                        Идэвхгүй
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3 flex flex-col flex-1">
+                    {p.brand && (
+                      <div className="text-[10px] uppercase tracking-[0.08em] font-bold text-primary line-clamp-1">
+                        {p.brand}
+                      </div>
+                    )}
+                    <div className="text-[12.5px] font-semibold leading-snug line-clamp-2 min-h-[2.4em] mt-0.5">
+                      {p.name}
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className="text-[14px] font-bold tabular-nums">
+                        {formatMnt(p.base_price)}
+                      </span>
+                      <span
+                        className={`text-[10.5px] font-semibold tabular-nums ${
+                          out
+                            ? "text-rose-600"
+                            : low
+                              ? "text-amber-700 dark:text-amber-300"
+                              : "text-muted-foreground"
+                        }`}
                       >
-                        {p.name}
-                      </Link>
-                      {p.brand && (
-                        <div className="text-xs text-muted-foreground truncate">
-                          {p.brand}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell
-                      className="hidden lg:table-cell text-sm text-muted-foreground truncate"
-                      title={p.categories?.name ?? undefined}
-                    >
-                      {p.categories?.name ?? "—"}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs truncate" title={p.sku}>
-                      {p.sku}
-                    </TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
-                      {formatMnt(p.base_price)}
-                    </TableCell>
-                    <TableCell className="text-right">{p.stock}</TableCell>
-                    <TableCell>
-                      {p.active ? (
-                        <Badge variant="secondary">Идэвхтэй</Badge>
-                      ) : (
-                        <Badge variant="outline">Идэвхгүй</Badge>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
+                        Үлд: {p.stock}
+                      </span>
+                    </div>
+                    {p.categories?.name && (
+                      <div className="mt-1.5 text-[10.5px] text-muted-foreground truncate">
+                        {p.categories.name}
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
         </>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4 text-sm">
+          <div className="text-muted-foreground">
+            {offset + 1}–{Math.min(offset + rows.length, total)} /{" "}
+            {total.toLocaleString("mn-MN")}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button asChild variant="outline" size="sm" disabled={page <= 1}>
+              <Link
+                href={buildHref({ q, category: categoryQS, page: page - 1 })}
+                aria-disabled={page <= 1}
+                tabIndex={page <= 1 ? -1 : undefined}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Өмнөх
+              </Link>
+            </Button>
+            <span className="px-2 text-muted-foreground">
+              {page} / {totalPages}
+            </span>
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages}
+            >
+              <Link
+                href={buildHref({ q, category: categoryQS, page: page + 1 })}
+                aria-disabled={page >= totalPages}
+                tabIndex={page >= totalPages ? -1 : undefined}
+              >
+                Дараах
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );

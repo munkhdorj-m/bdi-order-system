@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BDI · Full System · Hi-Fi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: { fontFamily: { sans: ["Geist", "system-ui", "sans-serif"] } } },
+  };
+</script>
+
+<style>
+  :root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.18 0.02 264);
+    --card: oklch(1 0 0);
+    --muted: oklch(0.97 0.004 264);
+    --muted-foreground: oklch(0.52 0.02 264);
+    --primary: oklch(0.5 0.18 263);
+    --primary-foreground: oklch(0.99 0 0);
+    --accent: oklch(0.96 0.03 263);
+    --accent-foreground: oklch(0.32 0.14 263);
+    --border: oklch(0.92 0.008 264);
+    --ring: oklch(0.5 0.18 263);
+    --chart-coral: oklch(0.7 0.18 30);
+    --chart-amber: oklch(0.78 0.16 75);
+    --chart-emerald: oklch(0.66 0.14 155);
+  }
+  html, body { background: #ece6d5; font-family: "Geist", system-ui, sans-serif; color: var(--foreground); margin:0; -webkit-font-smoothing: antialiased; }
+  .dc-root { background: #ece6d5 !important; }
+  .bg-primary { background: var(--primary); }
+  .text-primary { color: var(--primary); }
+  .text-primary-foreground { color: var(--primary-foreground); }
+  .bg-background { background: var(--background); }
+  .bg-muted { background: var(--muted); }
+  .text-muted-foreground { color: var(--muted-foreground); }
+  .border-border { border-color: var(--border); }
+  .bg-accent { background: var(--accent); }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="wireframes/hifi-shared.jsx"></script>
+<script type="text/babel" src="wireframes/hifi-buyer-main.jsx"></script>
+<script type="text/babel" src="wireframes/hifi-buyer-rest.jsx"></script>
+<script type="text/babel" src="wireframes/hifi-admin.jsx"></script>
+<script type="text/babel" src="wireframes/hifi-rep.jsx"></script>
+</head>
+
+<body>
+<div id="app"></div>
+
+<!-- Bonus: desktop catalog (responsive treatment) -->
+<script type="text/babel" data-presets="env,react">
+const { I, fmt, ProductImage, QtyStepper, AddBtn, PRODUCTS } = window;
+
+function DesktopBuyerCatalog() {
+  return (
+    <div className="h-full flex flex-col bg-background overflow-hidden">
+      {/* Desktop header */}
+      <header className="h-16 border-b border-border bg-background/85 backdrop-blur sticky top-0 z-20 flex items-center px-8 gap-5">
+        <div className="flex items-center gap-2.5">
+          <div className="size-9 rounded-xl bg-gradient-to-br from-primary to-[oklch(0.42_0.18_263)] text-primary-foreground flex items-center justify-center font-bold text-[13px] shadow-sm">BDI</div>
+          <div className="leading-tight">
+            <div className="text-[9.5px] uppercase tracking-[0.12em] text-muted-foreground font-semibold">Дэлгүүр</div>
+            <div className="text-[13px] font-semibold">Хүнс-Мини</div>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="ml-6 flex-1 max-w-2xl">
+          <button className="w-full h-10 rounded-xl bg-muted ring-1 ring-border flex items-center gap-2 px-4 text-[13px] text-muted-foreground hover:bg-[oklch(0.95_0.005_264)]">
+            {I.search} <span>Барааны нэр, бренд, SKU…</span>
+            <kbd className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded bg-white ring-1 ring-border">⌘K</kbd>
+          </button>
+        </div>
+
+        {/* Nav links */}
+        <nav className="flex items-center gap-1">
+          <a className="h-9 px-3 rounded-lg bg-[color-mix(in_oklch,var(--primary)_8%,transparent)] text-primary text-[13px] font-semibold flex items-center gap-1.5">{I.bag} Каталог</a>
+          <a className="h-9 px-3 rounded-lg text-muted-foreground hover:bg-muted text-[13px] font-semibold flex items-center gap-1.5">{I.clip} Захиалга</a>
+          <a className="h-9 px-3 rounded-lg text-muted-foreground hover:bg-muted text-[13px] font-semibold flex items-center gap-1.5 relative">
+            {I.cart} Сагс
+            <span className="ml-1 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">6</span>
+          </a>
+        </nav>
+
+        <div className="ml-2 size-9 rounded-full bg-gradient-to-br from-[oklch(0.7_0.13_263)] to-primary text-primary-foreground flex items-center justify-center text-[12px] font-bold">Э</div>
+      </header>
+
+      {/* Content */}
+      <div className="flex-1 overflow-hidden flex">
+        {/* Sidebar filters */}
+        <aside className="w-60 shrink-0 border-r border-border bg-muted/30 overflow-y-auto p-5">
+          <div className="text-[11px] uppercase tracking-[0.1em] font-bold text-muted-foreground mb-3">Ангилал</div>
+          <div className="flex flex-col gap-1">
+            {[
+              { l: "Бүгд", n: 56, a: true },
+              { l: "Цаас", n: 18 },
+              { l: "Хөвөн", n: 12 },
+              { l: "Угаалга", n: 14 },
+              { l: "Ариутгал", n: 6 },
+              { l: "Биеийн арчилгаа", n: 4 },
+              { l: "Бусад", n: 2 },
+            ].map((c) => (
+              <button key={c.l} className={`h-9 px-3 rounded-lg flex items-center justify-between text-[12.5px] ${
+                c.a ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-foreground/80 hover:bg-muted font-medium"
+              }`}>
+                <span>{c.l}</span>
+                <span className={`text-[10.5px] tabular-nums ${c.a ? "opacity-80" : "text-muted-foreground"}`}>{c.n}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-6 text-[11px] uppercase tracking-[0.1em] font-bold text-muted-foreground mb-3">Бренд</div>
+          <div className="flex flex-col gap-1">
+            {["Soft Leaf", "Cleanly", "Persil", "Dettol", "Lavera"].map((b) => (
+              <label key={b} className="h-8 px-3 rounded-lg hover:bg-muted text-[12.5px] flex items-center gap-2">
+                <span className="size-4 rounded ring-1 ring-border bg-white" />
+                {b}
+              </label>
+            ))}
+          </div>
+
+          <div className="mt-6 text-[11px] uppercase tracking-[0.1em] font-bold text-muted-foreground mb-3">Үнэ</div>
+          <div className="flex gap-2">
+            <div className="flex-1 h-9 rounded-lg bg-white ring-1 ring-border px-3 flex items-center text-[12px] text-muted-foreground">0₮</div>
+            <div className="flex-1 h-9 rounded-lg bg-white ring-1 ring-border px-3 flex items-center text-[12px] text-muted-foreground">20K₮</div>
+          </div>
+        </aside>
+
+        {/* Product grid */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex items-baseline justify-between">
+            <div>
+              <h1 className="text-[26px] font-bold tracking-tight">Бүх бараа</h1>
+              <p className="text-[13px] text-muted-foreground"><span className="font-bold text-foreground tabular-nums">48</span> бараа · Хүнс-Мини</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button className="h-9 px-3 rounded-lg bg-white ring-1 ring-border text-[12.5px] font-semibold hover:bg-muted flex items-center gap-1.5">
+                Эрэмбэлэх: <span className="text-primary">Үнэ ↓</span>
+              </button>
+              <div className="h-9 flex items-center bg-white ring-1 ring-border rounded-lg overflow-hidden">
+                <button className="size-9 flex items-center justify-center bg-foreground text-background">{<window.Icon d={<><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>} size={14} />}</button>
+                <button className="size-9 flex items-center justify-center text-muted-foreground">{<window.Icon d={<><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></>} size={14} />}</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-4 gap-3">
+            {PRODUCTS.map((p) => {
+              const inCart = p.qty > 0;
+              return (
+                <div key={p.id} className={`group relative flex flex-col rounded-3xl overflow-hidden transition-all ${
+                  inCart
+                    ? "bg-[color-mix(in_oklch,var(--primary)_6%,white)] ring-1 ring-[color-mix(in_oklch,var(--primary)_30%,transparent)] shadow-md shadow-[color-mix(in_oklch,var(--primary)_15%,transparent)]"
+                    : "bg-white ring-1 ring-border hover:shadow-md hover:-translate-y-0.5"
+                }`}>
+                  <div className="aspect-[4/3.4] relative overflow-hidden">
+                    <ProductImage hue={p.hue} />
+                    {p.recent && !p.deal && (
+                      <div className="absolute top-2.5 left-2.5 flex items-center gap-1 text-[10px] font-bold bg-white/90 backdrop-blur text-foreground px-2 py-0.5 rounded-full ring-1 ring-border">
+                        {I.history} Сүүлд авсан
+                      </div>
+                    )}
+                    {p.deal && <div className="absolute top-2.5 left-2.5 text-[11px] font-bold text-white px-2 py-0.5 rounded-full" style={{ background: "var(--chart-coral)" }}>−10%</div>}
+                    {p.low && <div className="absolute bottom-2.5 left-2.5 text-[10px] font-semibold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full ring-1 ring-amber-300/60">Цөөн үлдсэн</div>}
+                  </div>
+                  <div className="p-3 flex flex-col gap-1.5">
+                    <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-primary">{p.brand}</div>
+                    <div className="text-[13.5px] font-semibold leading-snug line-clamp-2 min-h-[2.4rem]">{p.name}</div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-[17px] font-bold tabular-nums tracking-tight">{fmt(p.price)}</span>
+                      {p.deal && <span className="text-[11px] text-muted-foreground line-through">{fmt(Math.round(p.price / 0.9))}</span>}
+                    </div>
+                    {p.box && <div className="flex items-center gap-1 text-[10.5px] text-muted-foreground">{I.package} хайрцагт {p.box}ш</div>}
+                    <div className="mt-1">{inCart ? <QtyStepper qty={p.qty} large /> : <AddBtn />}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+window.DesktopBuyerCatalog = DesktopBuyerCatalog;
+</script>
+
+<!-- Master canvas -->
+<script type="text/babel" data-presets="env,react">
+const { DesignCanvas, DCSection, DCArtboard, IOSDevice } = window;
+
+function PhoneArt({ children }) {
+  return (
+    <div className="w-full h-full flex items-center justify-center">
+      <IOSDevice width={402} height={874}>{children}</IOSDevice>
+    </div>
+  );
+}
+
+function DesktopArt({ children }) {
+  return (
+    <div className="w-full h-full flex items-center justify-center" style={{ padding: 16 }}>
+      <div style={{
+        width: "100%", height: "100%",
+        borderRadius: 14,
+        background: "var(--background)",
+        boxShadow: "0 30px 60px -20px rgba(0,0,0,0.25), 0 1px 0 rgba(255,255,255,0.5) inset",
+        overflow: "hidden",
+        border: "1px solid var(--border)",
+        display: "flex", flexDirection: "column",
+      }}>
+        {/* Window chrome */}
+        <div style={{
+          height: 30, background: "oklch(0.97 0.004 264)",
+          borderBottom: "1px solid var(--border)",
+          display: "flex", alignItems: "center", paddingLeft: 12, gap: 6, flexShrink: 0,
+        }}>
+          <span style={{ width: 11, height: 11, borderRadius: 6, background: "#ff5f56" }} />
+          <span style={{ width: 11, height: 11, borderRadius: 6, background: "#ffbd2e" }} />
+          <span style={{ width: 11, height: 11, borderRadius: 6, background: "#27c93f" }} />
+          <div style={{
+            marginLeft: 16,
+            flex: 1,
+            fontSize: 11,
+            color: "var(--muted-foreground)",
+            display: "flex",
+            justifyContent: "center",
+            fontFamily: "Geist, system-ui",
+          }}>bdi.mn</div>
+          <div style={{ width: 50 }} />
+        </div>
+        <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Intro() {
+  return (
+    <div style={{
+      width: 900, padding: "36px 44px", fontFamily: "Geist, system-ui, sans-serif",
+      background: "#fff", border: "1px solid #e5e0d0", borderRadius: 18,
+      boxShadow: "0 10px 30px -10px rgba(0,0,0,0.15)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{
+          width: 50, height: 50, borderRadius: 12,
+          background: "linear-gradient(135deg, var(--primary), oklch(0.4 0.18 263))",
+          color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 18,
+        }}>BDI</div>
+        <div>
+          <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.02em" }}>Бүхэл систем · Hi-Fi</div>
+          <div style={{ fontSize: 14.5, color: "var(--muted-foreground)" }}>
+            "② Confident" хэлээр бичсэн 21 дэлгэц · 3 үүрэг · mobile + desktop
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 20, fontSize: 14, lineHeight: 1.55, color: "#3a3530" }}>
+        Confident хэл нь систем дотор бүх дэлгэцэнд тэгш тархсан — том дугаар, идэвхтэй элементэд indigo tint,
+        шинж тэмдэг (Сүүлд авсан · Цөөн үлдсэн · Хямдрал) баталгаатай pattern. 
+        Дэлгэц бүр таны одоогийн tokens-оор бүтсэн: <code>oklch(0.5 0.18 263)</code> primary, Geist,
+        shadcn radii. Бэлэн боллоо — дараагийн алхам бол build-spec бичих эсвэл нэг section-ийг сонгож, үнэхээр хийх.
+      </div>
+
+      <div style={{ marginTop: 24, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+        {[
+          { tag: "Худалдан авагч", n: "8 дэлгэц", d: "Login → OTP → Catalog → Product → Cart → Order placed → Orders → Order detail" },
+          { tag: "BDI Admin",       n: "9 дэлгэц", d: "Login → Dashboard → Orders (list+detail) → Products (list+edit) → Stores → Үнийн жагсаалт → Хэрэглэгч" },
+          { tag: "Рөп",             n: "3 дэлгэц", d: "Дэлгүүрүүд → Дэлгүүрийн дэлгэрэнгүй → Нэрийн өмнөөс каталог" },
+        ].map((v) => (
+          <div key={v.tag} style={{ padding: 14, border: "1px solid var(--border)", borderRadius: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary)" }}>{v.tag}</div>
+            <div style={{ fontSize: 11, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginTop: 2 }}>{v.n}</div>
+            <div style={{ fontSize: 12.5, lineHeight: 1.5, marginTop: 8, color: "#3a3530" }}>{v.d}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const PW = 480,  PH = 980;     // phone artboard
+const DW = 1400, DH = 920;     // desktop artboard
+
+function App() {
+  return (
+    <DesignCanvas
+      title="BDI · Бүхэл систем · Hi-Fi"
+      subtitle="3 үүрэг · 21 дэлгэц · mobile + desktop"
+      intro={<Intro />}
+    >
+      {/* ───── Buyer auth ───── */}
+      <DCSection id="buyer-auth" title="① Худалдан авагч · нэвтрэх" subtitle="B1 + OTP">
+        <DCArtboard id="b-login" label="Нэвтрэх" width={PW} height={PH}>
+          <PhoneArt><window.BuyerLogin /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="b-otp" label="OTP код" width={PW} height={PH}>
+          <PhoneArt><window.BuyerOtp /></PhoneArt>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ───── Buyer main flow ───── */}
+      <DCSection id="buyer-flow" title="② Худалдан авагч · флоу" subtitle="Каталог → Бүтээгдэхүүн → Сагс → Захиалга илгээгдсэн">
+        <DCArtboard id="b-catalog" label="B2 · Каталог" width={PW} height={PH}>
+          <PhoneArt><window.BuyerCatalog /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="b-product" label="B3 · Бүтээгдэхүүн" width={PW} height={PH}>
+          <PhoneArt><window.BuyerProduct /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="b-cart" label="B4 · Сагс" width={PW} height={PH}>
+          <PhoneArt><window.BuyerCart /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="b-placed" label="B5 · Захиалга илгээгдсэн" width={PW} height={PH}>
+          <PhoneArt><window.BuyerOrderPlaced /></PhoneArt>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ───── Buyer orders ───── */}
+      <DCSection id="buyer-orders" title="③ Худалдан авагч · захиалгууд" subtitle="B6 list + detail">
+        <DCArtboard id="b-orders" label="B6 · Захиалгуудын жагсаалт" width={PW} height={PH}>
+          <PhoneArt><window.BuyerOrders /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="b-order" label="B6 · Захиалгын дэлгэрэнгүй" width={PW} height={PH}>
+          <PhoneArt><window.BuyerOrderDetail /></PhoneArt>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ───── Buyer desktop ───── */}
+      <DCSection id="buyer-desktop" title="④ Худалдан авагч · desktop" subtitle="Том дэлгэцийн responsive хувилбар">
+        <DCArtboard id="b-desktop" label="Desktop · Каталог" width={DW} height={DH}>
+          <DesktopArt><window.DesktopBuyerCatalog /></DesktopArt>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ───── Admin ───── */}
+      <DCSection id="admin" title="⑤ BDI Admin · desktop" subtitle="A1 → A8">
+        <DCArtboard id="a-login" label="A1 · Нэвтрэх" width={DW} height={DH}>
+          <DesktopArt><window.AdminLogin /></DesktopArt>
+        </DCArtboard>
+        <DCArtboard id="a-dash" label="A2 · Дашбоард" width={DW} height={DH}>
+          <DesktopArt><window.AdminDashboard /></DesktopArt>
+        </DCArtboard>
+        <DCArtboard id="a-orders" label="A3 · Захиалгууд" width={DW} height={DH}>
+          <DesktopArt><window.AdminOrdersList /></DesktopArt>
+        </DCArtboard>
+        <DCArtboard id="a-order" label="A4 · Захиалгын дэлгэрэнгүй" width={DW} height={DH}>
+          <DesktopArt><window.AdminOrderDetail /></DesktopArt>
+        </DCArtboard>
+        <DCArtboard id="a-products" label="A5 · Бараа · жагсаалт" width={DW} height={DH}>
+          <DesktopArt><window.AdminProductsList /></DesktopArt>
+        </DCArtboard>
+        <DCArtboard id="a-product-edit" label="A5b · Бараа · засах" width={DW} height={DH}>
+          <DesktopArt><window.AdminProductEdit /></DesktopArt>
+        </DCArtboard>
+        <DCArtboard id="a-stores" label="A6 · Дэлгүүр" width={DW} height={DH}>
+          <DesktopArt><window.AdminStoresList /></DesktopArt>
+        </DCArtboard>
+        <DCArtboard id="a-prices" label="A7 · Үнийн жагсаалт" width={DW} height={DH}>
+          <DesktopArt><window.AdminPriceList /></DesktopArt>
+        </DCArtboard>
+        <DCArtboard id="a-users" label="A8 · Хэрэглэгч" width={DW} height={DH}>
+          <DesktopArt><window.AdminUsersList /></DesktopArt>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ───── Rep ───── */}
+      <DCSection id="rep" title="⑥ Рөп · флоу" subtitle="R1 → R3, mobile">
+        <DCArtboard id="r-stores" label="R1 · Дэлгүүрүүд" width={PW} height={PH}>
+          <PhoneArt><window.RepStoresList /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="r-store" label="R2 · Дэлгүүрийн дэлгэрэнгүй" width={PW} height={PH}>
+          <PhoneArt><window.RepStoreDetail /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="r-catalog" label="R3 · Нэрийн өмнөөс каталог" width={PW} height={PH}>
+          <PhoneArt><window.RepCatalog /></PhoneArt>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("app")).render(<App />);
+</script>
+</body>
+</html>

@@ -114,6 +114,7 @@ export default async function RepProductDetailPage({
               image_url: p.image_url,
               unit_price: p.effective_price,
             }}
+            boxCount={p.box_count}
           />
 
           {p.description && (

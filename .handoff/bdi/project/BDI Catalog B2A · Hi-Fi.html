@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BDI · B2 Catalog · Hi-Fi (3 directions)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { sans: ["Geist", "system-ui", "sans-serif"] },
+      },
+    },
+  };
+</script>
+
+<style>
+  /* Lifted directly from /web/src/app/globals.css so cards look exactly as in production */
+  :root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.18 0.02 264);
+    --card: oklch(1 0 0);
+    --muted: oklch(0.97 0.004 264);
+    --muted-foreground: oklch(0.52 0.02 264);
+    --primary: oklch(0.5 0.18 263);
+    --primary-foreground: oklch(0.99 0 0);
+    --accent: oklch(0.96 0.03 263);
+    --accent-foreground: oklch(0.32 0.14 263);
+    --border: oklch(0.92 0.008 264);
+    --ring: oklch(0.5 0.18 263);
+    --chart-coral: oklch(0.7 0.18 30);
+  }
+  html, body {
+    background: #ece6d5;
+    font-family: "Geist", system-ui, sans-serif;
+    color: var(--foreground);
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .dc-root { background: #ece6d5 !important; }
+
+  /* Re-usable Tailwind-friendly colors */
+  .bg-primary { background: var(--primary); }
+  .text-primary { color: var(--primary); }
+  .text-primary-foreground { color: var(--primary-foreground); }
+  .bg-primary-foreground { background: var(--primary-foreground); }
+  .text-foreground { color: var(--foreground); }
+  .bg-background { background: var(--background); }
+  .bg-muted { background: var(--muted); }
+  .text-muted-foreground { color: var(--muted-foreground); }
+  .border-border { border-color: var(--border); }
+  .ring-border { --tw-ring-color: var(--border); }
+  .bg-accent { background: var(--accent); }
+  .text-accent-foreground { color: var(--accent-foreground); }
+  .ring-primary\/30 { --tw-ring-color: color-mix(in oklch, var(--primary) 30%, transparent); }
+  .shadow-primary\/20 { --tw-shadow-color: color-mix(in oklch, var(--primary) 20%, transparent); }
+
+  /* product image surface — gradient hatched look */
+  .img-surface {
+    background:
+      radial-gradient(circle at 30% 25%, color-mix(in oklch, var(--primary) 8%, transparent), transparent 60%),
+      linear-gradient(135deg, oklch(0.96 0.005 264), oklch(0.93 0.01 264));
+  }
+  .img-surface-2 {
+    background: linear-gradient(135deg, oklch(0.98 0.012 263), oklch(0.94 0.022 263));
+  }
+
+  @keyframes pop {
+    0% { transform: scale(0.9); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .animate-pop { animation: pop 0.15s ease-out; }
+
+  /* Hide scrollbars on chip rails */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+</head>
+
+<body>
+<div id="app"></div>
+
+<!-- Icons & shared product data -->
+<script type="text/babel" data-presets="env,react">
+/* Minimal lucide-style icons (single-stroke). */
+const Icon = ({ d, size = 20, sw = 2, className = "" }) => (
+  <svg
+    width={size} height={size} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"
+    className={className}
+  >
+    {d}
+  </svg>
+);
+const I = {
+  search: <Icon d={<><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></>} />,
+  cart: <Icon d={<><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6" /></>} />,
+  plus: <Icon d={<path d="M12 5v14M5 12h14" />} />,
+  minus: <Icon d={<path d="M5 12h14" />} />,
+  menu: <Icon d={<><path d="M3 6h18M3 12h18M3 18h18" /></>} />,
+  bag: <Icon d={<><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><path d="M3 6h18M16 10a4 4 0 0 1-8 0" /></>} />,
+  clip: <Icon d={<><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" /></>} />,
+  user: <Icon d={<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>} />,
+  chevR: <Icon d={<path d="m9 18 6-6-6-6" />} sw={2.4} size={16} />,
+  spark: <Icon d={<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />} sw={2} size={14} />,
+  package: <Icon d={<><path d="m12 3 9 4.5v9L12 21l-9-4.5v-9z" /><path d="M3.3 7 12 12l8.7-5M12 12v9" /></>} size={12} />,
+  bolt: <Icon d={<path d="M13 2 3 14h7l-1 8 10-12h-7z" />} sw={2} />,
+  filter: <Icon d={<path d="M3 6h18M7 12h10M11 18h2" />} />,
+  star: <Icon d={<path d="m12 2 3.1 6.3 7 1L17 14.1l1.2 7-6.2-3.3L5.8 21 7 14.1 2 9.3l7-1z" />} sw={1.8} />,
+  history: <Icon d={<><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5M12 7v5l3 2" /></>} size={12} sw={2.2} />,
+};
+
+/* Shared product list — one canonical set across all 3 variants */
+const PRODUCTS = [
+  { brand: "Soft Leaf", name: "Ариутгалын нойтон салфетка 10ш",   price: 1220, box: 120, qty: 2, recent: true,  hue: 165 },
+  { brand: "Soft Leaf", name: "Нойтон салфетка 25ш тагтай",       price: 2250, box:  48, qty: 1, recent: true,  hue: 140 },
+  { brand: "Cleanly",   name: "Хөвөн дэвсгэр 50ш багц",            price: 2150, box:  24, qty: 0, recent: false, hue: 215, low: true },
+  { brand: "Persil",    name: "Угаалгын нунтаг 1кг автомат",       price: 8400, box:   8, qty: 0, deal: -10,    hue: 200 },
+  { brand: "Dettol",    name: "Ариутгалын шингэн 500мл",           price: 5650, box:  12, qty: 0,               hue: 25 },
+  { brand: "Lavera",    name: "Шингэн саван 750мл насос",          price: 3900, box:  12, qty: 0, recent: true, hue: 50 },
+  { brand: "Cleanly",   name: "Гарын саван хатамал",                price: 1850, box:  20, qty: 0,               hue: 280 },
+  { brand: "Soft Leaf", name: "Гар алчуур 100ш",                    price: 4100, box:  20, qty: 0,               hue: 120 },
+];
+
+const fmt = (n) => n.toLocaleString("mn-MN") + "₮";
+
+window.Icons = I;
+window.PRODUCTS = PRODUCTS;
+window.fmt = fmt;
+</script>
+
+<!-- ========== HI-FI variant 1: REFINED ========== -->
+<script type="text/babel" data-presets="env,react">
+const I = window.Icons;
+const fmt = window.fmt;
+
+/* Product image stand-in — abstract gradient bottle/box per item, uses hue */
+function ProductImage({ hue, dense = false }) {
+  return (
+    <div
+      className="absolute inset-0 flex items-center justify-center"
+      style={{
+        background: `radial-gradient(circle at 35% 30%, oklch(0.94 0.04 ${hue}) 0%, oklch(0.88 0.05 ${hue}) 50%, oklch(0.82 0.06 ${hue}) 100%)`,
+      }}
+    >
+      <div
+        className="rounded-2xl shadow-md"
+        style={{
+          width: dense ? "44%" : "52%",
+          height: dense ? "62%" : "70%",
+          background: `linear-gradient(160deg, oklch(0.55 0.13 ${hue}), oklch(0.4 0.15 ${hue}))`,
+          boxShadow: `0 10px 20px -8px oklch(0.4 0.15 ${hue} / 0.5)`,
+        }}
+      />
+    </div>
+  );
+}
+window.ProductImage = ProductImage;
+
+function QtyStepper({ qty, large = false }) {
+  return (
+    <div
+      className="flex items-stretch rounded-lg overflow-hidden text-primary-foreground"
+      style={{
+        background: "var(--primary)",
+        height: large ? 40 : 32,
+        boxShadow: "0 1px 0 0 color-mix(in oklch, var(--primary) 30%, transparent), inset 0 0 0 1px color-mix(in oklch, var(--primary) 30%, transparent)",
+      }}
+    >
+      <button className="px-2.5 hover:bg-black/15 active:scale-95 transition-all">{I.minus}</button>
+      <span className={`flex items-center justify-center font-bold tabular-nums ${large ? "text-base px-3 min-w-12" : "text-sm px-2 min-w-10"}`}>{qty}</span>
+      <button className="px-2.5 hover:bg-black/15 active:scale-95 transition-all">{I.plus}</button>
+    </div>
+  );
+}
+
+function AddBtn({ small = false }) {
+  return (
+    <button
+      className="w-full rounded-lg text-xs font-semibold border border-border bg-white hover:border-primary hover:bg-primary hover:text-primary-foreground active:scale-[0.97] transition-all flex items-center justify-center gap-1.5"
+      style={{ height: small ? 32 : 40 }}
+    >
+      <span className="text-primary group-hover:text-primary-foreground">{I.plus}</span>
+      Нэмэх
+    </button>
+  );
+}
+
+/* Refined card — keeps current shape, tighter type ramp */
+function RefinedCard({ p, priority }) {
+  return (
+    <div className="group flex flex-col rounded-2xl border border-border bg-white overflow-hidden transition-all hover:shadow-md">
+      <div className="aspect-square relative overflow-hidden">
+        <ProductImage hue={p.hue} />
+        {p.qty > 0 && (
+          <div className="absolute top-2 left-2 size-6 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center shadow-sm">
+            {p.qty}
+          </div>
+        )}
+        {p.deal && (
+          <div className="absolute top-2 right-2 text-[10px] font-bold text-white px-1.5 py-0.5 rounded" style={{ background: "var(--chart-coral)" }}>
+            −10%
+          </div>
+        )}
+      </div>
+      <div className="p-3 pb-2 flex flex-col flex-1 gap-1">
+        <div className="text-[10px] uppercase tracking-[0.08em] font-semibold text-primary line-clamp-1">{p.brand}</div>
+        <div className="text-[13px] leading-snug line-clamp-2 min-h-[2.4rem] text-foreground/90">{p.name}</div>
+        {p.box && <div className="text-[11px] text-muted-foreground">Хайрцагт {p.box} ш</div>}
+        <div className="text-[15px] font-bold tabular-nums tracking-tight mt-auto pt-1">
+          {fmt(p.price)}
+        </div>
+      </div>
+      <div className="px-3 pb-3">
+        {p.qty > 0 ? <QtyStepper qty={p.qty} /> : <AddBtn />}
+      </div>
+    </div>
+  );
+}
+
+function CategoryRail({ items, activeIdx = 0 }) {
+  return (
+    <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+      {items.map((it, i) => {
+        const active = i === activeIdx;
+        return (
+          <div key={i} className="snap-start shrink-0 w-[58px] flex flex-col items-center gap-1 select-none">
+            <div className={`size-11 rounded-xl flex items-center justify-center transition-all ${
+              active
+                ? "bg-primary text-primary-foreground ring-1 ring-[color-mix(in_oklch,var(--primary)_40%,transparent)] shadow-sm"
+                : "bg-muted text-foreground/70 ring-1 ring-border"
+            }`}>
+              {it.icon}
+            </div>
+            <span className={`text-[10px] leading-tight text-center font-medium ${active ? "text-foreground" : "text-muted-foreground"}`}>
+              {it.label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ----- Variant 1 screen ----- */
+function CatalogRefined() {
+  const cats = [
+    { icon: I.bag, label: "Бүгд" },
+    { icon: <Icon d={<path d="M3 12h18M3 6h18M3 18h18" />} size={18} />, label: "Цаас" },
+    { icon: <Icon d={<><circle cx="12" cy="12" r="6" /></>} size={18} />, label: "Хөвөн" },
+    { icon: <Icon d={<path d="M3 12c0-5 4-9 9-9s9 4 9 9-4 9-9 9-9-4-9-9z" />} size={18} />, label: "Угаалга" },
+    { icon: <Icon d={<><path d="M12 2v20M2 12h20" /></>} size={18} />, label: "Ариут." },
+    { icon: <Icon d={<><circle cx="12" cy="8" r="3" /><path d="M5 21c0-4 3-7 7-7s7 3 7 7" /></>} size={18} />, label: "Биеийн" },
+  ];
+
+  return (
+    <div className="h-full flex flex-col bg-background overflow-hidden">
+      {/* App header */}
+      <header className="sticky top-0 z-20 bg-background/85 backdrop-blur-xl">
+        <div className="h-14 flex items-center px-3 gap-2">
+          <div className="size-9 rounded-xl bg-gradient-to-br from-primary to-[oklch(0.42_0.18_263)] text-primary-foreground flex items-center justify-center font-bold text-sm shadow-sm ring-1 ring-[color-mix(in_oklch,var(--primary)_30%,transparent)]">
+            Х
+          </div>
+          <div className="flex flex-col items-start min-w-0 leading-tight">
+            <span className="text-[9.5px] uppercase tracking-[0.12em] text-muted-foreground font-semibold">Дэлгүүр</span>
+            <span className="text-[13px] font-semibold truncate">Хүнс-Мини</span>
+          </div>
+          <div className="ml-auto flex items-center gap-1">
+            <button className="size-9 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-muted">{I.search}</button>
+          </div>
+        </div>
+        <div className="h-px bg-gradient-to-r from-transparent via-[color-mix(in_oklch,var(--primary)_30%,transparent)] to-transparent" />
+      </header>
+
+      {/* Sticky filter chrome — categories + search */}
+      <div className="sticky top-14 z-10 bg-background/85 backdrop-blur-xl border-b border-border/60 px-3 pt-2 pb-2">
+        <CategoryRail items={cats} activeIdx={0} />
+      </div>
+
+      {/* Result count */}
+      <div className="px-3 pt-3 pb-2 flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          <span className="font-semibold text-foreground tabular-nums">48</span> бараа
+        </p>
+        <button className="text-xs text-muted-foreground flex items-center gap-1">
+          Үнэ <span style={{ fontSize: 10 }}>↓</span>
+        </button>
+      </div>
+
+      {/* Grid */}
+      <div className="flex-1 overflow-y-auto px-3 pb-3">
+        <div className="grid grid-cols-2 gap-2.5">
+          {window.PRODUCTS.slice(0, 6).map((p, i) => <RefinedCard key={i} p={p} />)}
+        </div>
+      </div>
+
+      {/* Bottom tab bar */}
+      <nav className="border-t border-border bg-background/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
+        <ul className="flex min-h-14 max-w-lg mx-auto">
+          {[
+            { i: I.bag, l: "Каталог", a: true },
+            { i: I.clip, l: "Захиалга" },
+            { i: I.cart, l: "Сагс", badge: 3 },
+          ].map((t, idx) => (
+            <li key={idx} className="flex-1">
+              <a className={`flex flex-col items-center justify-center h-full gap-1 py-2 ${t.a ? "text-primary" : "text-muted-foreground"}`}>
+                <div className="relative">{t.i}
+                  {t.badge && (
+                    <span className="absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center ring-2 ring-background">
+                      {t.badge}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10.5px] font-medium leading-none">{t.l}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </div>
+  );
+}
+
+window.CatalogRefined = CatalogRefined;
+window.QtyStepper = QtyStepper;
+window.AddBtn = AddBtn;
+window.CategoryRail = CategoryRail;
+</script>
+
+<!-- ========== HI-FI variant 2: CONFIDENT ========== -->
+<script type="text/babel" data-presets="env,react">
+const I = window.Icons;
+const fmt = window.fmt;
+const { ProductImage, QtyStepper, AddBtn } = window;
+
+/* Bolder card — bigger image, stronger type, prominent in-cart state */
+function ConfidentCard({ p }) {
+  const inCart = p.qty > 0;
+  return (
+    <div
+      className={`group relative flex flex-col rounded-3xl overflow-hidden transition-all ${
+        inCart
+          ? "bg-[color-mix(in_oklch,var(--primary)_6%,white)] ring-1 ring-[color-mix(in_oklch,var(--primary)_30%,transparent)] shadow-md shadow-[color-mix(in_oklch,var(--primary)_15%,transparent)]"
+          : "bg-white ring-1 ring-border hover:ring-foreground/20 hover:shadow-md"
+      }`}
+    >
+      <div className="aspect-[4/3.4] relative overflow-hidden">
+        <ProductImage hue={p.hue} />
+        {p.recent && !p.deal && (
+          <div className="absolute top-2.5 left-2.5 flex items-center gap-1 text-[10px] font-bold bg-white/90 backdrop-blur text-foreground px-2 py-0.5 rounded-full ring-1 ring-border">
+            {I.history} Сүүлд авсан
+          </div>
+        )}
+        {p.deal && (
+          <div className="absolute top-2.5 left-2.5 text-[11px] font-bold text-white px-2 py-0.5 rounded-full" style={{ background: "var(--chart-coral)" }}>
+            −10%
+          </div>
+        )}
+        {p.low && (
+          <div className="absolute bottom-2.5 left-2.5 text-[10px] font-semibold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full ring-1 ring-amber-300/60">
+            Цөөн үлдсэн
+          </div>
+        )}
+      </div>
+      <div className="p-3 pt-3 flex flex-col gap-1.5">
+        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.1em] font-bold text-primary">
+          {p.brand}
+        </div>
+        <div className="text-[13.5px] font-semibold leading-snug line-clamp-2 min-h-[2.4rem]">{p.name}</div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[17px] font-bold tabular-nums tracking-tight">{fmt(p.price)}</span>
+          {p.deal && (
+            <span className="text-[11px] text-muted-foreground line-through">{fmt(Math.round(p.price / 0.9))}</span>
+          )}
+        </div>
+        {p.box && (
+          <div className="flex items-center gap-1 text-[10.5px] text-muted-foreground">
+            {I.package} хайрцагт {p.box}ш
+          </div>
+        )}
+        <div className="mt-1">
+          {inCart ? <QtyStepper qty={p.qty} large /> : <AddBtn />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CatalogConfident() {
+  const cats = [
+    { icon: I.bag, label: "Бүгд" },
+    { icon: <Icon d={<path d="M3 12h18M3 6h18M3 18h18" />} size={18} />, label: "Цаас" },
+    { icon: <Icon d={<><circle cx="12" cy="12" r="6" /></>} size={18} />, label: "Хөвөн" },
+    { icon: <Icon d={<path d="M3 12c0-5 4-9 9-9s9 4 9 9-4 9-9 9-9-4-9-9z" />} size={18} />, label: "Угаалга" },
+    { icon: <Icon d={<><path d="M12 2v20M2 12h20" /></>} size={18} />, label: "Ариут." },
+  ];
+
+  return (
+    <div className="h-full flex flex-col bg-background overflow-hidden">
+      {/* Header */}
+      <header className="sticky top-0 z-20 bg-background/85 backdrop-blur-xl">
+        <div className="h-14 flex items-center px-3 gap-2">
+          <div className="size-9 rounded-xl bg-gradient-to-br from-primary to-[oklch(0.42_0.18_263)] text-primary-foreground flex items-center justify-center font-bold text-sm shadow-sm">Х</div>
+          <div className="flex flex-col items-start min-w-0 leading-tight">
+            <span className="text-[9.5px] uppercase tracking-[0.12em] text-muted-foreground font-semibold">Дэлгүүр</span>
+            <span className="text-[13px] font-semibold truncate">Хүнс-Мини</span>
+          </div>
+          <div className="ml-auto flex items-center gap-1">
+            <button className="size-9 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-muted">{I.search}</button>
+          </div>
+        </div>
+        <div className="h-px bg-gradient-to-r from-transparent via-[color-mix(in_oklch,var(--primary)_30%,transparent)] to-transparent" />
+      </header>
+
+      {/* Big search pill */}
+      <div className="px-3 pt-3">
+        <button className="w-full h-11 rounded-2xl bg-muted/80 ring-1 ring-border flex items-center gap-2 px-4 text-[13px] text-muted-foreground">
+          {I.search} Барааны нэр, бренд…
+        </button>
+      </div>
+
+      {/* Categories */}
+      <div className="px-3 pt-3 pb-1 border-b border-border/40">
+        <window.CategoryRail items={cats} activeIdx={0} />
+      </div>
+
+      {/* Result count */}
+      <div className="px-3 pt-3 pb-2 flex items-center justify-between">
+        <p className="text-[13px]">
+          <span className="font-bold tabular-nums">48</span>
+          <span className="text-muted-foreground"> бараа</span>
+        </p>
+        <button className="text-[12px] text-muted-foreground flex items-center gap-1 px-2 py-1 rounded-md hover:bg-muted">
+          {I.filter} Үнэ ↓
+        </button>
+      </div>
+
+      {/* Grid */}
+      <div className="flex-1 overflow-y-auto px-3 pb-3">
+        <div className="grid grid-cols-2 gap-3">
+          {window.PRODUCTS.slice(0, 6).map((p, i) => <ConfidentCard key={i} p={p} />)}
+        </div>
+      </div>
+
+      {/* Floating cart pill — replaces tab bar's cart on this variant; tab bar still present */}
+      <nav className="border-t border-border bg-background/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
+        <ul className="flex min-h-14 max-w-lg mx-auto">
+          {[
+            { i: I.bag, l: "Каталог", a: true },
+            { i: I.clip, l: "Захиалга" },
+            { i: I.cart, l: "Сагс", badge: 3 },
+          ].map((t, idx) => (
+            <li key={idx} className="flex-1">
+              <a className={`flex flex-col items-center justify-center h-full gap-1 py-2 ${t.a ? "text-primary" : "text-muted-foreground"}`}>
+                <div className="relative">{t.i}
+                  {t.badge && (
+                    <span className="absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center ring-2 ring-background">
+                      {t.badge}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10.5px] font-medium leading-none">{t.l}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </div>
+  );
+}
+window.CatalogConfident = CatalogConfident;
+</script>
+
+<!-- ========== HI-FI variant 3: BRANDED + DENSE ========== -->
+<script type="text/babel" data-presets="env,react">
+const I = window.Icons;
+const fmt = window.fmt;
+const { ProductImage, QtyStepper, AddBtn } = window;
+
+function DenseCard({ p }) {
+  return (
+    <div className={`flex flex-col rounded-2xl border border-border bg-white overflow-hidden transition-all ${p.qty > 0 ? "ring-2 ring-[color-mix(in_oklch,var(--primary)_30%,transparent)]" : ""}`}>
+      <div className="aspect-square relative overflow-hidden">
+        <ProductImage hue={p.hue} dense />
+        {p.deal && (
+          <div className="absolute top-1.5 right-1.5 text-[10px] font-bold text-white px-1.5 py-0.5 rounded" style={{ background: "var(--chart-coral)" }}>
+            −10%
+          </div>
+        )}
+        {p.recent && (
+          <div className="absolute bottom-1.5 left-1.5 size-5 rounded-full bg-white/90 backdrop-blur flex items-center justify-center text-primary ring-1 ring-border" title="Сүүлд авсан">
+            {I.history}
+          </div>
+        )}
+      </div>
+      <div className="p-2 pb-1.5 flex flex-col gap-0.5">
+        <div className="text-[9px] uppercase tracking-[0.08em] font-semibold text-primary line-clamp-1">{p.brand}</div>
+        <div className="text-[11.5px] leading-tight line-clamp-2 min-h-[2.1rem]">{p.name}</div>
+        <div className="text-[13px] font-bold tabular-nums">{fmt(p.price)}</div>
+      </div>
+      <div className="px-2 pb-2">
+        {p.qty > 0 ? <QtyStepper qty={p.qty} /> : <AddBtn small />}
+      </div>
+    </div>
+  );
+}
+
+function CatalogBranded() {
+  return (
+    <div className="h-full flex flex-col bg-background overflow-hidden">
+      {/* Branded header: indigo top section with greeting + reorder rail */}
+      <header className="relative" style={{ background: "linear-gradient(180deg, var(--primary) 0%, color-mix(in oklch, var(--primary) 88%, black) 100%)" }}>
+        <div className="px-4 pt-12 pb-2 text-primary-foreground">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.12em] font-semibold opacity-70">Сайн уу</div>
+              <div className="text-[15px] font-bold leading-tight">Энхээ · Хүнс-Мини</div>
+            </div>
+            <button className="size-9 rounded-xl flex items-center justify-center text-white bg-white/15 backdrop-blur ring-1 ring-white/20">
+              {I.search}
+            </button>
+          </div>
+
+          {/* Search pill — sits inside the indigo block, contrast with white card */}
+          <button className="mt-3 w-full h-10 rounded-xl bg-white/95 text-muted-foreground text-[13px] flex items-center gap-2 px-3.5 ring-1 ring-white/40">
+            {I.search} Барааны нэр, бренд хайх…
+          </button>
+        </div>
+
+        {/* Curved bottom cut */}
+        <div className="h-3 bg-background rounded-t-3xl" />
+      </header>
+
+      {/* Categories */}
+      <div className="px-3 pt-2 pb-2 bg-background">
+        <window.CategoryRail items={[
+          { icon: I.bag, label: "Бүгд" },
+          { icon: <Icon d={<path d="M3 12h18M3 6h18M3 18h18" />} size={18} />, label: "Цаас" },
+          { icon: <Icon d={<><circle cx="12" cy="12" r="6" /></>} size={18} />, label: "Хөвөн" },
+          { icon: <Icon d={<path d="M3 12c0-5 4-9 9-9s9 4 9 9-4 9-9 9-9-4-9-9z" />} size={18} />, label: "Угаалга" },
+          { icon: <Icon d={<><path d="M12 2v20M2 12h20" /></>} size={18} />, label: "Ариут." },
+        ]} activeIdx={0} />
+      </div>
+
+      {/* Heading + count */}
+      <div className="px-3 pt-1 pb-2 flex items-center justify-between">
+        <div>
+          <div className="text-[15px] font-bold tracking-tight">Бүх бараа</div>
+          <div className="text-[11px] text-muted-foreground tabular-nums">48 бараа</div>
+        </div>
+        <button className="text-[11px] text-muted-foreground flex items-center gap-1 px-2 py-1 rounded-md hover:bg-muted">
+          Үнэ ↓
+        </button>
+      </div>
+
+      {/* Dense 2-col grid */}
+      <div className="flex-1 overflow-y-auto px-3 pb-24">
+        <div className="grid grid-cols-2 gap-2">
+          {window.PRODUCTS.map((p, i) => <DenseCard key={i} p={p} />)}
+        </div>
+      </div>
+
+      {/* Floating cart bar */}
+      <div className="absolute left-3 right-3 bottom-[calc(56px+env(safe-area-inset-bottom)+8px)]">
+        <div className="rounded-2xl bg-primary text-primary-foreground shadow-xl shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)] px-4 h-12 flex items-center gap-3">
+          <div className="size-7 rounded-full bg-white/20 flex items-center justify-center">
+            {I.cart}
+          </div>
+          <div className="flex-1 leading-tight">
+            <div className="text-[10px] opacity-80 uppercase tracking-wider font-semibold">Сагсанд</div>
+            <div className="text-[13px] font-bold tabular-nums">3 бараа · {fmt(4690)}</div>
+          </div>
+          <div className="text-[12px] font-bold flex items-center gap-0.5">
+            Сагс {I.chevR}
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom tab bar */}
+      <nav className="border-t border-border bg-background/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
+        <ul className="flex min-h-14 max-w-lg mx-auto">
+          {[
+            { i: I.bag, l: "Каталог", a: true },
+            { i: I.clip, l: "Захиалга" },
+            { i: I.cart, l: "Сагс", badge: 3 },
+          ].map((t, idx) => (
+            <li key={idx} className="flex-1">
+              <a className={`flex flex-col items-center justify-center h-full gap-1 py-2 ${t.a ? "text-primary" : "text-muted-foreground"}`}>
+                <div className="relative">{t.i}
+                  {t.badge && (
+                    <span className="absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center ring-2 ring-background">
+                      {t.badge}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10.5px] font-medium leading-none">{t.l}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </div>
+  );
+}
+window.CatalogBranded = CatalogBranded;
+</script>
+
+<!-- ========== CANVAS APP ========== -->
+<script type="text/babel" data-presets="env,react">
+const { DesignCanvas, DCSection, DCArtboard, IOSDevice } = window;
+
+function PhoneArt({ children }) {
+  return (
+    <div className="w-full h-full flex items-center justify-center" style={{ background: "transparent" }}>
+      <IOSDevice width={402} height={874}>
+        {children}
+      </IOSDevice>
+    </div>
+  );
+}
+
+function Intro() {
+  return (
+    <div style={{
+      width: 760, padding: "32px 40px", fontFamily: "Geist, system-ui, sans-serif",
+      background: "#fff", border: "1px solid #e5e0d0", borderRadius: 18,
+      boxShadow: "0 10px 30px -10px rgba(0,0,0,0.15)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{
+          width: 48, height: 48, borderRadius: 12,
+          background: "linear-gradient(135deg, var(--primary), oklch(0.4 0.18 263))",
+          color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+          fontWeight: 700, fontSize: 18,
+        }}>BDI</div>
+        <div>
+          <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em" }}>
+            B2 Catalog · Hi-Fi
+          </div>
+          <div style={{ fontSize: 14, color: "var(--muted-foreground)" }}>
+            "A · Inline qty-stepper" хувилбараас гарсан 3 хийц
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 22, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        {[
+          {
+            tag: "① Refined",
+            sub: "Тогтсон хийц",
+            d: "Одоогийн UI-аас зөвхөн нягтрал, type ramp, in-cart хэлбэр сайжруулсан. Безопасный апгрейд — direct PR-руу буух боломжтой.",
+          },
+          {
+            tag: "② Confident",
+            sub: "Премиум",
+            d: "Том зураг, том type, in-cart карт нь indigo tint-тэй. Recent / Low stock badge харагдана. Цаашид CD/брэндийн ажил нэмэгдвэл энэ чиглэл.",
+          },
+          {
+            tag: "③ Branded + Dense",
+            sub: "Хүчтэй brand presence",
+            d: "Indigo header дотор greeting + хайлт. Card нь жижиг, дэлгэцэнд 8 бараа багтана. Floating cart pill — нэг товшилтоор сагс руу.",
+          },
+        ].map((v, i) => (
+          <div key={v.tag} style={{
+            padding: 14, border: "1px solid var(--border)", borderRadius: 12, background: "#fff",
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--primary)" }}>{v.tag}</div>
+            <div style={{ fontSize: 11, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 }}>{v.sub}</div>
+            <div style={{ fontSize: 12.5, lineHeight: 1.5, marginTop: 8, color: "#3a3530" }}>{v.d}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 18, fontSize: 13, lineHeight: 1.5, color: "#3a3530" }}>
+        <b>Бүгд нэг IA-тай:</b> Sticky header (дэлгүүр + хайлт) → category rail → grid + inline qty-stepper → bottom tab bar.
+        Зөв ялгаа нь visual hierarchy ба brand presence.
+        Бүгд таны одоогийн tokens-оор бүтсэн — primary <code>oklch(0.5 0.18 263)</code>, Geist, shadcn radii.
+      </div>
+    </div>
+  );
+}
+
+const PB_W = 480, PB_H = 980;
+
+function App() {
+  return (
+    <DesignCanvas
+      title="B2 Catalog · Hi-Fi (3 хувилбар)"
+      subtitle="Inline qty-stepper concept-ийн 3 polish-ийг харьцуулах"
+      intro={<Intro />}
+    >
+      <DCSection id="hifi" title="3 hi-fi хувилбар" subtitle="iPhone 15 Pro, реал брэнд систем">
+        <DCArtboard id="refined" label="① Refined · safe upgrade" width={PB_W} height={PB_H}>
+          <PhoneArt><window.CatalogRefined /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="confident" label="② Confident · premium" width={PB_W} height={PB_H}>
+          <PhoneArt><window.CatalogConfident /></PhoneArt>
+        </DCArtboard>
+        <DCArtboard id="branded" label="③ Branded + Dense" width={PB_W} height={PB_H}>
+          <PhoneArt><window.CatalogBranded /></PhoneArt>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("app")).render(<App />);
+</script>
+</body>
+</html>

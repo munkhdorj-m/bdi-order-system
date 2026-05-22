@@ -1,17 +1,25 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, DollarSign, Plus, Search, Store as StoreIcon } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  DollarSign,
+  Phone,
+  Plus,
+  Search,
+  Store as StoreIcon,
+  User,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type SupermarketRow = {
   id: string;
@@ -95,7 +103,9 @@ export default async function AdminSupermarketsPage({
   } else if (typeFilter) {
     query = query.ilike("type", `%${typeFilter}%`);
   }
-  if (districtFilter) {
+  // Radix Select can't bind to an empty value, so the dropdown emits "all"
+  // when the user wants every district. Treat that as "no filter".
+  if (districtFilter && districtFilter !== "all") {
     query = query.eq("district", districtFilter);
   }
 
@@ -154,18 +164,22 @@ export default async function AdminSupermarketsPage({
                 className="w-full rounded-md border border-input bg-background pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
-            <select
+            <Select
               name="district"
-              defaultValue={districtFilter}
-              className="w-full sm:w-48 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring truncate"
+              defaultValue={districtFilter || "all"}
             >
-              <option value="">Бүх дүүрэг</option>
-              {districts.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger size="default" className="w-full sm:w-48 h-9">
+                <SelectValue placeholder="Бүх дүүрэг" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Бүх дүүрэг</SelectItem>
+                {districts.map((d) => (
+                  <SelectItem key={d} value={d}>
+                    {d}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button type="submit" variant="secondary">
               Хайх
             </Button>
@@ -248,7 +262,12 @@ export default async function AdminSupermarketsPage({
                   )}
                 </Link>
                 <div className="mt-2 pt-2 border-t">
-                  <Button asChild size="sm" variant="ghost" className="w-full h-8">
+                  <Button
+                    asChild
+                    size="default"
+                    variant="ghost"
+                    className="w-full"
+                  >
                     <Link href={`/admin/supermarkets/${s.id}/prices`}>
                       <DollarSign className="h-3.5 w-3.5" />
                       Үнийн жагсаалт
@@ -259,88 +278,76 @@ export default async function AdminSupermarketsPage({
             ))}
           </div>
 
-          {/* Desktop table */}
-          <Card className="hidden sm:block">
-            <Table className="table-fixed w-full">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[34%]">Нэр</TableHead>
-                  <TableHead className="w-32">Төрөл</TableHead>
-                  <TableHead className="w-40">Дүүрэг</TableHead>
-                  <TableHead className="w-36">Утас</TableHead>
-                  <TableHead className="hidden xl:table-cell">Хариуцагч</TableHead>
-                  <TableHead className="w-20"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="align-top">
-                      <div className="flex items-start gap-2">
-                        <div className="min-w-0 flex-1">
-                          <Link
-                            href={`/admin/supermarkets/${s.id}`}
-                            className="font-medium hover:underline block truncate"
-                            title={s.name}
-                          >
-                            {s.name}
-                          </Link>
-                          {s.address && (
-                            <div
-                              className="text-xs text-muted-foreground truncate"
-                              title={s.address}
-                            >
-                              {s.address}
-                            </div>
-                          )}
-                        </div>
-                        {!s.active && (
-                          <Badge variant="outline" className="shrink-0 h-5 text-[10px]">
-                            Идэвхгүй
-                          </Badge>
-                        )}
+          {/* Desktop: 3-col card grid per Hi-Fi AdminStoresList */}
+          <div className="hidden sm:grid grid-cols-2 lg:grid-cols-3 gap-3">
+            {rows.map((s) => (
+              <div
+                key={s.id}
+                className="rounded-2xl bg-card ring-1 ring-border p-4 hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col"
+              >
+                <Link
+                  href={`/admin/supermarkets/${s.id}`}
+                  className="block"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="size-11 rounded-xl bg-gradient-to-br from-primary to-[oklch(0.42_0.18_263)] text-primary-foreground flex items-center justify-center font-bold text-base shrink-0">
+                      {s.name.trim()[0]?.toUpperCase() ?? "•"}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[14px] font-bold truncate">
+                        {s.name}
                       </div>
-                    </TableCell>
-                    <TableCell
-                      className="text-sm text-muted-foreground truncate"
-                      title={s.type ?? undefined}
-                    >
-                      {s.type ?? "—"}
-                    </TableCell>
-                    <TableCell
-                      className="text-sm text-muted-foreground truncate"
-                      title={s.district ?? undefined}
-                    >
-                      {s.district ?? "—"}
-                    </TableCell>
-                    <TableCell
-                      className="text-xs font-mono truncate"
-                      title={s.contact_phone ?? undefined}
-                    >
-                      {s.contact_phone ?? "—"}
-                    </TableCell>
-                    <TableCell className="hidden xl:table-cell text-sm truncate">
-                      {s.profiles?.full_name ?? s.profiles?.email ?? (
-                        <span className="text-muted-foreground italic">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        asChild
-                        size="icon"
-                        variant="ghost"
-                        title="Үнийн override"
-                      >
-                        <Link href={`/admin/supermarkets/${s.id}/prices`}>
-                          <DollarSign className="h-4 w-4" />
-                        </Link>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
+                      <div className="text-[11.5px] text-muted-foreground truncate">
+                        {[s.type, s.district].filter(Boolean).join(" · ") || "—"}
+                      </div>
+                    </div>
+                    {!s.active && (
+                      <span
+                        className="size-2 rounded-full bg-muted-foreground/40"
+                        title="Идэвхгүй"
+                      />
+                    )}
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-border space-y-1.5 text-[12px]">
+                    {s.contact_phone && (
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Phone
+                          className="h-3.5 w-3.5 shrink-0"
+                          strokeWidth={2.2}
+                        />
+                        <span className="font-mono">{s.contact_phone}</span>
+                      </div>
+                    )}
+                    {(s.profiles?.full_name || s.profiles?.email) && (
+                      <div className="flex items-center gap-1.5 text-muted-foreground truncate">
+                        <User
+                          className="h-3.5 w-3.5 shrink-0"
+                          strokeWidth={2.2}
+                        />
+                        <span className="truncate">
+                          {s.profiles.full_name ?? s.profiles.email}
+                        </span>
+                      </div>
+                    )}
+                    {s.address && (
+                      <div className="text-[11.5px] text-muted-foreground/80 truncate">
+                        {s.address}
+                      </div>
+                    )}
+                  </div>
+                </Link>
+
+                <Link
+                  href={`/admin/supermarkets/${s.id}/prices`}
+                  className="mt-3 inline-flex items-center justify-center gap-1.5 text-[11.5px] font-semibold text-primary hover:underline"
+                >
+                  <DollarSign className="h-3.5 w-3.5" />
+                  Үнийн жагсаалт ›
+                </Link>
+              </div>
+            ))}
+          </div>
         </>
       )}
 
