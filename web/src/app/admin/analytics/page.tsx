@@ -138,7 +138,9 @@ export default async function AdminAnalyticsPage() {
   const today = startOfDay(now);
   const windowDays = 30;
   const startCurrent = new Date(today.getTime() - (windowDays - 1) * DAY_MS); // inclusive
-  const startPrevious = new Date(today.getTime() - (2 * windowDays - 1) * DAY_MS);
+  const startPrevious = new Date(
+    today.getTime() - (2 * windowDays - 1) * DAY_MS,
+  );
   const endPreviousExclusive = startCurrent;
 
   const currentStartIso = startCurrent.toISOString();
@@ -402,9 +404,7 @@ export default async function AdminAnalyticsPage() {
               it readable on narrow screens. */}
           <div className="mt-2 flex justify-between text-[10px] text-muted-foreground tabular-nums">
             <span>{fmtDay(buckets[0].date)}</span>
-            <span>
-              {fmtDay(buckets[Math.floor(windowDays / 2)].date)}
-            </span>
+            <span>{fmtDay(buckets[Math.floor(windowDays / 2)].date)}</span>
             <span>{fmtDay(buckets[buckets.length - 1].date)}</span>
           </div>
         </CardContent>
@@ -531,7 +531,7 @@ export default async function AdminAnalyticsPage() {
         <CardContent className="p-5">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <h2 className="text-[15px] font-bold tracking-tight">
-              Захиалгын төлөв
+              Захиалгын төлөв 2222
             </h2>
             <Link
               href="/admin/orders"
