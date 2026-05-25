@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,23 +71,77 @@ export function ProductForm({
   const [categoryId, setCategoryId] = useState<string>(
     defaults.category_id ?? "",
   );
+  // Drag-and-drop wiring: ref the file input so a dropped file can be
+  // pushed onto it via DataTransfer (so the form still submits the
+  // file under name="image"), plus a small drag-active flag for the
+  // visual "you can drop here" treatment.
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragActive, setDragActive] = useState(false);
+
+  function ingestFile(file: File | undefined | null) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return; // ignore non-images silently
+    if (fileInputRef.current) {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      fileInputRef.current.files = dt.files;
+    }
+    setPreviewUrl(URL.createObjectURL(file));
+  }
 
   return (
     <form action={formAction} className="max-w-5xl space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {/* ── Column 1 — Image ─────────────────────────────────────────── */}
+        {/* ── Column 1 — Image (drop zone) ────────────────────────────── */}
         <Card className="md:col-span-1 self-start">
           <CardHeader>
             <CardTitle className="text-base">Зураг</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="aspect-square rounded-2xl ring-1 ring-border overflow-hidden relative bg-muted/40">
+          {/* The entire CardContent is the drop target so the admin
+              doesn't have to aim at the small button below. Drag events
+              on a parent need preventDefault on dragOver, otherwise the
+              browser intercepts the drop and just opens the image in a
+              new tab. */}
+          <CardContent
+            className="space-y-3"
+            onDragEnter={(e) => {
+              e.preventDefault();
+              setDragActive(true);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!dragActive) setDragActive(true);
+            }}
+            onDragLeave={(e) => {
+              // Only deactivate when the drag actually leaves the
+              // CardContent — leaving a child element fires the event
+              // too. relatedTarget being inside the current target
+              // means we're still inside, so ignore.
+              if (
+                e.currentTarget.contains(e.relatedTarget as Node | null)
+              )
+                return;
+              setDragActive(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragActive(false);
+              ingestFile(e.dataTransfer.files?.[0]);
+            }}
+          >
+            <div
+              className={`aspect-square rounded-2xl ring-1 overflow-hidden relative transition-all ${
+                dragActive
+                  ? "ring-2 ring-primary bg-primary/10"
+                  : "ring-border bg-muted/40"
+              }`}
+            >
               {previewUrl ? (
                 <Image
                   src={previewUrl}
                   alt=""
                   fill
-                  className="object-cover"
+                  className={`object-cover transition-opacity ${dragActive ? "opacity-40" : ""}`}
                   sizes="(max-width: 768px) 100vw, 320px"
                   unoptimized
                 />
@@ -96,24 +150,38 @@ export function ProductForm({
                   Зураг алга
                 </div>
               )}
+              {/* Drag-active overlay — sits on top of the preview so the
+                  admin sees clearly that releasing here will replace
+                  the current image. */}
+              {dragActive && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-primary pointer-events-none">
+                  <Upload className="h-7 w-7" strokeWidth={2} />
+                  <span className="text-[12px] font-bold">Энд буулга</span>
+                </div>
+              )}
             </div>
 
-            {/* Custom file picker so we can style it like the Hi-Fi dashed
-                drop-zone. The underlying Input still posts as name="image". */}
+            {/* Click-to-browse fallback. The label still wraps the
+                hidden input, so clicking opens the OS file picker.
+                Drag handlers above provide the drop behaviour. */}
             <label className="block">
               <Input
+                ref={fileInputRef}
                 type="file"
                 name="image"
                 accept="image/*"
                 className="sr-only peer"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) setPreviewUrl(URL.createObjectURL(file));
-                }}
+                onChange={(e) => ingestFile(e.target.files?.[0])}
               />
-              <span className="w-full h-10 rounded-xl border-2 border-dashed border-border bg-muted/30 text-[12px] font-semibold text-muted-foreground hover:bg-muted hover:border-primary/40 hover:text-foreground transition-colors flex items-center justify-center gap-1.5 cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-primary/40">
+              <span
+                className={`w-full h-10 rounded-xl border-2 border-dashed text-[12px] font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-primary/40 ${
+                  dragActive
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-muted/30 text-muted-foreground hover:bg-muted hover:border-primary/40 hover:text-foreground"
+                }`}
+              >
                 <Upload className="h-3.5 w-3.5" strokeWidth={2.2} />
-                Зураг сонгох
+                Зураг сонгох эсвэл чирж буулга
               </span>
             </label>
 

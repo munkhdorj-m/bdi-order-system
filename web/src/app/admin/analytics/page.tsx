@@ -531,7 +531,7 @@ export default async function AdminAnalyticsPage() {
         <CardContent className="p-5">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <h2 className="text-[15px] font-bold tracking-tight">
-              Захиалгын төлөв 2222
+              Захиалгын төлөв
             </h2>
             <Link
               href="/admin/orders"
