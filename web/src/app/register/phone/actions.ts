@@ -222,19 +222,68 @@ export async function completeVerification() {
 
   // Create the auth user with phone + password. phone_confirm:true
   // because verify.mn just proved ownership.
-  const { error: createErr } = await admin.auth.admin.createUser({
-    phone: pending.phone,
-    password: pending.password,
-    phone_confirm: true,
-    user_metadata: pending.fullName
-      ? { full_name: pending.fullName }
-      : undefined,
-  });
+  const { data: created, error: createErr } =
+    await admin.auth.admin.createUser({
+      phone: pending.phone,
+      password: pending.password,
+      phone_confirm: true,
+      user_metadata: pending.fullName
+        ? { full_name: pending.fullName }
+        : undefined,
+    });
 
+  // "Already registered" isn't fatal in this flow — verify.mn just
+  // re-confirmed the phone ownership, so we treat it the same as a
+  // fresh signup and continue.
   if (createErr && !/already (registered|exists)/i.test(createErr.message)) {
     console.error("[register/phone] createUser failed:", createErr);
     redirect(
       `/register/phone/verify?session=${encodeURIComponent(pending.sessionId)}&error=${encodeURIComponent(mapAuthError(createErr, "register"))}`,
+    );
+  }
+
+  // Resolve the user id. On a fresh signup `createUser` returns it
+  // directly; on the "already registered" path we look it up by phone
+  // so we can still attach a profile if one's missing.
+  let userId = created?.user?.id ?? null;
+  if (!userId) {
+    const { data: list } = await admin.auth.admin.listUsers({
+      page: 1,
+      perPage: 200,
+    });
+    userId =
+      list?.users.find((u) => u.phone === pending.phone)?.id ?? null;
+  }
+
+  // Defensive profile upsert. The on_auth_user_created trigger SHOULD
+  // create this row, but in practice we've seen it silently no-op for
+  // phone-only signups created via admin.createUser. Writing the row
+  // here guarantees the new user shows up in /admin/users under the
+  // "Хүлээгдсэн" tab regardless of trigger state.
+  if (userId) {
+    const { error: profileErr } = await admin
+      .from("profiles")
+      .upsert(
+        {
+          id: userId,
+          phone: pending.phone,
+          full_name: pending.fullName || null,
+          role: "buyer",
+          active: false, // pending admin approval per fix 18 default
+        },
+        { onConflict: "id", ignoreDuplicates: false },
+      );
+    if (profileErr) {
+      console.error(
+        "[register/phone] profile upsert failed:",
+        profileErr.message,
+      );
+      // Don't fail the registration — auth.users exists, admin can
+      // run the backfill SQL to repair the profile.
+    }
+  } else {
+    console.error(
+      "[register/phone] could not resolve user id after createUser",
     );
   }
 
