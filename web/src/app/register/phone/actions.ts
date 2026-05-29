@@ -220,72 +220,130 @@ export async function completeVerification() {
     );
   }
 
-  // Create the auth user with phone + password. phone_confirm:true
-  // because verify.mn just proved ownership.
-  const { data: created, error: createErr } =
-    await admin.auth.admin.createUser({
-      phone: pending.phone,
-      password: pending.password,
-      phone_confirm: true,
-      user_metadata: pending.fullName
-        ? { full_name: pending.fullName }
-        : undefined,
-    });
+  // Step 1: figure out the auth user id. Either find an existing
+  // profile with this phone (means a previous attempt got partway
+  // through), or create a fresh auth user.
+  let userId: string | null = null;
 
-  // "Already registered" isn't fatal in this flow — verify.mn just
-  // re-confirmed the phone ownership, so we treat it the same as a
-  // fresh signup and continue.
-  if (createErr && !/already (registered|exists)/i.test(createErr.message)) {
-    console.error("[register/phone] createUser failed:", createErr);
-    redirect(
-      `/register/phone/verify?session=${encodeURIComponent(pending.sessionId)}&error=${encodeURIComponent(mapAuthError(createErr, "register"))}`,
-    );
-  }
-
-  // Resolve the user id. On a fresh signup `createUser` returns it
-  // directly; on the "already registered" path we look it up by phone
-  // so we can still attach a profile if one's missing.
-  let userId = created?.user?.id ?? null;
-  if (!userId) {
-    const { data: list } = await admin.auth.admin.listUsers({
-      page: 1,
-      perPage: 200,
-    });
-    userId =
-      list?.users.find((u) => u.phone === pending.phone)?.id ?? null;
-  }
-
-  // Defensive profile upsert. The on_auth_user_created trigger SHOULD
-  // create this row, but in practice we've seen it silently no-op for
-  // phone-only signups created via admin.createUser. Writing the row
-  // here guarantees the new user shows up in /admin/users under the
-  // "Хүлээгдсэн" tab regardless of trigger state.
-  if (userId) {
-    const { error: profileErr } = await admin
+  // Check existing profile by phone first — if someone already
+  // partially registered with this number, reuse their id rather
+  // than create a duplicate auth user.
+  {
+    const { data: existingProfile, error: existingErr } = await admin
       .from("profiles")
-      .upsert(
-        {
-          id: userId,
-          phone: pending.phone,
-          full_name: pending.fullName || null,
-          role: "buyer",
-          active: false, // pending admin approval per fix 18 default
-        },
-        { onConflict: "id", ignoreDuplicates: false },
-      );
-    if (profileErr) {
+      .select("id")
+      .eq("phone", pending.phone)
+      .maybeSingle();
+    if (existingErr) {
       console.error(
-        "[register/phone] profile upsert failed:",
-        profileErr.message,
+        "[register/phone] profile lookup by phone failed:",
+        existingErr.message,
       );
-      // Don't fail the registration — auth.users exists, admin can
-      // run the backfill SQL to repair the profile.
     }
-  } else {
+    if (existingProfile?.id) {
+      userId = existingProfile.id;
+      console.info(
+        "[register/phone] reusing existing profile for phone:",
+        pending.phone,
+      );
+    }
+  }
+
+  // No existing profile → create the auth user.
+  if (!userId) {
+    const { data: created, error: createErr } =
+      await admin.auth.admin.createUser({
+        phone: pending.phone,
+        password: pending.password,
+        phone_confirm: true,
+        user_metadata: pending.fullName
+          ? { full_name: pending.fullName }
+          : undefined,
+      });
+
+    if (createErr) {
+      // "Already registered" means there's an auth.users row but no
+      // matching profile (we'd have caught it above otherwise). Look
+      // it up via listUsers so we can still attach a profile.
+      if (/already (registered|exists)/i.test(createErr.message)) {
+        console.warn(
+          "[register/phone] createUser said already-exists; looking up by phone",
+        );
+        const { data: list, error: listErr } =
+          await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        if (listErr) {
+          console.error("[register/phone] listUsers failed:", listErr);
+        }
+        userId =
+          list?.users.find((u) => u.phone === pending.phone)?.id ?? null;
+        if (!userId) {
+          console.error(
+            "[register/phone] auth.users has the phone but listUsers missed it — possibly >1000 users; aborting",
+          );
+          redirect(
+            `/register/phone/verify?session=${encodeURIComponent(pending.sessionId)}&error=${encodeURIComponent("Бүртгэл үүсгэхэд алдаа гарлаа. Админд хандана уу.")}`,
+          );
+        }
+      } else {
+        console.error("[register/phone] createUser failed:", createErr);
+        redirect(
+          `/register/phone/verify?session=${encodeURIComponent(pending.sessionId)}&error=${encodeURIComponent(mapAuthError(createErr, "register"))}`,
+        );
+      }
+    } else {
+      userId = created?.user?.id ?? null;
+    }
+  }
+
+  if (!userId) {
+    // Should be unreachable — every branch above either sets userId
+    // or redirects. Belt-and-suspenders.
     console.error(
-      "[register/phone] could not resolve user id after createUser",
+      "[register/phone] reached profile upsert with null userId",
+    );
+    redirect(
+      `/register/phone/verify?session=${encodeURIComponent(pending.sessionId)}&error=${encodeURIComponent("Бүртгэл үүсгэхэд алдаа гарлаа. Админд хандана уу.")}`,
     );
   }
+
+  // Step 2: upsert the profile. This is REQUIRED — if it fails the
+  // user won't appear in /admin/users and admin can't approve them.
+  // No silent no-op like before.
+  const { error: profileErr } = await admin
+    .from("profiles")
+    .upsert(
+      {
+        id: userId,
+        phone: pending.phone,
+        full_name: pending.fullName || null,
+        role: "buyer",
+        active: false,
+      },
+      { onConflict: "id" },
+    );
+
+  if (profileErr) {
+    console.error(
+      "[register/phone] profile upsert failed:",
+      profileErr.message,
+      "userId:",
+      userId,
+      "phone:",
+      pending.phone,
+    );
+    redirect(
+      `/register/phone/verify?session=${encodeURIComponent(pending.sessionId)}&error=${encodeURIComponent("Бүртгэл хадгалахад алдаа гарлаа: " + profileErr.message.slice(0, 80))}`,
+    );
+  }
+
+  console.info(
+    "[register/phone] registration complete — userId:",
+    userId,
+    "phone:",
+    pending.phone,
+    "name:",
+    pending.fullName,
+  );
 
   await clearPendingCookie();
   redirect("/login?success=phone-verified");
