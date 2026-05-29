@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Mail } from "lucide-react";
-import { sendOtp } from "./actions";
+import { startVerification } from "./actions";
 
 type SearchParams = Promise<{ error?: string; phone?: string; name?: string }>;
 
@@ -21,7 +21,7 @@ export default async function RegisterByPhonePage({
           </p>
         </div>
 
-        <form action={sendOtp} className="space-y-4">
+        <form action={startVerification} className="space-y-4">
           <div>
             <label htmlFor="fullName" className="input-label">
               Овог нэр
@@ -97,7 +97,7 @@ export default async function RegisterByPhonePage({
           )}
 
           <button type="submit" className="btn-primary w-full">
-            Баталгаажуулах код авах
+            Үргэлжлүүлэх
           </button>
         </form>
 

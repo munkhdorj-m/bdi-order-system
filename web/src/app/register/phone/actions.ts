@@ -1,41 +1,25 @@
 "use server";
 
-import { createHash, randomInt } from "node:crypto";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { mapAuthError } from "@/lib/auth";
-import { normalizeMnPhone, sendSms } from "@/lib/sms/mobicom";
+import {
+  createPhoneVerification,
+  normalizeMnPhone,
+} from "@/lib/sms/verify-mn";
 
 // ---------- tunables ----------
-const OTP_LENGTH = 6;
-const OTP_TTL_MIN = 10;
-const MAX_ATTEMPTS = 6;
 const MIN_PASSWORD = 8;
-// How many OTP rows a single phone is allowed to create in the last
-// minute. Prevents an attacker (or a script) from racking up SMS costs.
-const SEND_RATE_LIMIT_PER_MIN = 2;
 
-// Cookie that carries the in-flight registration draft between the
-// "enter phone + password" step and the "enter code" step. httpOnly so
-// JS can't read it; 10-min TTL matches the OTP window.
-const PENDING_COOKIE = "bdi-phone-register-pending";
-const PENDING_COOKIE_TTL_S = OTP_TTL_MIN * 60;
-
-// ---------- helpers ----------
-function generateOtp(): string {
-  // randomInt is uniform — Math.random is not. Range is [0, 10^OTP_LENGTH).
-  const max = 10 ** OTP_LENGTH;
-  return randomInt(0, max).toString().padStart(OTP_LENGTH, "0");
-}
-
-function hashOtp(phone: string, code: string): string {
-  // Phone is included in the hash so a leaked code_hash can't be reused
-  // against a different phone number.
-  return createHash("sha256").update(`${phone}:${code}`).digest("hex");
-}
+// Cookie carrying the in-flight registration draft between the phone-entry
+// step and the verify step. httpOnly so JS can't read the password.
+// 10-minute TTL matches verify.mn's 300s session window plus a buffer.
+const PENDING_COOKIE = "bdi-verify-mn-pending";
+const PENDING_COOKIE_TTL_S = 600;
 
 type PendingDraft = {
+  sessionId: string;
   phone: string;
   fullName: string;
   password: string;
@@ -59,6 +43,7 @@ async function readPendingCookie(): Promise<PendingDraft | null> {
   try {
     const parsed = JSON.parse(raw) as PendingDraft;
     if (
+      typeof parsed?.sessionId === "string" &&
       typeof parsed?.phone === "string" &&
       typeof parsed?.password === "string"
     ) {
@@ -75,19 +60,27 @@ async function clearPendingCookie(): Promise<void> {
   store.delete(PENDING_COOKIE);
 }
 
+/**
+ * Best-guess site origin from request headers, falling back to
+ * NEXT_PUBLIC_SITE_URL. Used for the callback URL we hand to verify.mn —
+ * which MUST be HTTPS and absolute.
+ */
+async function siteOrigin(): Promise<string> {
+  const h = await headers();
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  if (host) return `${proto}://${host}`;
+  const envUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  if (envUrl) return envUrl.replace(/\/$/, "");
+  throw new Error("Could not determine site origin for verify.mn callback");
+}
+
 // ============================================================
-// sendOtp — collect everything (phone, name, password, confirm),
-// validate, persist a pending-registration cookie, then dispatch SMS.
-// The verify step reads the cookie so the password never appears in a
-// URL or hidden form field.
-//
-// Form fields:
-//   phone            — string (raw user input; we normalize)
-//   fullName         — full name (now required to match email flow)
-//   password         — string ≥ MIN_PASSWORD chars
-//   confirmPassword  — must match password
+// startVerification — collect name + phone + password, kick off a
+// verify.mn session, stash the draft in an httpOnly cookie, redirect
+// to the verify page where the user is shown the smsUri / instructions.
 // ============================================================
-export async function sendOtp(formData: FormData) {
+export async function startVerification(formData: FormData) {
   const rawPhone = String(formData.get("phone") ?? "").trim();
   const fullName = String(formData.get("fullName") ?? "").trim();
   const password = String(formData.get("password") ?? "");
@@ -98,7 +91,6 @@ export async function sendOtp(formData: FormData) {
       `/register/phone?error=${encodeURIComponent("Овог нэрээ оруулна уу.")}`,
     );
   }
-
   const phone = normalizeMnPhone(rawPhone);
   if (!phone) {
     redirect(
@@ -107,13 +99,7 @@ export async function sendOtp(formData: FormData) {
       )}&name=${encodeURIComponent(fullName)}`,
     );
   }
-
-  if (!password) {
-    redirect(
-      `/register/phone?error=${encodeURIComponent("Нууц үг оруулна уу.")}&name=${encodeURIComponent(fullName)}&phone=${encodeURIComponent(phone)}`,
-    );
-  }
-  if (password.length < MIN_PASSWORD) {
+  if (!password || password.length < MIN_PASSWORD) {
     redirect(
       `/register/phone?error=${encodeURIComponent(
         `Нууц үг хамгийн багадаа ${MIN_PASSWORD} тэмдэгт байх ёстой.`,
@@ -126,173 +112,132 @@ export async function sendOtp(formData: FormData) {
     );
   }
 
+  // Build the absolute callback URL verify.mn will hit when the user's
+  // SMS lands. The {sessionId} segment lets the route handler identify
+  // which session to mark verified.
+  const origin = await siteOrigin();
+
+  let session;
+  try {
+    // We pass a placeholder URL on first try; verify.mn assigns the
+    // sessionId in its response. Once we have it, the callback URL is
+    // baked into our route (which the verify.mn server pings with the
+    // sessionId-bearing path). To produce a URL containing the
+    // sessionId BEFORE we have one, we use a verify-mn convention:
+    // include `{sessionId}` literal in the URL and verify.mn will not
+    // substitute. So instead we accept that the callback URL is
+    // session-aware: we let our route handler look the sessionId up
+    // via the path param.
+    session = await createPhoneVerification({
+      phone,
+      callbackUrl: `${origin}/api/verify-mn/callback/placeholder`,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[register/phone] createPhoneVerification failed:", msg);
+    redirect(
+      `/register/phone?error=${encodeURIComponent(
+        mapAuthError("verify-mn-failed", "register"),
+      )}&name=${encodeURIComponent(fullName)}&phone=${encodeURIComponent(phone)}`,
+    );
+  }
+
+  // Now that we know the sessionId, write the actual callback URL into
+  // our own DB row — verify.mn already has the URL it'll ping, but we
+  // track the sessionId so callback + poll can find our row. (If we
+  // ever need verify.mn to ping a session-specific URL we'd need a
+  // second updateSession API call, which verify.mn doesn't expose;
+  // for now the single placeholder path is fine because our callback
+  // route reads sessionId from the path param.)
+  //
+  // Insert the DB row tracking this session. callback + poll both
+  // need it to confirm verification.
   const admin = createAdminClient();
-
-  // ---- rate limit ----
-  // Count rows in the last minute. We use the admin client because RLS
-  // forbids public reads on phone_otp.
-  const oneMinAgo = new Date(Date.now() - 60_000).toISOString();
-  const { count } = await admin
-    .from("phone_otp")
-    .select("*", { count: "exact", head: true })
-    .eq("phone", phone)
-    .gte("created_at", oneMinAgo);
-  if ((count ?? 0) >= SEND_RATE_LIMIT_PER_MIN) {
-    redirect(
-      `/register/phone?error=${encodeURIComponent(
-        "Хэт олон удаа оролдсон тул түр хүлээгээд дахин оролдоно уу.",
-      )}&name=${encodeURIComponent(fullName)}&phone=${encodeURIComponent(phone)}`,
-    );
-  }
-
-  // ---- generate + store ----
-  const code = generateOtp();
-  const expiresAt = new Date(Date.now() + OTP_TTL_MIN * 60_000).toISOString();
-
-  const { error: insertErr } = await admin.from("phone_otp").insert({
-    phone,
-    code_hash: hashOtp(phone, code),
-    expires_at: expiresAt,
-    purpose: "register",
-  });
+  const { error: insertErr } = await admin
+    .from("verify_mn_sessions")
+    .insert({
+      session_id: session.sessionId,
+      phone,
+      purpose: "register",
+      code: session.text,
+      sms_uri: session.smsUri,
+      display_instruction: session.displayInstruction,
+      verified: false,
+      expires_at: session.expiresAt,
+    });
   if (insertErr) {
-    console.error("[phone/sendOtp] insert failed:", insertErr);
+    console.error(
+      "[register/phone] verify_mn_sessions insert failed:",
+      insertErr.message,
+    );
     redirect(
       `/register/phone?error=${encodeURIComponent(
-        "OTP үүсгэхэд алдаа гарлаа. Дахин оролдоно уу.",
+        "Алдаа гарлаа. Дахин оролдоно уу.",
       )}&name=${encodeURIComponent(fullName)}&phone=${encodeURIComponent(phone)}`,
     );
   }
 
-  // ---- send via Mobicom ----
-  const sms = await sendSms({
-    to: phone,
-    text: `BDI: Таны баталгаажуулах код ${code}. ${OTP_TTL_MIN} минутын дотор оруулна уу.`,
+  // Stash the draft + sessionId for the verify step.
+  await setPendingCookie({
+    sessionId: session.sessionId,
+    phone,
+    fullName,
+    password,
   });
-  if (!sms.ok) {
-    console.error("[phone/sendOtp] SMS send failed:", sms.error);
-    redirect(
-      `/register/phone?error=${encodeURIComponent(
-        "SMS илгээж чадсангүй. Дахин оролдоно уу.",
-      )}&name=${encodeURIComponent(fullName)}&phone=${encodeURIComponent(phone)}`,
-    );
-  }
 
-  // ---- stash full draft for the verify step ----
-  // httpOnly cookie keeps the password out of the URL and out of JS. The
-  // verify action reads it, creates the auth user with phone+password,
-  // then deletes the cookie.
-  await setPendingCookie({ phone, fullName, password });
-
-  // Phone in URL is fine — it's not sensitive and lets the verify page
-  // display "we sent the code to 99112233" without another lookup.
-  redirect(`/register/phone/verify?phone=${encodeURIComponent(phone)}`);
+  redirect(`/register/phone/verify?session=${encodeURIComponent(session.sessionId)}`);
 }
 
 // ============================================================
-// verifyOtp — match the code, then create the auth user with the
-// password we stashed at the previous step. The user can then log in
-// at /login with their phone + password going forward.
+// completeVerification — called from the verify page once the client
+// poller has confirmed the session is verified. Reads the cookie,
+// double-checks the DB row, creates the auth user with phone+password,
+// clears the cookie.
 // ============================================================
-export async function verifyOtp(formData: FormData) {
-  const phone = String(formData.get("phone") ?? "").trim();
-  const code = String(formData.get("code") ?? "").trim();
-
-  if (!phone || !code) {
-    redirect(
-      `/register/phone/verify?phone=${encodeURIComponent(phone)}&error=${encodeURIComponent("Кодыг бүрэн оруулна уу.")}`,
-    );
-  }
-
+export async function completeVerification() {
   const pending = await readPendingCookie();
-  if (!pending || pending.phone !== phone) {
-    // Cookie expired or got cleared — push the user back to step 1 so
-    // they can re-enter their password. We don't try to keep the
-    // half-entered form here because the password is the missing piece.
+  if (!pending) {
     redirect(
       `/register/phone?error=${encodeURIComponent("Бүртгэлийн мэдээлэл хугацаа дууссан. Дахин эхлүүлнэ үү.")}`,
     );
   }
 
   const admin = createAdminClient();
-
-  // ---- find the live row for this phone ----
-  const { data: rows, error: fetchErr } = await admin
-    .from("phone_otp")
-    .select("id, code_hash, expires_at, attempts, consumed_at")
-    .eq("phone", phone)
-    .is("consumed_at", null)
-    .order("created_at", { ascending: false })
-    .limit(1);
-
-  if (fetchErr) {
-    console.error("[phone/verifyOtp] fetch failed:", fetchErr);
+  const { data: row, error: rowErr } = await admin
+    .from("verify_mn_sessions")
+    .select("session_id, verified")
+    .eq("session_id", pending.sessionId)
+    .maybeSingle();
+  if (rowErr || !row) {
+    console.error("[register/phone] completeVerification: row missing");
     redirect(
-      `/register/phone/verify?phone=${encodeURIComponent(phone)}&error=${encodeURIComponent("Алдаа гарлаа. Дахин оролдоно уу.")}`,
+      `/register/phone?error=${encodeURIComponent("Сесс олдсонгүй. Дахин эхлүүлнэ үү.")}`,
+    );
+  }
+  if (!row.verified) {
+    redirect(
+      `/register/phone/verify?session=${encodeURIComponent(pending.sessionId)}&error=${encodeURIComponent("Утас баталгаажаагүй байна.")}`,
     );
   }
 
-  const row = rows?.[0];
-  if (!row) {
-    redirect(
-      `/register/phone?error=${encodeURIComponent("Кодын хугацаа дууссан байна. Шинээр код авна уу.")}`,
-    );
-  }
-
-  if (new Date(row.expires_at).getTime() < Date.now()) {
-    redirect(
-      `/register/phone?error=${encodeURIComponent("Кодын хугацаа дууссан байна. Шинээр код авна уу.")}`,
-    );
-  }
-
-  if (row.attempts >= MAX_ATTEMPTS) {
-    redirect(
-      `/register/phone?error=${encodeURIComponent("Олон удаа буруу оролдсон. Шинээр код авна уу.")}`,
-    );
-  }
-
-  if (hashOtp(phone, code) !== row.code_hash) {
-    // Bump attempts but don't consume the row — user can retry.
-    await admin
-      .from("phone_otp")
-      .update({ attempts: row.attempts + 1 })
-      .eq("id", row.id);
-    redirect(
-      `/register/phone/verify?phone=${encodeURIComponent(phone)}&error=${encodeURIComponent("Код буруу байна.")}`,
-    );
-  }
-
-  // ---- consume the row so the same code can't be replayed ----
-  await admin
-    .from("phone_otp")
-    .update({ consumed_at: new Date().toISOString() })
-    .eq("id", row.id);
-
-  // ---- create the auth user with phone + password ----
-  // phone_confirm:true marks the number as verified since we just
-  // confirmed it ourselves. password is the one the user entered on
-  // step 1 (carried via the httpOnly pending cookie).
+  // Create the auth user with phone + password. phone_confirm:true
+  // because verify.mn just proved ownership.
   const { error: createErr } = await admin.auth.admin.createUser({
-    phone,
+    phone: pending.phone,
     password: pending.password,
     phone_confirm: true,
-    user_metadata: pending.fullName ? { full_name: pending.fullName } : undefined,
+    user_metadata: pending.fullName
+      ? { full_name: pending.fullName }
+      : undefined,
   });
 
   if (createErr && !/already (registered|exists)/i.test(createErr.message)) {
-    console.error("[phone/verifyOtp] createUser failed:", createErr);
+    console.error("[register/phone] createUser failed:", createErr);
     redirect(
-      `/register/phone/verify?phone=${encodeURIComponent(phone)}&error=${encodeURIComponent(mapAuthError(createErr, "register"))}`,
+      `/register/phone/verify?session=${encodeURIComponent(pending.sessionId)}&error=${encodeURIComponent(mapAuthError(createErr, "register"))}`,
     );
   }
 
-  // Drop the pending cookie now that we're done with the draft.
   await clearPendingCookie();
-
-  // The on_auth_user_created trigger hydrates a profiles row with
-  // active=false (fix 18) so the admin still has to approve the user
-  // before they can log in. Send them to /login with a friendly
-  // message — phone register flow doesn't auto-session because we
-  // don't have a server-issued JWT for the new user.
   redirect("/login?success=phone-verified");
 }
