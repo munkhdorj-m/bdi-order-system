@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { adminGuardError } from "@/lib/auth";
 
 type ActionState = { error?: string };
 
@@ -49,6 +50,9 @@ export async function createSupermarket(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
   const built = buildPayload(formData);
   if ("error" in built) return { error: built.error };
 
@@ -65,6 +69,9 @@ export async function updateSupermarket(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
   const built = buildPayload(formData);
   if ("error" in built) return { error: built.error };
 
@@ -81,6 +88,9 @@ export async function updateSupermarket(
 }
 
 export async function deactivateSupermarket(id: string): Promise<void> {
+  const guardErr = await adminGuardError();
+  if (guardErr) throw new Error(guardErr);
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("supermarkets")
@@ -92,6 +102,9 @@ export async function deactivateSupermarket(id: string): Promise<void> {
 }
 
 export async function deleteSupermarket(id: string): Promise<DeleteResult> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
   const supabase = await createClient();
 
   // Check for orders first so we can produce a friendlier message than
@@ -120,6 +133,9 @@ export async function savePriceList(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
   const supabase = await createClient();
 
   const upserts: { supermarket_id: string; product_id: string; price: number }[] = [];

@@ -44,6 +44,35 @@ export async function requireSession(): Promise<SessionContext> {
   return session;
 }
 
+/**
+ * Admin-only guard for server actions. Returns a Mongolian error message
+ * if the caller isn't an admin, or `null` if they pass.
+ *
+ * Use this at the top of every mutating admin action — layout-level
+ * checks (admin/layout.tsx) only catch page navigations, NOT direct POSTs
+ * to server actions. Without an explicit guard here a signed-in
+ * non-admin (rep, buyer) could call any "use server" action by crafting
+ * the POST themselves.
+ *
+ * Two call-site patterns depending on the action's return type:
+ *
+ *   // Action returns ActionState
+ *   const guardErr = await adminGuardError();
+ *   if (guardErr) return { error: guardErr };
+ *
+ *   // Action returns void or throws
+ *   const guardErr = await adminGuardError();
+ *   if (guardErr) throw new Error(guardErr);
+ */
+export async function adminGuardError(): Promise<string | null> {
+  const session = await getSession();
+  if (!session) return "Нэвтэрнэ үү.";
+  if (session.profile.role !== "admin") {
+    return "Зөвхөн админ хийх боломжтой.";
+  }
+  return null;
+}
+
 export function homePathForRole(profile: Profile): string {
   if (!profile.active) return "/inactive";
   switch (profile.role) {

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getSession } from "@/lib/auth";
+import { adminGuardError, getSession } from "@/lib/auth";
 import { notify } from "@/lib/notify";
 import { normalizeMnPhone } from "@/lib/sms/verify-mn";
 
@@ -24,6 +24,12 @@ export async function updateUser(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  // Admin-only — without this guard a signed-in rep or buyer could POST
+  // directly to this action and escalate their own role to admin, or
+  // demote/suspend another account.
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
   const role = parseString(formData.get("role"));
   if (!role || !(VALID_ROLES as readonly string[]).includes(role)) {
     return { error: "Эрх буруу." };
@@ -60,15 +66,6 @@ export async function updateUser(
 
 type Result = { ok?: boolean; error?: string };
 
-async function requireAdmin(): Promise<Result | { admin: true }> {
-  const session = await getSession();
-  if (!session) return { error: "Нэвтэрнэ үү." };
-  if (session.profile.role !== "admin") {
-    return { error: "Зөвхөн админ хийх боломжтой." };
-  }
-  return { admin: true };
-}
-
 /**
  * Approve a pending user — flip their profiles.active to true so they can
  * sign in. New sign-ups land with active=false thanks to fix 17 so admins
@@ -77,8 +74,8 @@ async function requireAdmin(): Promise<Result | { admin: true }> {
 export async function approveUser(userId: string): Promise<Result> {
   if (!userId) return { error: "Хэрэглэгчийн ID байхгүй." };
 
-  const guard = await requireAdmin();
-  if ("error" in guard) return { error: guard.error };
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -114,8 +111,8 @@ export async function approveUser(userId: string): Promise<Result> {
 export async function revokeUser(userId: string): Promise<Result> {
   if (!userId) return { error: "Хэрэглэгчийн ID байхгүй." };
 
-  const guard = await requireAdmin();
-  if ("error" in guard) return { error: guard.error };
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
 
   const session = await getSession();
   if (session?.userId === userId) {
@@ -159,8 +156,8 @@ export async function revokeUser(userId: string): Promise<Result> {
 export async function deleteUser(userId: string): Promise<Result> {
   if (!userId) return { error: "Хэрэглэгчийн ID байхгүй." };
 
-  const guard = await requireAdmin();
-  if ("error" in guard) return { error: guard.error };
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
 
   const session = await getSession();
   if (session?.userId === userId) {
@@ -238,8 +235,8 @@ export async function createUserAccount(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const guard = await requireAdmin();
-  if ("error" in guard) return { error: guard.error };
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
 
   const fullName = parseString(formData.get("full_name"));
   const password = String(formData.get("password") ?? "");

@@ -3,19 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getSession } from "@/lib/auth";
+import { adminGuardError } from "@/lib/auth";
 import { listBuyerIds, notifyMany } from "@/lib/notify";
 
 type ActionState = { error?: string };
-
-async function requireAdmin(): Promise<{ admin: true } | { error: string }> {
-  const session = await getSession();
-  if (!session) return { error: "Нэвтэрнэ үү." };
-  if (session.profile.role !== "admin") {
-    return { error: "Зөвхөн админ хийх боломжтой." };
-  }
-  return { admin: true };
-}
 
 type DiscountKind = "product" | "threshold_bonus";
 
@@ -105,8 +96,8 @@ export async function createDiscount(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const guard = await requireAdmin();
-  if ("error" in guard) return { error: guard.error };
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
 
   const built = buildPayload(formData);
   if ("error" in built) return { error: built.error };
@@ -142,8 +133,8 @@ export async function updateDiscount(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const guard = await requireAdmin();
-  if ("error" in guard) return { error: guard.error };
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
 
   const built = buildPayload(formData);
   if ("error" in built) return { error: built.error };
@@ -164,8 +155,8 @@ export async function toggleDiscountActive(
   id: string,
   next: boolean,
 ): Promise<ActionState> {
-  const guard = await requireAdmin();
-  if ("error" in guard) return { error: guard.error };
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -179,8 +170,8 @@ export async function toggleDiscountActive(
 }
 
 export async function deleteDiscount(id: string): Promise<ActionState> {
-  const guard = await requireAdmin();
-  if ("error" in guard) return { error: guard.error };
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
 
   const supabase = await createClient();
   const { error } = await supabase.from("discounts").delete().eq("id", id);

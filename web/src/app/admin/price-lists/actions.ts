@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { adminGuardError } from "@/lib/auth";
 
 type ActionState = { error?: string; ok?: boolean };
 
@@ -28,6 +29,9 @@ export async function createPriceList(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
   const built = buildMeta(formData);
   if ("error" in built) return { error: built.error };
 
@@ -48,6 +52,9 @@ export async function updatePriceList(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
   const built = buildMeta(formData);
   if ("error" in built) return { error: built.error };
 
@@ -64,6 +71,9 @@ export async function updatePriceList(
 }
 
 export async function deletePriceList(id: string): Promise<void> {
+  const guardErr = await adminGuardError();
+  if (guardErr) throw new Error(guardErr);
+
   const supabase = await createClient();
   const { error } = await supabase.from("price_lists").delete().eq("id", id);
   if (error) throw new Error(error.message);
@@ -76,6 +86,9 @@ export async function savePriceListItems(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
   const supabase = await createClient();
 
   const upserts: { price_list_id: string; product_id: string; price: number }[] = [];
@@ -130,6 +143,9 @@ export async function autoAssignByKeyword(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
   const raw = parseString(formData.get("keywords"));
   if (!raw) return { error: "Түлхүүр үг оруулна уу (жишээ нь: Nomin, Номин)" };
 
@@ -169,6 +185,9 @@ export async function unassignStore(
   storeId: string,
   redirectTo: string,
 ): Promise<void> {
+  const guardErr = await adminGuardError();
+  if (guardErr) throw new Error(guardErr);
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("supermarkets")

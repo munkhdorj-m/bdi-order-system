@@ -4,6 +4,7 @@ import sharp from "sharp";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { adminGuardError } from "@/lib/auth";
 
 type ActionState = {
   error?: string;
@@ -134,6 +135,9 @@ export async function createProduct(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
   let imageUrl: string | null = null;
   try {
     imageUrl = await uploadImageIfPresent(formData);
@@ -157,6 +161,9 @@ export async function updateProduct(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
   let imageUrl: string | null = null;
   try {
     imageUrl = await uploadImageIfPresent(formData);
@@ -180,6 +187,9 @@ export async function updateProduct(
 }
 
 export async function toggleProductActive(id: string, active: boolean) {
+  const guardErr = await adminGuardError();
+  if (guardErr) throw new Error(guardErr);
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("products")

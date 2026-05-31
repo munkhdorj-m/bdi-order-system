@@ -163,8 +163,8 @@
     font-weight: 500;
   }
 
-  /* Login/register/forgot/reset forms share these three pieces. Inputs are
-     16px so iOS doesn't auto-zoom on focus. */
+  /* Login + register forms share these three pieces. Inputs are 16px so
+     iOS doesn't auto-zoom on focus. */
   .input-label {
     @apply block text-[13px] font-medium text-foreground/85 mb-1.5;
   }

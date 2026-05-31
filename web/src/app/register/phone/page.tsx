@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Mail } from "lucide-react";
 import { startVerification } from "./actions";
 
 type SearchParams = Promise<{ error?: string; phone?: string; name?: string }>;
@@ -101,24 +100,15 @@ export default async function RegisterByPhonePage({
           </button>
         </form>
 
-        <div className="mt-6 space-y-3 text-center">
+        <p className="mt-6 text-caption text-muted-foreground text-center">
+          Аль хэдийн бүртгэлтэй бол{" "}
           <Link
-            href="/register"
-            className="text-caption2 text-primary inline-flex items-center gap-1.5 hover:underline"
+            href="/login"
+            className="text-primary font-semibold hover:underline"
           >
-            <Mail className="h-3.5 w-3.5" />
-            Имэйлээр бүртгүүлэх
+            нэвтрэх
           </Link>
-          <p className="text-caption text-muted-foreground">
-            Аль хэдийн бүртгэлтэй бол{" "}
-            <Link
-              href="/login"
-              className="text-primary font-semibold hover:underline"
-            >
-              нэвтрэх
-            </Link>
-          </p>
-        </div>
+        </p>
       </div>
     </main>
   );

@@ -55,7 +55,8 @@ export default async function LoginPage({
             BDI
           </div>
           <h1 className="mt-8 lg:mt-12 text-[26px] lg:text-[34px] font-bold tracking-tight leading-tight">
-            Захиалга өгөх<br />
+            Захиалга өгөх
+            <br />
             хамгийн хялбар арга
           </h1>
           <p className="mt-3 text-[14px] lg:text-[14.5px] opacity-85 max-w-[320px] leading-relaxed">
@@ -101,9 +102,6 @@ export default async function LoginPage({
                 defaultValue={phone ?? ""}
                 className="input-field"
               />
-              <p className="text-caption2 text-muted-foreground mt-1.5">
-                8 оронтой Монгол утас.
-              </p>
             </div>
 
             <div>

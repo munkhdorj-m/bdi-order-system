@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { adminGuardError } from "@/lib/auth";
 import {
   NEXT_STATUS,
   STATUS_LABELS,
@@ -15,19 +16,30 @@ export async function advanceOrderStatus(
   id: string,
   currentStatus: OrderStatus,
 ): Promise<Result> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
   const next = NEXT_STATUS[currentStatus];
   if (!next) return { error: "Энэ захиалгыг урагшлуулах боломжгүй." };
   return setOrderStatus(id, next);
 }
 
 export async function cancelOrder(id: string): Promise<Result> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
   return setOrderStatus(id, "cancelled");
 }
 
 export async function reopenOrder(id: string): Promise<Result> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
   return setOrderStatus(id, "pending");
 }
 
+// Internal — every public entry point above has already checked admin
+// guard, so this can write the DB without re-checking.
 async function setOrderStatus(
   id: string,
   status: OrderStatus,
