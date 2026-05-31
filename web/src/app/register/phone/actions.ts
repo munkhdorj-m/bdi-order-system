@@ -75,6 +75,18 @@ async function siteOrigin(): Promise<string> {
   throw new Error("Could not determine site origin for verify.mn callback");
 }
 
+/**
+ * Phone format normalization. We pass +976XXXXXXXX (E.164) to verify.mn
+ * because that's what its API expects, but Supabase Auth stores phones
+ * WITHOUT the leading "+". So when comparing against auth.users or
+ * profiles.phone, we need to check both forms.
+ */
+function phoneVariants(phone: string): string[] {
+  const withPlus = phone.startsWith("+") ? phone : `+${phone}`;
+  const noPlus = phone.startsWith("+") ? phone.slice(1) : phone;
+  return [withPlus, noPlus];
+}
+
 // ============================================================
 // startVerification — collect name + phone + password, kick off a
 // verify.mn session, stash the draft in an httpOnly cookie, redirect
@@ -128,9 +140,15 @@ export async function startVerification(formData: FormData) {
     // substitute. So instead we accept that the callback URL is
     // session-aware: we let our route handler look the sessionId up
     // via the path param.
+    // verify.mn requires a callback URL but fires GET to that exact URL
+    // with no sessionId substitution — so a per-session callback URL
+    // isn't reachable from inside the createSession call (we don't have
+    // the sessionId yet). Point it at a single no-op endpoint; the
+    // client poller handles verification discovery via direct status
+    // polls, which is the source of truth anyway.
     session = await createPhoneVerification({
       phone,
-      callbackUrl: `${origin}/api/verify-mn/callback/placeholder`,
+      callbackUrl: `${origin}/api/verify-mn/callback/noop`,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -227,12 +245,14 @@ export async function completeVerification() {
 
   // Check existing profile by phone first — if someone already
   // partially registered with this number, reuse their id rather
-  // than create a duplicate auth user.
+  // than create a duplicate auth user. We `.in()` both phone variants
+  // (with and without "+") because we may have legacy profile rows in
+  // either format.
   {
     const { data: existingProfile, error: existingErr } = await admin
       .from("profiles")
       .select("id")
-      .eq("phone", pending.phone)
+      .in("phone", phoneVariants(pending.phone))
       .maybeSingle();
     if (existingErr) {
       console.error(
@@ -274,11 +294,18 @@ export async function completeVerification() {
         if (listErr) {
           console.error("[register/phone] listUsers failed:", listErr);
         }
+        // Supabase stores phones WITHOUT the leading "+" while we keep
+        // E.164 internally. Match against both forms so the listUsers
+        // result doesn't silently miss a row purely because of `+`.
+        const variants = new Set(phoneVariants(pending.phone));
         userId =
-          list?.users.find((u) => u.phone === pending.phone)?.id ?? null;
+          list?.users.find((u) => u.phone && variants.has(u.phone))?.id ??
+          null;
         if (!userId) {
           console.error(
-            "[register/phone] auth.users has the phone but listUsers missed it — possibly >1000 users; aborting",
+            "[register/phone] listUsers couldn't find the phone in either format; aborting",
+            "looking for:",
+            Array.from(variants).join(" or "),
           );
           redirect(
             `/register/phone/verify?session=${encodeURIComponent(pending.sessionId)}&error=${encodeURIComponent("Бүртгэл үүсгэхэд алдаа гарлаа. Админд хандана уу.")}`,
@@ -306,15 +333,44 @@ export async function completeVerification() {
     );
   }
 
+  // Belt-and-suspenders: explicitly mark phone as confirmed.
+  // `phone_confirm: true` on admin.createUser is supposed to set
+  // phone_confirmed_at, but in practice some supabase-auth versions
+  // silently ignore the flag and leave it NULL — which then blocks
+  // signInWithPassword for that user with "Invalid login credentials".
+  // updateUserById here makes sure the flag lands every time.
+  {
+    const { error: confirmErr } = await admin.auth.admin.updateUserById(
+      userId,
+      { phone_confirm: true },
+    );
+    if (confirmErr) {
+      console.warn(
+        "[register/phone] phone_confirm update failed:",
+        confirmErr.message,
+      );
+      // Not fatal — fix 28 (one-shot SQL) handles users where this
+      // failed, and admin can also flip it via SQL directly.
+    }
+  }
+
   // Step 2: upsert the profile. This is REQUIRED — if it fails the
   // user won't appear in /admin/users and admin can't approve them.
   // No silent no-op like before.
+  //
+  // We store phones WITHOUT the leading "+" to match Supabase Auth's
+  // `auth.users.phone` format. Going forward, profile lookups should
+  // expect this format; the phoneVariants helper above guards against
+  // legacy data in either format.
+  const phoneStored = pending.phone.startsWith("+")
+    ? pending.phone.slice(1)
+    : pending.phone;
   const { error: profileErr } = await admin
     .from("profiles")
     .upsert(
       {
         id: userId,
-        phone: pending.phone,
+        phone: phoneStored,
         full_name: pending.fullName || null,
         role: "buyer",
         active: false,
