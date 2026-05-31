@@ -3,7 +3,13 @@ import { redirect } from "next/navigation";
 import { getSession, homePathForRole } from "@/lib/auth";
 import { LoginMethodTabs } from "@/components/login-method-tabs";
 
-type SearchParams = Promise<{ error?: string; success?: string }>;
+type SearchParams = Promise<{
+  error?: string;
+  success?: string;
+  method?: "phone" | "email";
+  phone?: string;
+  email?: string;
+}>;
 
 export default async function LoginPage({
   searchParams,
@@ -12,13 +18,18 @@ export default async function LoginPage({
 }) {
   const session = await getSession();
   if (session) redirect(homePathForRole(session.profile));
-  const { error, success } = await searchParams;
+  const { error, success, method, phone, email } = await searchParams;
 
   return (
     <main className="flex-1 flex flex-col lg:flex-row min-h-screen">
-      {/* Brand panel — full-width hero on mobile, 2/5 column on lg+. Matches
-          Hi-Fi BuyerLogin (mobile gradient hero with curved bottom) and
-          AdminLogin (desktop split-screen with stats sidebar). */}
+      {/* Brand panel — full-width hero on mobile, 2/5 column on lg+.
+          Background layering (top → bottom):
+            1. Brand-gradient fallback (always present, no asset needed)
+            2. Optional /login-hero.jpg overlay — drop a hero image into
+               web/public/login-hero.jpg and it shows here. Missing file
+               just 404s silently and the gradient remains.
+            3. Dark overlay on top of the image so the white headline
+               text stays legible regardless of the photo's brightness. */}
       <div
         className="relative lg:w-2/5 lg:min-h-screen flex flex-col justify-between px-6 pt-12 pb-10 lg:px-12 lg:pt-16 lg:pb-12 text-white overflow-hidden"
         style={{
@@ -26,7 +37,22 @@ export default async function LoginPage({
             "linear-gradient(155deg, var(--primary) 0%, color-mix(in oklch, var(--primary) 78%, black) 100%)",
         }}
       >
-        <div>
+        {/* Optional photo layer — opacity ~0.55 so the gradient bleeds
+            through and the brand colour still dominates. If you don't
+            have an image yet, drop one at web/public/login-hero.jpg
+            (any aspect; we use bg-cover bg-center). */}
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-55 mix-blend-overlay"
+          style={{ backgroundImage: "url('/login-hero.jpg')" }}
+          aria-hidden
+        />
+        {/* Soft vignette so headline reads on bright photos */}
+        <div
+          className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/30 pointer-events-none"
+          aria-hidden
+        />
+
+        <div className="relative">
           <div className="size-12 rounded-2xl bg-white/15 backdrop-blur ring-1 ring-white/25 flex items-center justify-center font-bold text-base">
             BDI
           </div>
@@ -37,25 +63,6 @@ export default async function LoginPage({
           <p className="mt-3 text-[14px] lg:text-[14.5px] opacity-85 max-w-[320px] leading-relaxed">
             BDI-н бөөний бараагаа дэлгүүрээсээ шууд захиалаарай.
           </p>
-        </div>
-
-        {/* Stats — desktop only. Mobile has more limited vertical space. */}
-        <div className="hidden lg:grid mt-8 grid-cols-3 gap-3 text-white/85">
-          {[
-            { v: "247", l: "Захиалга" },
-            { v: "56", l: "SKU" },
-            { v: "23", l: "Дэлгүүр" },
-          ].map((s) => (
-            <div
-              key={s.l}
-              className="rounded-2xl bg-white/10 ring-1 ring-white/15 backdrop-blur px-4 py-3"
-            >
-              <div className="text-[22px] font-bold tabular-nums tracking-tight">
-                {s.v}
-              </div>
-              <div className="text-[11px] opacity-80">{s.l}</div>
-            </div>
-          ))}
         </div>
 
         {/* Curved bottom transition on mobile — visual handoff into the form. */}
@@ -77,7 +84,13 @@ export default async function LoginPage({
             </p>
           </div>
 
-          <LoginMethodTabs defaultError={error} defaultSuccess={success} />
+          <LoginMethodTabs
+            defaultError={error}
+            defaultSuccess={success}
+            defaultMethod={method}
+            defaultPhone={phone}
+            defaultEmail={email}
+          />
 
           <p className="mt-6 text-caption text-muted-foreground text-center">
             Шинэ хэрэглэгч үү?{" "}

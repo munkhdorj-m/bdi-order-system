@@ -19,6 +19,7 @@ import {
   SearchableSelect,
   type SelectOption,
 } from "@/components/ui/searchable-select";
+import { ActiveSwitch } from "@/components/ui/active-switch";
 
 type ActionState = { error?: string };
 
@@ -70,7 +71,6 @@ export function DiscountForm({
   submitLabel,
 }: Props) {
   const [kind, setKind] = useState<DiscountKind>(defaults.kind ?? "product");
-  const [active, setActive] = useState<boolean>(defaults.active ?? true);
   const [state, formAction, pending] = useActionState(action, {});
 
   const productOptions: SelectOption[] = products.map((p) => ({
@@ -296,52 +296,14 @@ export function DiscountForm({
           />
         </Field>
 
-        {/* Active toggle — switch-style instead of a bare checkbox.
-            Form submission still reads `active=on` because we mirror
-            the state into a hidden checkbox. */}
-        <div className="flex items-center justify-between rounded-2xl bg-muted/50 ring-1 ring-border px-4 py-3">
-          <div className="flex items-start gap-3 min-w-0">
-            <Power
-              className={`h-4 w-4 mt-0.5 shrink-0 transition-colors ${active ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}
-            />
-            <div className="min-w-0">
-              <div className="text-[13.5px] font-semibold">
-                {active ? "Идэвхтэй" : "Идэвхгүй"}
-              </div>
-              <div className="text-[11.5px] text-muted-foreground leading-snug">
-                {active
-                  ? "Худалдан авагчид одоо харагдаж байна."
-                  : "Хадгалсан ч худалдан авагчид харагдахгүй."}
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={active}
-            onClick={() => setActive((v) => !v)}
-            className={`relative shrink-0 h-6 w-11 rounded-full ring-1 transition-colors ${
-              active
-                ? "bg-emerald-500 ring-emerald-500/30"
-                : "bg-muted ring-border"
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform ${
-                active ? "translate-x-5" : "translate-x-0.5"
-              }`}
-            />
-          </button>
-          {/* Mirror the switch state into a hidden checkbox so the form
-              action still reads `formData.get("active") === "on"`. */}
-          <input
-            type="checkbox"
-            name="active"
-            checked={active}
-            readOnly
-            className="sr-only"
-          />
-        </div>
+        {/* Active toggle — uses the shared ActiveSwitch component so the
+            geometry / hover state / dark-mode treatment is identical to
+            the product / supermarket / user / price-list forms. */}
+        <ActiveSwitch
+          defaultChecked={defaults.active ?? true}
+          activeHint="Худалдан авагчид одоо харагдаж байна."
+          inactiveHint="Хадгалсан ч худалдан авагчид харагдахгүй."
+        />
       </Section>
 
       <div className="flex gap-2 pt-1">

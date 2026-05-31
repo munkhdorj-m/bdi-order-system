@@ -32,30 +32,33 @@ export async function signIn(formData: FormData) {
 
   if (method === "email") {
     const email = String(formData.get("email") ?? "").trim();
+    // Keep `email` in any error redirect so the input pre-fills on the
+    // next render — only the password should reset on failure.
+    const errorRedirect = (msg: string) =>
+      `/login?method=email&email=${encodeURIComponent(email)}&error=${encodeURIComponent(msg)}`;
     if (!email) {
-      redirect(
-        `/login?error=${encodeURIComponent(mapAuthError("missing-credentials", "login"))}`,
-      );
+      redirect(errorRedirect(mapAuthError("missing-credentials", "login")));
     }
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     if (error) {
-      redirect(
-        `/login?error=${encodeURIComponent(mapAuthError(error, "login"))}`,
-      );
+      redirect(errorRedirect(mapAuthError(error, "login")));
     }
     redirect("/");
   }
 
   // Default branch: phone login.
   const rawPhone = String(formData.get("phone") ?? "").trim();
+  // Keep the typed phone in any error redirect so it pre-fills next
+  // render. We pass the raw user input (not the normalized E.164) so
+  // the user sees exactly what they typed.
+  const phoneError = (msg: string) =>
+    `/login?method=phone&phone=${encodeURIComponent(rawPhone)}&error=${encodeURIComponent(msg)}`;
   const e164 = normalizeMnPhone(rawPhone);
   if (!e164) {
-    redirect(
-      `/login?error=${encodeURIComponent("Утасны дугаар буруу байна (жишээ нь: 99112233).")}`,
-    );
+    redirect(phoneError("Утасны дугаар буруу байна (жишээ нь: 99112233)."));
   }
 
   // Try E.164 first (the supabase-js documented format). If that
@@ -96,9 +99,7 @@ export async function signIn(formData: FormData) {
   }
   if (error) {
     console.error("[login] final phone signIn error:", error);
-    redirect(
-      `/login?error=${encodeURIComponent(mapAuthError(error, "login"))}`,
-    );
+    redirect(phoneError(mapAuthError(error, "login")));
   }
   redirect("/");
 }

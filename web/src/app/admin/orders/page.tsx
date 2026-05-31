@@ -331,7 +331,7 @@ export default async function AdminOrdersPage({
               <Link
                 key={p.label}
                 href={href}
-                className={`h-7 px-2.5 rounded-full text-[11.5px] font-semibold transition-all ${
+                className={`inline-flex items-center h-7 px-2.5 rounded-full text-[11.5px] font-semibold transition-all leading-none ${
                   active
                     ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
                     : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-muted/80 hover:text-foreground dark:hover:bg-muted/60"

@@ -73,16 +73,29 @@ export function ActiveSwitch({
         aria-checked={active}
         disabled={disabled}
         onClick={() => !disabled && setActive((v) => !v)}
-        className={`relative shrink-0 h-6 w-11 rounded-full ring-1 transition-colors ${
+        // Geometry notes (so this never overflows again):
+        //   - Track: 44×24px, rounded-full. `overflow-hidden` clips the
+        //     thumb so nothing can escape even if positioning math drifts.
+        //   - Border (not ring) keeps the visual edge INSIDE the element's
+        //     bounds — ring-1 in Tailwind v4 draws outside, which made the
+        //     thumb appear to poke past the corner.
+        //   - Thumb: explicit 20×20px circle, vertically centered via
+        //     top-1/2 + -translate-y-1/2 so any browser font-size scaling
+        //     doesn't shift it. Horizontal position via `left` with a
+        //     `calc(100% - …)` for active so the gap from the right edge
+        //     stays constant regardless of track width.
+        className={`relative shrink-0 h-6 w-11 rounded-full border transition-colors overflow-hidden ${
           active
-            ? "bg-emerald-500 ring-emerald-500/30"
-            : "bg-muted ring-border"
+            ? "bg-emerald-500 border-emerald-600/40"
+            : "bg-muted border-border"
         } ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
       >
         <span
-          className={`absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform ${
-            active ? "translate-x-5" : "translate-x-0.5"
-          }`}
+          aria-hidden
+          className="absolute top-1/2 -translate-y-1/2 size-[20px] rounded-full bg-white shadow-sm transition-[left] duration-200 ease-out"
+          style={{
+            left: active ? "calc(100% - 22px)" : "2px",
+          }}
         />
       </button>
       {/* Hidden checkbox the form actually submits. checked={active} keeps

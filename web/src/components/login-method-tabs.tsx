@@ -21,11 +21,22 @@ type Method = "phone" | "email";
 export function LoginMethodTabs({
   defaultError,
   defaultSuccess,
+  defaultMethod,
+  defaultPhone,
+  defaultEmail,
 }: {
   defaultError?: string;
   defaultSuccess?: string;
+  /** Server passes the user's previously-chosen method via URL so a
+   *  failed-login redirect lands on the right tab. */
+  defaultMethod?: Method;
+  /** Pre-fill values from the URL on a failed-login redirect. Only the
+   *  password ever clears — the identifier stays so the user doesn't
+   *  have to retype their phone/email. */
+  defaultPhone?: string;
+  defaultEmail?: string;
 }) {
-  const [method, setMethod] = useState<Method>("phone");
+  const [method, setMethod] = useState<Method>(defaultMethod ?? "phone");
 
   return (
     <>
@@ -79,6 +90,7 @@ export function LoginMethodTabs({
               autoComplete="tel"
               inputMode="numeric"
               placeholder="99112233"
+              defaultValue={defaultPhone ?? ""}
               className="input-field"
             />
             <p className="text-caption2 text-muted-foreground mt-1.5">
@@ -98,6 +110,7 @@ export function LoginMethodTabs({
               autoFocus
               autoComplete="email"
               placeholder="name@example.com"
+              defaultValue={defaultEmail ?? ""}
               className="input-field"
             />
           </div>

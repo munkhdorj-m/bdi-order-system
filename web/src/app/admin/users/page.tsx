@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { Clock } from "lucide-react";
+import { Clock, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ApproveUserButton } from "@/components/admin/approve-user-button";
 
 type UserRow = {
@@ -125,11 +126,19 @@ export default async function AdminUsersPage({
 
   return (
     <div className="max-w-6xl">
-      <div className="mb-4">
-        <h1 className="text-[26px] font-bold tracking-tight">Хэрэглэгч</h1>
-        <p className="text-[13px] text-muted-foreground">
-          Нийт {allCount} хэрэглэгч
-        </p>
+      <div className="mb-4 flex items-baseline justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-[26px] font-bold tracking-tight">Хэрэглэгч</h1>
+          <p className="text-[13px] text-muted-foreground">
+            Нийт {allCount} хэрэглэгч
+          </p>
+        </div>
+        <Button asChild>
+          <Link href="/admin/users/new">
+            <Plus className="h-4 w-4" />
+            Шинэ хэрэглэгч
+          </Link>
+        </Button>
       </div>
 
       {/* Helper card */}

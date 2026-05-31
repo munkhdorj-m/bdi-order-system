@@ -284,7 +284,7 @@ function Chip({
   return (
     <Link
       href={href}
-      className={`whitespace-nowrap shrink-0 h-8 px-3 rounded-full text-[12px] font-semibold transition-all ${
+      className={`inline-flex items-center whitespace-nowrap shrink-0 h-8 px-3 rounded-full text-[12px] font-semibold leading-none transition-all ${
         active
           ? "bg-primary text-primary-foreground shadow-sm shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)]"
           : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-muted/80 dark:hover:bg-muted/60 hover:text-foreground"
