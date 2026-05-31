@@ -1,14 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, homePathForRole } from "@/lib/auth";
-import { LoginMethodTabs } from "@/components/login-method-tabs";
+import { signIn } from "./actions";
 
 type SearchParams = Promise<{
   error?: string;
   success?: string;
-  method?: "phone" | "email";
   phone?: string;
-  email?: string;
 }>;
 
 export default async function LoginPage({
@@ -18,7 +16,7 @@ export default async function LoginPage({
 }) {
   const session = await getSession();
   if (session) redirect(homePathForRole(session.profile));
-  const { error, success, method, phone, email } = await searchParams;
+  const { error, success, phone } = await searchParams;
 
   return (
     <main className="flex-1 flex flex-col lg:flex-row min-h-screen">
@@ -69,7 +67,9 @@ export default async function LoginPage({
         <div className="lg:hidden absolute left-0 right-0 -bottom-px h-5 bg-background rounded-t-3xl" />
       </div>
 
-      {/* Form panel */}
+      {/* Form panel — phone-only login. Email was removed app-wide; the
+          buyer is a store manager on their phone and admin accounts are
+          provisioned via /admin/users/new. */}
       <div className="flex-1 flex items-center justify-center bg-background px-6 pt-8 pb-12 lg:p-10">
         <div className="w-full max-w-sm">
           <div className="lg:mb-8">
@@ -80,17 +80,67 @@ export default async function LoginPage({
               Тавтай морил
             </h2>
             <p className="text-[13px] text-muted-foreground mt-1">
-              Утас эсвэл имэйлээр нэвтэрнэ үү
+              Утсаар нэвтэрнэ үү
             </p>
           </div>
 
-          <LoginMethodTabs
-            defaultError={error}
-            defaultSuccess={success}
-            defaultMethod={method}
-            defaultPhone={phone}
-            defaultEmail={email}
-          />
+          <form action={signIn} className="space-y-4">
+            <div>
+              <label htmlFor="phone" className="input-label">
+                Утасны дугаар
+              </label>
+              <input
+                id="phone"
+                name="phone"
+                type="tel"
+                required
+                autoFocus
+                autoComplete="tel"
+                inputMode="numeric"
+                placeholder="99112233"
+                defaultValue={phone ?? ""}
+                className="input-field"
+              />
+              <p className="text-caption2 text-muted-foreground mt-1.5">
+                8 оронтой Монгол утас.
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="password" className="input-label">
+                Нууц үг
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                required
+                autoComplete="current-password"
+                placeholder="••••••••"
+                className="input-field"
+              />
+            </div>
+
+            {success && (
+              <p className="text-caption rounded-lg px-3 py-2 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                {success === "phone-verified"
+                  ? "Утас баталгаажлаа. BDI-н ажилтан таны бүртгэлийг идэвхжүүлмэгц нэвтэрч орох боломжтой."
+                  : success}
+              </p>
+            )}
+            {error && (
+              <p
+                className="text-caption rounded-lg px-3 py-2 bg-destructive/10 text-destructive"
+                role="alert"
+              >
+                {error}
+              </p>
+            )}
+
+            <button type="submit" className="btn-primary w-full">
+              Нэвтрэх
+            </button>
+          </form>
 
           <p className="mt-6 text-caption text-muted-foreground text-center">
             Шинэ хэрэглэгч үү?{" "}

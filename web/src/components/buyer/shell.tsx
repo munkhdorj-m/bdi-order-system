@@ -9,7 +9,9 @@ import { CatalogSearchTrigger } from "./catalog-search-trigger";
 
 type Props = {
   storeName: string;
-  email: string | null;
+  /** Phone number to surface as the sign-out button's hover title.
+   *  Lets a buyer confirm which account they're about to log out of. */
+  phone: string | null;
   children: React.ReactNode;
   /** Slot for the notifications bell — passed in from the async parent
    *  layout so this client shell stays purely presentational. */
@@ -31,7 +33,7 @@ function storeInitial(name: string): string {
 
 export function BuyerShell({
   storeName,
-  email,
+  phone,
   children,
   bell,
   dealsChip,
@@ -93,7 +95,7 @@ export function BuyerShell({
                 type="submit"
                 className="size-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/70 active:scale-95 transition-all"
                 aria-label="Гарах"
-                title={email ?? "Гарах"}
+                title={phone ?? "Гарах"}
               >
                 <LogOut className="h-[18px] w-[18px]" />
               </button>

@@ -124,6 +124,30 @@ export async function startVerification(formData: FormData) {
     );
   }
 
+  // Duplicate-check BEFORE calling verify.mn — every verify.mn session
+  // costs 150₮ per verified phone, so we want to fail fast if the
+  // phone is already registered. We also save the user a wasted SMS.
+  //
+  // Match against both stored formats ("+97699112233" and "97699112233")
+  // since legacy rows can be in either shape.
+  {
+    const admin = createAdminClient();
+    const { data: existingProfile } = await admin
+      .from("profiles")
+      .select("id, active")
+      .in("phone", phoneVariants(phone))
+      .maybeSingle();
+    if (existingProfile?.id) {
+      redirect(
+        `/login?method=phone&phone=${encodeURIComponent(rawPhone)}&error=${encodeURIComponent(
+          existingProfile.active
+            ? "Энэ утас аль хэдийн бүртгэлтэй байна. Нэвтэрнэ үү."
+            : "Энэ утас бүртгэгдсэн ба админы баталгаажилт хүлээж байна. Бид баталгаажуулмагц нэвтрэх боломжтой.",
+        )}`,
+      );
+    }
+  }
+
   // Build the absolute callback URL verify.mn will hit when the user's
   // SMS lands. The {sessionId} segment lets the route handler identify
   // which session to mark verified.
@@ -243,15 +267,16 @@ export async function completeVerification() {
   // through), or create a fresh auth user.
   let userId: string | null = null;
 
-  // Check existing profile by phone first — if someone already
-  // partially registered with this number, reuse their id rather
-  // than create a duplicate auth user. We `.in()` both phone variants
-  // (with and without "+") because we may have legacy profile rows in
-  // either format.
+  // Hard duplicate-check: if a profile already exists for this phone,
+  // the account is fully registered (whether active=true or pending
+  // admin approval). Refuse the re-registration — the user should log
+  // in OR contact admin to reset their password. Without this guard a
+  // re-register would silently overwrite the existing profile's name
+  // and reset `active=false`, undoing prior admin approval.
   {
     const { data: existingProfile, error: existingErr } = await admin
       .from("profiles")
-      .select("id")
+      .select("id, active")
       .in("phone", phoneVariants(pending.phone))
       .maybeSingle();
     if (existingErr) {
@@ -261,10 +286,17 @@ export async function completeVerification() {
       );
     }
     if (existingProfile?.id) {
-      userId = existingProfile.id;
       console.info(
-        "[register/phone] reusing existing profile for phone:",
+        "[register/phone] duplicate phone — sending user to login",
         pending.phone,
+      );
+      await clearPendingCookie();
+      redirect(
+        `/login?method=phone&phone=${encodeURIComponent(pending.phone)}&error=${encodeURIComponent(
+          existingProfile.active
+            ? "Энэ утас аль хэдийн бүртгэлтэй байна. Нэвтэрнэ үү."
+            : "Энэ утас бүртгэгдсэн ба админы баталгаажилт хүлээж байна. Бид баталгаажуулмагц нэвтрэх боломжтой.",
+        )}`,
       );
     }
   }

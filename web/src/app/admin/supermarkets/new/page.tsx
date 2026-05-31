@@ -10,7 +10,7 @@ export default async function NewSupermarketPage() {
   const [{ data: reps }, { data: priceLists }, suggestions] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, email")
+      .select("id, full_name, phone")
       .eq("role", "rep")
       .order("full_name"),
     supabase

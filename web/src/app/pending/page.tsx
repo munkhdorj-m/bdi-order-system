@@ -12,7 +12,9 @@ export default async function PendingPage() {
           Бүртгэл хүлээгдэж байна
         </h1>
         <p className="text-muted-foreground mb-2">
-          <span className="font-mono text-sm">{session.email}</span>
+          <span className="font-mono text-sm">
+            {session.profile.phone ?? session.profile.full_name ?? "—"}
+          </span>
         </p>
         <p className="text-sm text-muted-foreground mb-8">
           Таны бүртгэлийг BDI-н ажилтан дэлгүүрт хуваарилах хүртэл хүлээнэ үү.

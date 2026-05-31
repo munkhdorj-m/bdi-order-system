@@ -14,7 +14,6 @@ export type Profile = {
 
 export type SessionContext = {
   userId: string;
-  email: string | null;
   profile: Profile;
 };
 
@@ -35,7 +34,6 @@ export async function getSession(): Promise<SessionContext | null> {
 
   return {
     userId: user.id,
-    email: user.email ?? null,
     profile: profile as Profile,
   };
 }
@@ -59,9 +57,9 @@ export function homePathForRole(profile: Profile): string {
 }
 
 /**
- * Public site URL used when handing redirect callbacks to Supabase (email
- * verification + password-reset links). Falls back to localhost for dev.
- * Set NEXT_PUBLIC_SITE_URL in deployed environments.
+ * Public site URL used for verify.mn callback links and any external
+ * absolute URLs. Falls back to localhost for dev. Set
+ * NEXT_PUBLIC_SITE_URL in deployed environments.
  */
 export function siteUrl(): string {
   return process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
@@ -71,14 +69,14 @@ export function siteUrl(): string {
  * Localize Supabase auth errors to Mongolian + collapse enumeration vectors.
  *
  * - `context: "register"` deliberately maps "user already exists" to a
- *   generic message so attackers can't probe the registered-email list.
+ *   generic message so attackers can't probe the registered-phone list.
  * - `context: "login"` keeps Supabase's already-generic "Invalid login
- *   credentials" (same message for wrong email OR wrong password — already
+ *   credentials" (same message for wrong phone OR wrong password — already
  *   safe), but localizes it.
  * - Unknown errors fall through to a generic message rather than echoing
  *   raw Supabase strings into URL query params.
  */
-type AuthErrorContext = "login" | "register" | "reset" | "forgot" | "callback";
+type AuthErrorContext = "login" | "register" | "callback";
 
 export function mapAuthError(
   error: { message?: string; code?: string } | string,
@@ -93,10 +91,10 @@ export function mapAuthError(
     key.includes("invalid login credentials") ||
     key.includes("invalid_credentials")
   ) {
-    return "Имэйл эсвэл нууц үг буруу байна.";
+    return "Утас эсвэл нууц үг буруу байна.";
   }
-  if (key.includes("email not confirmed")) {
-    return "Имэйл хаягаа баталгаажуулна уу. Шуудангаа шалгана уу.";
+  if (key.includes("phone not confirmed")) {
+    return "Утасны дугаараа баталгаажуулна уу.";
   }
   if (key.includes("rate limit") || key.includes("too many")) {
     return "Хэт олон удаа оролдсон тул түр хүлээгээд дахин оролдоно уу.";
@@ -107,13 +105,6 @@ export function mapAuthError(
     key.includes("weak_password")
   ) {
     return "Нууц үг шаардлага хангахгүй байна.";
-  }
-  if (
-    key.includes("token has expired") ||
-    key.includes("invalid token") ||
-    key.includes("otp_expired")
-  ) {
-    return "Холбоосын хугацаа дууссан байна. Шинэ холбоос авна уу.";
   }
   if (key.includes("new password should be different")) {
     return "Шинэ нууц үг өмнөхөөс өөр байх ёстой.";
@@ -132,7 +123,7 @@ export function mapAuthError(
     if (context === "register") {
       return "Бүртгэл үүсгэхэд алдаа гарлаа. Дахин оролдоно уу.";
     }
-    return "Энэ имэйл аль хэдийн ашиглагдаж байна.";
+    return "Энэ утасны дугаар аль хэдийн ашиглагдаж байна.";
   }
   if (
     key.includes("database error saving") ||
@@ -143,8 +134,8 @@ export function mapAuthError(
     // the real cause; the user sees a friendly message.
     return "Бүртгэл үүсгэхэд алдаа гарлаа. Дахин оролдоно уу.";
   }
-  if (key.includes("email") && key.includes("invalid")) {
-    return "Имэйл хаяг буруу байна.";
+  if (key.includes("phone") && key.includes("invalid")) {
+    return "Утасны дугаар буруу байна.";
   }
   if (key.includes("signups not allowed") || key.includes("signup_disabled")) {
     return "Шинэ бүртгэл хүлээж аваагүй байна. BDI-н ажилтантай холбогдоно уу.";
@@ -152,8 +143,8 @@ export function mapAuthError(
   if (key === "missing-credentials" || key === "missing-fields") {
     return "Бүх талбарыг бөглөнө үү.";
   }
-  if (key === "missing-email") {
-    return "Имэйл хаягаа оруулна уу.";
+  if (key === "missing-phone") {
+    return "Утасны дугаараа оруулна уу.";
   }
   if (key === "missing-password") {
     return "Нууц үгээ оруулна уу.";

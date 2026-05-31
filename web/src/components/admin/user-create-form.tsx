@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState, useState } from "react";
-import { AlertCircle, Mail, Phone } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +17,6 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { createUserAccount } from "@/app/admin/users/actions";
 
 type Role = "admin" | "rep" | "buyer";
-type Method = "phone" | "email";
 
 const ROLE_LABELS: Record<Role, string> = {
   admin: "Админ",
@@ -33,17 +32,18 @@ export type SupermarketOption = {
 
 /**
  * Admin "create user on someone's behalf" form. Bypasses the normal
- * verify.mn / email-confirm signup flow because the admin is vouching
- * for the credentials — the resulting account lands active=true and
- * the user can log in immediately with whatever password the admin
- * set.
+ * verify.mn signup flow because the admin is vouching for the
+ * credentials — the resulting account lands active=true and the user
+ * can log in immediately with whatever password the admin set.
+ *
+ * Phone-only: email login was removed from the app, so this form only
+ * collects a Mongolian phone number.
  */
 export function UserCreateForm({
   supermarkets,
 }: {
   supermarkets: SupermarketOption[];
 }) {
-  const [method, setMethod] = useState<Method>("phone");
   const [role, setRole] = useState<Role>("buyer");
   const [state, formAction, pending] = useActionState(createUserAccount, {});
 
@@ -62,86 +62,33 @@ export function UserCreateForm({
         </div>
       )}
 
-      {/* Identifier — Phone / Email toggle */}
+      {/* Credentials — phone + password. Phone is the only identifier
+          the system accepts now (email login was removed). */}
       <section className="rounded-2xl bg-card ring-1 ring-border p-5 sm:p-6 space-y-4">
         <header>
           <h3 className="text-[14.5px] font-bold tracking-tight">
-            Танигдах арга
+            Нэвтрэх мэдээлэл
           </h3>
           <p className="text-[12px] text-muted-foreground mt-0.5">
-            Хэрэглэгч энэ дугаар эсвэл имэйлээр нэвтрэх боломжтой
+            Хэрэглэгч энэ дугаараар нэвтэрнэ
           </p>
         </header>
 
-        <input type="hidden" name="method" value={method} />
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => setMethod("phone")}
-            aria-pressed={method === "phone"}
-            className={`rounded-xl ring-1 p-3 text-left transition-all ${
-              method === "phone"
-                ? "ring-primary bg-[color-mix(in_oklch,var(--primary)_6%,var(--card))] shadow-sm"
-                : "ring-border bg-card hover:bg-muted/40"
-            }`}
-          >
-            <Phone
-              className={`h-4 w-4 mb-1.5 ${method === "phone" ? "text-primary" : "text-muted-foreground"}`}
-            />
-            <div className="text-[13px] font-bold">Утсаар</div>
-            <div className="text-[10.5px] text-muted-foreground leading-tight mt-0.5">
-              Монгол утасны дугаар
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMethod("email")}
-            aria-pressed={method === "email"}
-            className={`rounded-xl ring-1 p-3 text-left transition-all ${
-              method === "email"
-                ? "ring-primary bg-[color-mix(in_oklch,var(--primary)_6%,var(--card))] shadow-sm"
-                : "ring-border bg-card hover:bg-muted/40"
-            }`}
-          >
-            <Mail
-              className={`h-4 w-4 mb-1.5 ${method === "email" ? "text-primary" : "text-muted-foreground"}`}
-            />
-            <div className="text-[13px] font-bold">Имэйлээр</div>
-            <div className="text-[10.5px] text-muted-foreground leading-tight mt-0.5">
-              Корпорат имэйл
-            </div>
-          </button>
+        <div>
+          <Label htmlFor="phone">Утасны дугаар *</Label>
+          <Input
+            id="phone"
+            name="phone"
+            type="tel"
+            autoComplete="off"
+            inputMode="numeric"
+            placeholder="99112233"
+            required
+          />
+          <p className="text-[11px] text-muted-foreground mt-1.5">
+            8 оронтой Монгол утас.
+          </p>
         </div>
-
-        {method === "phone" ? (
-          <div>
-            <Label htmlFor="phone">Утасны дугаар *</Label>
-            <Input
-              id="phone"
-              name="phone"
-              type="tel"
-              autoComplete="off"
-              inputMode="numeric"
-              placeholder="99112233"
-              required
-            />
-            <p className="text-[11px] text-muted-foreground mt-1.5">
-              8 оронтой Монгол утас.
-            </p>
-          </div>
-        ) : (
-          <div>
-            <Label htmlFor="email">Имэйл *</Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="off"
-              placeholder="name@example.com"
-              required
-            />
-          </div>
-        )}
 
         <div>
           <Label htmlFor="password">Нууц үг *</Label>

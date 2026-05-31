@@ -27,7 +27,7 @@ type PriceRow = {
 type StoreContext = {
   name: string;
   district: string | null;
-  profiles: { full_name: string | null; email: string | null } | null;
+  profiles: { full_name: string | null; phone: string | null } | null;
 };
 
 function shortLabel(name: string): string {
@@ -52,7 +52,7 @@ export default async function RepCatalogPage({
   const { data: storeRaw } = await supabase
     .from("supermarkets")
     .select(
-      "name, district, profiles:assigned_rep_id(full_name, email)",
+      "name, district, profiles:assigned_rep_id(full_name, phone)",
     )
     .eq("id", id)
     .single();
@@ -123,7 +123,7 @@ export default async function RepCatalogPage({
   }
 
   const onBehalfOf =
-    store.profiles?.full_name ?? store.profiles?.email ?? "Худалдан авагч";
+    store.profiles?.full_name ?? store.profiles?.phone ?? "Худалдан авагч";
 
   return (
     <div>

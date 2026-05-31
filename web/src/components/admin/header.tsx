@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { MobileNav } from "./mobile-nav";
 
 type Props = {
-  email: string | null;
+  phone: string | null;
   name: string | null;
 };
 
@@ -18,7 +18,7 @@ type Props = {
  * so the bell has fresh data on every navigation. Capped at 20 latest
  * rows; the full feed lives at /notifications.
  */
-export async function AdminHeader({ email, name }: Props) {
+export async function AdminHeader({ phone, name }: Props) {
   const supabase = await createClient();
   const { data: notifs } = await supabase
     .from("notifications")
@@ -38,9 +38,9 @@ export async function AdminHeader({ email, name }: Props) {
           {name && (
             <div className="text-sm font-medium leading-tight">{name}</div>
           )}
-          {email && (
-            <div className="text-xs text-muted-foreground leading-tight">
-              {email}
+          {phone && (
+            <div className="text-xs text-muted-foreground leading-tight font-mono">
+              {phone}
             </div>
           )}
         </div>

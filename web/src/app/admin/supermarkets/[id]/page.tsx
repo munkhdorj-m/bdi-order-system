@@ -33,7 +33,7 @@ export default async function EditSupermarketPage({
       .single(),
     supabase
       .from("profiles")
-      .select("id, full_name, email")
+      .select("id, full_name, phone")
       .eq("role", "rep")
       .order("full_name"),
     supabase

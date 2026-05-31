@@ -140,14 +140,99 @@ export async function revokeUser(userId: string): Promise<Result> {
 }
 
 /**
- * Admin creates a new user account on someone's behalf. Bypasses the
- * normal email-confirmation / verify.mn signup dance — the admin
- * vouches for the credentials and the resulting profile lands
- * active=true so the user can log in immediately.
+ * Hard-delete a user account. Removes from auth.users, which cascades
+ * to profiles via the FK ON DELETE CASCADE.
  *
- * Either email or phone is required (not both). Supabase auth.users
- * stores phones without the leading "+"; we normalize and strip
- * before persisting.
+ * Refuses to delete when:
+ *   - userId is falsy
+ *   - caller isn't admin
+ *   - target IS the caller (would lock you out)
+ *   - target is the last admin in the system (would brick admin access)
+ *   - target has placed orders (orders.placed_by FK has no ON DELETE,
+ *     so the DB would reject the delete with a foreign-key violation —
+ *     we catch it up-front with a friendly Mongolian message and steer
+ *     admin toward `revokeUser` (suspend) instead).
+ *
+ * supermarkets.assigned_rep_id is `ON DELETE SET NULL` so deleting a
+ * rep just unassigns them from their stores — no extra cleanup needed.
+ */
+export async function deleteUser(userId: string): Promise<Result> {
+  if (!userId) return { error: "Хэрэглэгчийн ID байхгүй." };
+
+  const guard = await requireAdmin();
+  if ("error" in guard) return { error: guard.error };
+
+  const session = await getSession();
+  if (session?.userId === userId) {
+    return { error: "Өөрийнхөө бүртгэлийг устгаж болохгүй." };
+  }
+
+  const admin = createAdminClient();
+
+  // Guard: if this user is currently the only active admin, refuse —
+  // deleting them would leave the system with no one who can manage it.
+  const { data: target } = await admin
+    .from("profiles")
+    .select("role, full_name, phone")
+    .eq("id", userId)
+    .single();
+  if (!target) return { error: "Хэрэглэгч олдсонгүй." };
+  if (target.role === "admin") {
+    const { count: adminCount } = await admin
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .eq("role", "admin")
+      .eq("active", true);
+    if ((adminCount ?? 0) <= 1) {
+      return {
+        error:
+          "Сүүлчийн идэвхтэй админыг устгах боломжгүй. Эхлээд өөр админ томилно уу.",
+      };
+    }
+  }
+
+  // Guard: orders.placed_by has no ON DELETE clause, so a delete will
+  // fail at the DB level if this user has any orders. Surface a
+  // friendly message and recommend suspending the account instead.
+  const { count: orderCount } = await admin
+    .from("orders")
+    .select("*", { count: "exact", head: true })
+    .eq("placed_by", userId);
+  if ((orderCount ?? 0) > 0) {
+    return {
+      error: `Энэ хэрэглэгч ${orderCount} захиалга үүсгэсэн тул устгах боломжгүй. Бүртгэлийг устгахын оронд идэвхгүй болгож (цуцалж) ашиглаарай.`,
+    };
+  }
+
+  const { error: deleteErr } = await admin.auth.admin.deleteUser(userId);
+  if (deleteErr) {
+    console.error("[admin/users/delete] auth.admin.deleteUser failed:", deleteErr);
+    return { error: deleteErr.message };
+  }
+
+  console.info(
+    "[admin/users/delete] removed user",
+    userId,
+    "name:",
+    target.full_name,
+    "by admin:",
+    session?.userId,
+  );
+
+  revalidatePath("/admin/users");
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+/**
+ * Admin creates a new user account on someone's behalf. Bypasses the
+ * normal verify.mn signup flow — the admin vouches for the credentials
+ * and the resulting profile lands active=true so the user can log in
+ * immediately.
+ *
+ * Phone-only: the app dropped email login entirely. Supabase auth.users
+ * stores phones without the leading "+"; we normalize and strip before
+ * persisting.
  */
 export async function createUserAccount(
   _prev: ActionState,
@@ -156,7 +241,6 @@ export async function createUserAccount(
   const guard = await requireAdmin();
   if ("error" in guard) return { error: guard.error };
 
-  const method = parseString(formData.get("method")) ?? "phone";
   const fullName = parseString(formData.get("full_name"));
   const password = String(formData.get("password") ?? "");
   const roleRaw = parseString(formData.get("role")) ?? "buyer";
@@ -173,46 +257,70 @@ export async function createUserAccount(
     };
   }
 
-  // Build the auth.users payload. Either phone OR email must be set —
-  // both is allowed but rare.
-  type AuthPayload = {
-    email?: string;
-    phone?: string;
-    password: string;
-    email_confirm?: boolean;
-    phone_confirm?: boolean;
-    user_metadata?: Record<string, string>;
-  };
-  const authPayload: AuthPayload = { password };
-
-  let normalizedPhone: string | null = null;
-  if (method === "phone") {
-    const rawPhone = parseString(formData.get("phone"));
-    if (!rawPhone) return { error: "Утасны дугаар оруулна уу." };
-    const e164 = normalizeMnPhone(rawPhone);
-    if (!e164) {
-      return {
-        error: "Утасны дугаар буруу байна (жишээ нь: 99112233).",
-      };
-    }
-    // Supabase stores phones as digits-only (no leading "+").
-    normalizedPhone = e164.startsWith("+") ? e164.slice(1) : e164;
-    authPayload.phone = normalizedPhone;
-    authPayload.phone_confirm = true;
-  } else {
-    const email = parseString(formData.get("email"));
-    if (!email) return { error: "Имэйл оруулна уу." };
-    authPayload.email = email;
-    authPayload.email_confirm = true;
+  const rawPhone = parseString(formData.get("phone"));
+  if (!rawPhone) return { error: "Утасны дугаар оруулна уу." };
+  const e164 = normalizeMnPhone(rawPhone);
+  if (!e164) {
+    return {
+      error: "Утасны дугаар буруу байна (жишээ нь: 99112233).",
+    };
   }
-
-  if (fullName) authPayload.user_metadata = { full_name: fullName };
+  // Supabase stores phones as digits-only (no leading "+").
+  const normalizedPhone = e164.startsWith("+") ? e164.slice(1) : e164;
 
   const admin = createAdminClient();
+
+  // Pre-check: refuse to create an account if the phone is already in
+  // use. Supabase's admin.createUser doesn't reliably reject duplicate
+  // phones across versions, so we enforce uniqueness in app code first.
+  // We check BOTH profiles (canonical record) and auth.users (catches
+  // orphaned auth rows from past failed flows).
+  // Match either phone format (with/without leading "+") to catch
+  // legacy rows in either shape.
+  const phoneCandidates = [normalizedPhone, `+${normalizedPhone}`];
+  const { data: dupProfile } = await admin
+    .from("profiles")
+    .select("id")
+    .in("phone", phoneCandidates)
+    .maybeSingle();
+  if (dupProfile) {
+    return {
+      error:
+        "Энэ утасны дугаар аль хэдийн бүртгэлтэй байна. Өөр дугаар сонгоно уу.",
+    };
+  }
+  // Belt-and-suspenders: scan auth.users via listUsers. Catches the
+  // case where auth.users has the row but no profile (orphan).
+  const { data: list } = await admin.auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
+  });
+  const phoneSet = new Set(phoneCandidates);
+  const dupAuth = list?.users.find(
+    (u) => u.phone && phoneSet.has(u.phone),
+  );
+  if (dupAuth) {
+    return {
+      error:
+        "Энэ утасны дугаар аль хэдийн бүртгэлтэй байна. Өөр дугаар сонгоно уу.",
+    };
+  }
+
   const { data: created, error: createErr } =
-    await admin.auth.admin.createUser(authPayload);
+    await admin.auth.admin.createUser({
+      phone: normalizedPhone,
+      password,
+      phone_confirm: true,
+      user_metadata: fullName ? { full_name: fullName } : undefined,
+    });
   if (createErr) {
     console.error("[admin/users/create] createUser failed:", createErr);
+    if (/already (registered|exists)/i.test(createErr.message)) {
+      return {
+        error:
+          "Энэ утасны дугаар аль хэдийн бүртгэлтэй байна. Өөр дугаар сонгоно уу.",
+      };
+    }
     return { error: createErr.message };
   }
 
@@ -222,29 +330,25 @@ export async function createUserAccount(
   }
 
   // Belt-and-suspenders confirmation (matches register/phone path —
-  // some Supabase versions don't honor the *_confirm flag on create).
+  // some Supabase versions don't honor the phone_confirm flag on
+  // create).
   await admin.auth.admin.updateUserById(userId, {
-    email_confirm: method === "email",
-    phone_confirm: method === "phone",
+    phone_confirm: true,
   });
 
   // Upsert profile. active=true because admin is vouching — no
   // pending-approval gate when an admin creates the account.
-  const profilePayload: Record<string, unknown> = {
-    id: userId,
-    full_name: fullName,
-    role,
-    active: true,
-    supermarket_id: role === "buyer" ? supermarketId : null,
-  };
-  if (method === "phone") profilePayload.phone = normalizedPhone;
-  if (method === "email") {
-    profilePayload.email = parseString(formData.get("email"));
-  }
-
-  const { error: profileErr } = await admin
-    .from("profiles")
-    .upsert(profilePayload, { onConflict: "id" });
+  const { error: profileErr } = await admin.from("profiles").upsert(
+    {
+      id: userId,
+      full_name: fullName,
+      phone: normalizedPhone,
+      role,
+      active: true,
+      supermarket_id: role === "buyer" ? supermarketId : null,
+    },
+    { onConflict: "id" },
+  );
   if (profileErr) {
     console.error(
       "[admin/users/create] profile upsert failed:",

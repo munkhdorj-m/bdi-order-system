@@ -12,7 +12,9 @@ export default async function InactivePage() {
           Бүртгэл идэвхгүй
         </h1>
         <p className="text-muted-foreground mb-2">
-          <span className="font-mono text-sm">{session.email}</span>
+          <span className="font-mono text-sm">
+            {session.profile.phone ?? session.profile.full_name ?? "—"}
+          </span>
         </p>
         <p className="text-sm text-muted-foreground mb-8">
           Таны бүртгэл идэвхгүй болсон байна. BDI-н ажилтантай холбогдоно уу.

@@ -18,7 +18,6 @@ import { ActiveSwitch } from "@/components/ui/active-switch";
 
 export type UserFormDefaults = {
   id: string;
-  email: string | null;
   phone: string | null;
   full_name: string | null;
   role: "admin" | "rep" | "buyer";
@@ -71,15 +70,9 @@ export function UserForm({ defaults, supermarkets, action, isSelf }: Props) {
           <CardTitle className="text-base">Бүртгэлийн мэдээлэл</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <div className="text-muted-foreground">Имэйл</div>
-              <div className="font-mono">{defaults.email ?? "—"}</div>
-            </div>
-            <div>
-              <div className="text-muted-foreground">Утас</div>
-              <div className="font-mono">{defaults.phone ?? "—"}</div>
-            </div>
+          <div className="md:col-span-2 text-sm">
+            <div className="text-muted-foreground">Утас</div>
+            <div className="font-mono">{defaults.phone ?? "—"}</div>
           </div>
 
           <div className="md:col-span-2">

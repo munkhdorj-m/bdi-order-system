@@ -29,7 +29,7 @@ type SupermarketRow = {
   address: string | null;
   contact_phone: string | null;
   active: boolean;
-  profiles: { full_name: string | null; email: string | null } | null;
+  profiles: { full_name: string | null; phone: string | null } | null;
 };
 
 type SearchParams = Promise<{
@@ -85,7 +85,7 @@ export default async function AdminSupermarketsPage({
   let query = supabase
     .from("supermarkets")
     .select(
-      "id, name, type, district, address, contact_phone, active, profiles:assigned_rep_id(full_name, email)",
+      "id, name, type, district, address, contact_phone, active, profiles:assigned_rep_id(full_name, phone)",
       { count: "exact" },
     )
     .order("name");
@@ -248,14 +248,14 @@ export default async function AdminSupermarketsPage({
                       </Badge>
                     )}
                   </div>
-                  {(s.contact_phone || s.profiles?.full_name || s.profiles?.email) && (
+                  {(s.contact_phone || s.profiles?.full_name || s.profiles?.phone) && (
                     <div className="mt-2 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
                       {s.contact_phone && (
                         <span className="font-mono">{s.contact_phone}</span>
                       )}
-                      {(s.profiles?.full_name || s.profiles?.email) && (
+                      {(s.profiles?.full_name || s.profiles?.phone) && (
                         <span>
-                          Хариуцагч: {s.profiles.full_name ?? s.profiles.email}
+                          Хариуцагч: {s.profiles.full_name ?? s.profiles.phone}
                         </span>
                       )}
                     </div>
@@ -319,14 +319,14 @@ export default async function AdminSupermarketsPage({
                         <span className="font-mono">{s.contact_phone}</span>
                       </div>
                     )}
-                    {(s.profiles?.full_name || s.profiles?.email) && (
+                    {(s.profiles?.full_name || s.profiles?.phone) && (
                       <div className="flex items-center gap-1.5 text-muted-foreground truncate">
                         <User
                           className="h-3.5 w-3.5 shrink-0"
                           strokeWidth={2.2}
                         />
                         <span className="truncate">
-                          {s.profiles.full_name ?? s.profiles.email}
+                          {s.profiles.full_name ?? s.profiles.phone}
                         </span>
                       </div>
                     )}

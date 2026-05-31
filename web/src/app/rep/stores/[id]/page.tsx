@@ -15,7 +15,7 @@ type Store = {
   address: string | null;
   contact_phone: string | null;
   district: string | null;
-  profiles: { full_name: string | null; email: string | null } | null;
+  profiles: { full_name: string | null; phone: string | null } | null;
 };
 
 type OrderRow = {
@@ -54,7 +54,7 @@ export default async function RepStoreDetailPage({
       supabase
         .from("supermarkets")
         .select(
-          "id, name, address, contact_phone, district, profiles:assigned_rep_id(full_name, email)",
+          "id, name, address, contact_phone, district, profiles:assigned_rep_id(full_name, phone)",
         )
         .eq("id", id)
         .single(),

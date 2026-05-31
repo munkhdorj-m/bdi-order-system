@@ -26,11 +26,10 @@ type OrderDetail = {
     name: string;
     address: string | null;
     contact_phone: string | null;
-    profiles: { full_name: string | null; email: string | null } | null;
+    profiles: { full_name: string | null; phone: string | null } | null;
   } | null;
   buyer: {
     full_name: string | null;
-    email: string | null;
     phone: string | null;
   } | null;
   order_items: {
@@ -68,8 +67,8 @@ export default async function AdminOrderDetailPage({
     .from("orders")
     .select(
       `id, order_number, status, subtotal, discount_total, payment_method, notes, created_at, confirmed_at, shipped_at, delivered_at,
-       supermarkets:supermarket_id(name, address, contact_phone, profiles:assigned_rep_id(full_name, email)),
-       buyer:placed_by(full_name, email, phone),
+       supermarkets:supermarket_id(name, address, contact_phone, profiles:assigned_rep_id(full_name, phone)),
+       buyer:placed_by(full_name, phone),
        order_items(id, product_name_snapshot, qty, unit_price, line_total)`,
     )
     .eq("id", id)
@@ -280,11 +279,11 @@ export default async function AdminOrderDetailPage({
               label="Захиалсан"
               value={
                 order.buyer?.full_name ??
-                order.buyer?.email ??
+                order.buyer?.phone ??
                 "—"
               }
             />
-            {order.buyer?.phone && (
+            {order.buyer?.full_name && order.buyer.phone && (
               <FactRow label="Утас" value={order.buyer.phone} mono />
             )}
             {order.supermarkets?.profiles?.full_name && (

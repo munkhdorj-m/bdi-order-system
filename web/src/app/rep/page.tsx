@@ -93,7 +93,7 @@ export default async function MyStoresPage() {
   }));
   const warnCount = enriched.filter((s) => s.relative.status === "warn").length;
 
-  const repInitials = (session.profile.full_name ?? session.email ?? "—")
+  const repInitials = (session.profile.full_name ?? session.profile.phone ?? "—")
     .trim()
     .split(/\s+/)
     .map((part) => part[0]?.toUpperCase())
@@ -121,7 +121,7 @@ export default async function MyStoresPage() {
                 Төлөөлөгч
               </div>
               <div className="text-[14px] font-bold truncate">
-                {session.profile.full_name ?? session.email ?? "—"}
+                {session.profile.full_name ?? session.profile.phone ?? "—"}
               </div>
             </div>
             <button className="size-9 rounded-xl bg-white/15 backdrop-blur ring-1 ring-white/20 flex items-center justify-center">

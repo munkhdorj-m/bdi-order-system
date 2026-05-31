@@ -34,7 +34,7 @@ export type SupermarketFormDefaults = {
 export type RepOption = {
   id: string;
   full_name: string | null;
-  email: string | null;
+  phone: string | null;
 };
 
 export type PriceListOption = {
@@ -230,7 +230,7 @@ export function SupermarketForm({
                 <SelectItem value="__none">— Хариуцагчгүй —</SelectItem>
                 {reps.map((r) => (
                   <SelectItem key={r.id} value={r.id}>
-                    {r.full_name || r.email || r.id.slice(0, 8)}
+                    {r.full_name || r.phone || r.id.slice(0, 8)}
                   </SelectItem>
                 ))}
               </SelectContent>

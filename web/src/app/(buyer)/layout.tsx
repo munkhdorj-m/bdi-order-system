@@ -82,7 +82,7 @@ export default async function BuyerLayout({
   return (
     <BuyerShell
       storeName={store?.name ?? ""}
-      email={session.email}
+      phone={session.profile.phone}
       bell={<NotificationsBell notifications={items} unreadCount={unread} />}
       dealsChip={
         <DiscountsChip cards={dealCards} count={dealCards.length} />

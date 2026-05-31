@@ -9,7 +9,6 @@ import { ApproveUserButton } from "@/components/admin/approve-user-button";
 type UserRow = {
   id: string;
   full_name: string | null;
-  email: string | null;
   phone: string | null;
   role: "admin" | "rep" | "buyer";
   active: boolean;
@@ -37,7 +36,7 @@ const ROLE_PILL: Record<UserRow["role"], string> = {
 };
 
 function avatarInitial(u: UserRow): string {
-  const source = u.full_name || u.email || "?";
+  const source = u.full_name || u.phone || "?";
   const trimmed = source.trim();
   return trimmed[0]?.toUpperCase() ?? "?";
 }
@@ -77,7 +76,7 @@ export default async function AdminUsersPage({
       let q = supabase
         .from("profiles")
         .select(
-          "id, full_name, email, phone, role, active, supermarkets:supermarket_id(name)",
+          "id, full_name, phone, role, active, supermarkets:supermarket_id(name)",
         )
         .order("role")
         .order("created_at", { ascending: false });
@@ -146,8 +145,8 @@ export default async function AdminUsersPage({
         <p className="font-semibold mb-1">Шинэ хэрэглэгч нэмэхдээ:</p>
         <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
           <li>
-            Тэр хүн <span className="font-mono">/login</span> -ээр өөрийн
-            имэйлээ ашиглан нэвтэрнэ.
+            Тэр хүн <span className="font-mono">/register</span> -ээр утсаараа
+            бүртгүүлнэ.
           </li>
           <li>
             Эхэлж <em>Худалдан авагч</em> (хүлээгдэх) төлөвөөр бүртгэгдэнэ.
@@ -155,6 +154,10 @@ export default async function AdminUsersPage({
           <li>
             Та эндээс түүний эрхийг, шаардлагатай бол дэлгүүрийг сонгож
             хадгална.
+          </li>
+          <li>
+            Эсвэл <span className="font-mono">/admin/users/new</span> -ээр
+            өөрөө шууд үүсгэнэ.
           </li>
         </ol>
       </Card>
@@ -231,11 +234,11 @@ export default async function AdminUsersPage({
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px] font-semibold truncate">
-                        {u.full_name || u.email || u.id.slice(0, 8)}
+                        {u.full_name || u.phone || u.id.slice(0, 8)}
                       </div>
-                      {u.email && u.full_name && (
+                      {u.phone && u.full_name && (
                         <div className="text-[11px] text-muted-foreground font-mono truncate">
-                          {u.email}
+                          {u.phone}
                         </div>
                       )}
                     </div>
@@ -270,7 +273,7 @@ export default async function AdminUsersPage({
                   <div className="px-3 pb-3 -mt-1 flex justify-end">
                     <ApproveUserButton
                       userId={u.id}
-                      userLabel={u.full_name || u.email || u.id.slice(0, 8)}
+                      userLabel={u.full_name || u.phone || u.id.slice(0, 8)}
                     />
                   </div>
                 )}
@@ -306,11 +309,11 @@ export default async function AdminUsersPage({
                         </div>
                         <div className="min-w-0">
                           <div className="font-semibold group-hover/u:underline truncate">
-                            {u.full_name || u.email || u.id.slice(0, 8)}
+                            {u.full_name || u.phone || u.id.slice(0, 8)}
                           </div>
-                          {u.email && u.full_name && (
+                          {u.phone && u.full_name && (
                             <div className="text-[11px] text-muted-foreground font-mono truncate">
-                              {u.email}
+                              {u.phone}
                             </div>
                           )}
                         </div>
@@ -324,7 +327,7 @@ export default async function AdminUsersPage({
                       </span>
                     </td>
                     <td className="px-3 py-3 font-mono text-[12px]">
-                      {u.phone ? u.phone : u.email ? u.email : "—"}
+                      {u.phone ?? "—"}
                     </td>
                     <td className="px-3 py-3 text-[12.5px]">
                       {u.role === "buyer" ? (
@@ -349,7 +352,7 @@ export default async function AdminUsersPage({
                           <ApproveUserButton
                             userId={u.id}
                             userLabel={
-                              u.full_name || u.email || u.id.slice(0, 8)
+                              u.full_name || u.phone || u.id.slice(0, 8)
                             }
                           />
                         </div>
