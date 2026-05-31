@@ -29,9 +29,18 @@ export async function GET(
 ) {
   const { sessionId } = await params;
 
-  // Best-effort verification check. Errors are swallowed and we still
-  // return 200 so verify.mn doesn't retry forever — if the check fails
-  // here, the client's poll endpoint will retry on next tick anyway.
+  // verify.mn fires GET to the exact callback URL we gave it during
+  // createSession. Since that URL has to be specified BEFORE we have
+  // the sessionId, we use a single "noop" sentinel path. Recognize it
+  // and skip — the client poller is the source of truth for status.
+  if (sessionId === "noop" || sessionId === "placeholder") {
+    return NextResponse.json({ ok: true });
+  }
+
+  // For per-session callback URLs (if we ever switch to a verify.mn
+  // tier that supports them), treat as "check now" — pull verify.mn
+  // status and flip our row if VERIFIED. Errors swallowed; the
+  // client's poll endpoint retries on the next tick anyway.
   try {
     const status = await checkPhoneVerification(sessionId);
     if (status.sessionStatus === "VERIFIED") {
@@ -40,7 +49,7 @@ export async function GET(
         .from("verify_mn_sessions")
         .update({ verified: true, verified_at: new Date().toISOString() })
         .eq("session_id", sessionId)
-        .eq("verified", false); // skip noop updates on already-verified rows
+        .eq("verified", false);
     }
   } catch (e) {
     console.error("[verify.mn callback] check failed:", e);

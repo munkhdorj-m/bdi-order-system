@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, homePathForRole } from "@/lib/auth";
-import { signInWithEmail } from "./actions";
+import { LoginMethodTabs } from "@/components/login-method-tabs";
 
 type SearchParams = Promise<{ error?: string; success?: string }>;
 
@@ -73,77 +73,16 @@ export default async function LoginPage({
               Тавтай морил
             </h2>
             <p className="text-[13px] text-muted-foreground mt-1">
-              Имэйл болон нууц үгээр нэвтэрнэ үү
+              Утас эсвэл имэйлээр нэвтэрнэ үү
             </p>
           </div>
 
-          <form action={signInWithEmail} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="input-label">
-                Имэйл
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                autoFocus
-                autoComplete="email"
-                placeholder="name@example.com"
-                className="input-field"
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="input-label">
-                Нууц үг
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                autoComplete="current-password"
-                placeholder="••••••••"
-                className="input-field"
-              />
-            </div>
-
-            {success && (
-              <p className="text-caption rounded-lg px-3 py-2 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-                {success === "password-reset"
-                  ? "Нууц үг амжилттай солигдлоо. Шинэ нууц үгээрээ нэвтэрнэ үү."
-                  : success === "phone-verified"
-                    ? "Утас баталгаажлаа. BDI-н ажилтан таны бүртгэлийг идэвхжүүлмэгц нэвтэрч орох боломжтой."
-                    : success}
-              </p>
-            )}
-            {error && (
-              <p
-                className="text-caption rounded-lg px-3 py-2 bg-destructive/10 text-destructive"
-                role="alert"
-              >
-                {error}
-              </p>
-            )}
-
-            <div className="flex justify-end pt-1">
-              <Link
-                href="/forgot-password"
-                className="text-caption2 text-primary hover:underline"
-              >
-                Нууц үг мартсан?
-              </Link>
-            </div>
-
-            <button type="submit" className="btn-primary w-full">
-              Нэвтрэх
-            </button>
-          </form>
+          <LoginMethodTabs defaultError={error} defaultSuccess={success} />
 
           <p className="mt-6 text-caption text-muted-foreground text-center">
             Шинэ хэрэглэгч үү?{" "}
             <Link
-              href="/register"
+              href="/register/phone"
               className="text-primary font-semibold hover:underline"
             >
               Бүртгүүлэх
