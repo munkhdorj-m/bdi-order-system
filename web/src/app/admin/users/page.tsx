@@ -170,7 +170,7 @@ export default async function AdminUsersPage({
               "bg-amber-50 text-amber-700 ring-1 ring-amber-300/60 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800/60 dark:hover:bg-amber-950/60";
           } else {
             chipClass =
-              "bg-muted text-muted-foreground ring-1 ring-border hover:bg-[oklch(0.95_0.005_264)] hover:text-foreground";
+              "bg-muted text-muted-foreground ring-1 ring-border hover:bg-muted/80 dark:hover:bg-muted/60 hover:text-foreground";
           }
           return (
             <Link

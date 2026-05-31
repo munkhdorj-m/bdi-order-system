@@ -287,7 +287,7 @@ function Chip({
       className={`whitespace-nowrap shrink-0 h-8 px-3 rounded-full text-[12px] font-semibold transition-all ${
         active
           ? "bg-primary text-primary-foreground shadow-sm shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)]"
-          : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-[oklch(0.95_0.005_264)] hover:text-foreground"
+          : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-muted/80 dark:hover:bg-muted/60 hover:text-foreground"
       }`}
     >
       {children}

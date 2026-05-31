@@ -139,7 +139,7 @@ export function PriceEditor({ products, action }: Props) {
           className={`h-8 px-3 rounded-full text-[12px] font-semibold inline-flex items-center gap-1 transition-all ${
             tab === "overrides"
               ? "bg-primary text-primary-foreground shadow-sm shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)]"
-              : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-[oklch(0.95_0.005_264)]"
+              : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-muted/80 dark:hover:bg-muted/60"
           }`}
         >
           Зөвхөн зөрүү
@@ -155,7 +155,7 @@ export function PriceEditor({ products, action }: Props) {
           className={`h-8 px-3 rounded-full text-[12px] font-semibold inline-flex items-center gap-1 transition-all ${
             tab === "all"
               ? "bg-primary text-primary-foreground shadow-sm shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)]"
-              : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-[oklch(0.95_0.005_264)]"
+              : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-muted/80 dark:hover:bg-muted/60"
           }`}
         >
           Бүгд

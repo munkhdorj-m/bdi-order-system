@@ -234,7 +234,7 @@ export default async function BuyerOrdersPage({
               className={`shrink-0 h-9 px-3.5 rounded-full text-[12.5px] font-semibold transition-all flex items-center gap-1.5 ${
                 active
                   ? "bg-primary text-primary-foreground shadow-sm shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)]"
-                  : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-[oklch(0.95_0.005_264)]"
+                  : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-muted/80 dark:hover:bg-muted/60"
               }`}
             >
               {t.label}

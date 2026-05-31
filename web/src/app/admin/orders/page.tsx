@@ -255,7 +255,7 @@ export default async function AdminOrdersPage({
               className={`whitespace-nowrap shrink-0 rounded-full px-3.5 h-8 inline-flex items-center gap-1 text-[12px] font-semibold transition-all ${
                 active
                   ? "bg-primary text-primary-foreground shadow-sm shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)]"
-                  : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-[oklch(0.95_0.005_264)] hover:text-foreground"
+                  : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-muted/80 dark:hover:bg-muted/60 hover:text-foreground"
               }`}
             >
               {t.label}
@@ -333,8 +333,8 @@ export default async function AdminOrdersPage({
                 href={href}
                 className={`h-7 px-2.5 rounded-full text-[11.5px] font-semibold transition-all ${
                   active
-                    ? "bg-foreground text-background"
-                    : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-[oklch(0.95_0.005_264)] hover:text-foreground"
+                    ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
+                    : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-muted/80 hover:text-foreground dark:hover:bg-muted/60"
                 }`}
               >
                 {p.label}
