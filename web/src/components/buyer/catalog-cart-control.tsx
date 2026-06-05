@@ -147,10 +147,13 @@ export function CatalogCartControl({ product }: Props) {
           e.stopPropagation();
         }}
         aria-label={`${product.name} — тоо ширхэг`}
-        // Width is min-w-12 to match the old span; max 4 digits is
-        // plenty for any realistic order line.
+        // `size={1}` overrides HTML's default size=20 attribute, which
+        // would otherwise lock the input to ~150px regardless of
+        // `flex-1`. With size=1 the flex layout takes over: input fills
+        // the gap between - and + buttons.
+        size={1}
         maxLength={4}
-        className="flex-1 text-center px-2 text-base font-bold tabular-nums min-w-12 bg-transparent border-0 outline-none focus:bg-black/10 transition-colors caret-primary-foreground selection:bg-white/40"
+        className="flex-1 text-center px-2 text-base font-bold tabular-nums min-w-0 bg-transparent border-0 outline-none focus:bg-black/10 transition-colors caret-primary-foreground selection:bg-white/40"
       />
       <button
         type="button"

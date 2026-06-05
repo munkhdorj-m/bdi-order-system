@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -252,28 +252,10 @@ export function CartView({
                 )}
               </div>
               <div className="mt-2 flex items-center gap-2">
-                <div className="inline-flex items-center rounded-full bg-muted ring-1 ring-border">
-                  <button
-                    type="button"
-                    onClick={() => updateQty(item.product_id, item.qty - 1)}
-                    disabled={item.qty <= 1}
-                    aria-label="Хасах"
-                    className="size-7 flex items-center justify-center hover:bg-[oklch(0.94_0.005_264)] rounded-l-full disabled:opacity-40 active:scale-90 transition-transform"
-                  >
-                    <Minus className="h-3.5 w-3.5" strokeWidth={2.4} />
-                  </button>
-                  <span className="px-2 text-[12.5px] font-bold tabular-nums min-w-7 text-center">
-                    {item.qty}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => updateQty(item.product_id, item.qty + 1)}
-                    aria-label="Нэмэх"
-                    className="size-7 flex items-center justify-center hover:bg-[oklch(0.94_0.005_264)] rounded-r-full active:scale-90 transition-transform"
-                  >
-                    <Plus className="h-3.5 w-3.5" strokeWidth={2.4} />
-                  </button>
-                </div>
+                <CartLineQtyStepper
+                  productId={item.product_id}
+                  qty={item.qty}
+                />
                 <button
                   type="button"
                   onClick={() => removeFromCart(item.product_id)}
@@ -564,6 +546,103 @@ export function CartView({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Per-row quantity stepper for cart lines. Same UX shape as the
+ * catalog card stepper: -/+ buttons plus an inline-editable input
+ * between them.
+ *
+ * Each row owns its own typing draft (the cart `qty` is the source of
+ * truth — we sync the draft to it whenever the cart re-renders). On
+ * blur/Enter we commit; Escape reverts.
+ *
+ * Typing `0` and committing removes the row (matches the behavior of
+ * pressing - until it would go below 1, which is otherwise blocked
+ * because the - button is `disabled` at qty=1). This is the
+ * pragmatic way to clear a single line without making the trash
+ * button the only path.
+ */
+function CartLineQtyStepper({
+  productId,
+  qty,
+}: {
+  productId: string;
+  qty: number;
+}) {
+  const [draft, setDraft] = useState<string>(String(qty));
+  useEffect(() => {
+    setDraft(String(qty));
+  }, [qty]);
+
+  function commit() {
+    const trimmed = draft.trim();
+    if (trimmed === "") {
+      setDraft(String(qty));
+      return;
+    }
+    const n = Number(trimmed);
+    if (!Number.isFinite(n) || n < 0) {
+      setDraft(String(qty));
+      return;
+    }
+    const floored = Math.floor(n);
+    if (floored === qty) {
+      setDraft(String(qty));
+      return;
+    }
+    updateQty(productId, floored);
+  }
+
+  return (
+    <div className="inline-flex items-center rounded-full bg-muted ring-1 ring-border">
+      <button
+        type="button"
+        onClick={() => updateQty(productId, qty - 1)}
+        disabled={qty <= 1}
+        aria-label="Хасах"
+        className="size-7 flex items-center justify-center hover:bg-[oklch(0.94_0.005_264)] rounded-l-full disabled:opacity-40 active:scale-90 transition-transform"
+      >
+        <Minus className="h-3.5 w-3.5" strokeWidth={2.4} />
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={draft}
+        onChange={(e) => {
+          const cleaned = e.target.value.replace(/[^0-9]/g, "");
+          setDraft(cleaned);
+        }}
+        onFocus={(e) => e.target.select()}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            (e.target as HTMLInputElement).blur();
+          } else if (e.key === "Escape") {
+            setDraft(String(qty));
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        aria-label="Тоо ширхэг"
+        // Fixed width — the pill is `inline-flex` so it sizes to
+        // content; without an explicit width the input inherits HTML's
+        // default size=20 (~150px) and blows the pill out across the row.
+        size={1}
+        maxLength={4}
+        className="w-10 px-1 text-[12.5px] font-bold tabular-nums text-center bg-transparent border-0 outline-none focus:bg-background/60 transition-colors"
+      />
+      <button
+        type="button"
+        onClick={() => updateQty(productId, qty + 1)}
+        aria-label="Нэмэх"
+        className="size-7 flex items-center justify-center hover:bg-[oklch(0.94_0.005_264)] rounded-r-full active:scale-90 transition-transform"
+      >
+        <Plus className="h-3.5 w-3.5" strokeWidth={2.4} />
+      </button>
     </div>
   );
 }

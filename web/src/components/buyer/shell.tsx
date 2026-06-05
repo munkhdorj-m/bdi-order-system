@@ -49,12 +49,16 @@ export function BuyerShell({
             with a gradient that picks up the brand color in the centre. */}
         <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
 
-        <div className="h-full flex items-center px-3 sm:px-4 gap-2">
+        {/* Flex layout: left-cluster takes leftover width (truncates the
+            store name), right-cluster is `shrink-0` so icons never get
+            squeezed. On narrow phones the store name truncates earlier
+            now instead of pushing into the icon column. */}
+        <div className="h-full flex items-center px-2 sm:px-4 gap-2">
           {!isRoot ? (
             <button
               type="button"
               onClick={() => router.back()}
-              className="-ml-1 size-9 rounded-xl flex items-center justify-center bg-muted/60 hover:bg-muted ring-1 ring-border/60 hover:ring-border active:scale-95 transition-all"
+              className="shrink-0 -ml-1 size-9 rounded-xl flex items-center justify-center bg-muted/60 hover:bg-muted ring-1 ring-border/60 hover:ring-border active:scale-95 transition-all"
               aria-label="Буцах"
             >
               <ChevronLeft className="h-5 w-5" />
@@ -62,10 +66,10 @@ export function BuyerShell({
           ) : (
             <Link
               href="/catalog"
-              className="flex items-center gap-2 group/store min-w-0"
+              className="flex items-center gap-2 group/store min-w-0 flex-1"
               aria-label={storeName}
             >
-              <div className="relative size-9 rounded-xl bg-gradient-to-br from-primary to-primary/75 text-primary-foreground flex items-center justify-center font-bold text-sm shadow-sm shadow-primary/20 ring-1 ring-primary/30">
+              <div className="shrink-0 relative size-9 rounded-xl bg-gradient-to-br from-primary to-primary/75 text-primary-foreground flex items-center justify-center font-bold text-sm shadow-sm shadow-primary/20 ring-1 ring-primary/30">
                 {storeInitial(storeName)}
                 <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-transparent to-white/15 pointer-events-none" />
               </div>
@@ -73,14 +77,18 @@ export function BuyerShell({
                 <span className="text-[9.5px] uppercase tracking-[0.12em] text-muted-foreground font-semibold">
                   Дэлгүүр
                 </span>
-                <span className="text-[13px] font-semibold truncate max-w-[180px] sm:max-w-[260px] group-hover/store:text-primary transition-colors">
+                <span className="text-[13px] font-semibold truncate max-w-full group-hover/store:text-primary transition-colors">
                   {storeName}
                 </span>
               </div>
             </Link>
           )}
 
-          <div className="ml-auto flex items-center gap-1">
+          {/* Right cluster — `shrink-0` so icons keep their full size,
+              the store-name truncation absorbs all the squeeze. Tighter
+              gap on mobile to fit the search + deals + bell + theme +
+              logout row without overflow. */}
+          <div className="ml-auto shrink-0 flex items-center gap-0.5 sm:gap-1">
             {/* Mobile only — desktop has the inline search on /catalog. */}
             <CatalogSearchTrigger />
 

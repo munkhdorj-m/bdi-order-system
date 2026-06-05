@@ -184,7 +184,10 @@ export function AddToCartForm({
               }}
               aria-label="Тоо ширхэг"
               maxLength={4}
-              className="px-3.5 flex items-center font-bold tabular-nums text-[15px] min-w-12 text-center bg-transparent border-0 outline-none focus:bg-muted/50 transition-colors"
+              // Explicit fixed width — without it the input inherits
+              // HTML's default `size=20` (~150px) which pushes the
+              // Сагсанд нэмэх CTA off-screen on narrow phones.
+              className="w-12 px-1 text-center font-bold tabular-nums text-[15px] bg-transparent border-0 outline-none focus:bg-muted/50 transition-colors"
             />
             <button
               type="button"
