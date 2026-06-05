@@ -81,9 +81,6 @@ export default async function LoginPage({
             <h2 className="mt-1 text-[24px] lg:text-[26px] font-bold tracking-tight">
               Тавтай морил
             </h2>
-            <p className="text-[13px] text-muted-foreground mt-1">
-              Утсаар нэвтэрнэ үү
-            </p>
           </div>
 
           <form action={signIn} className="space-y-4">

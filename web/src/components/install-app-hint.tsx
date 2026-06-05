@@ -166,8 +166,8 @@ export function InstallAppHint() {
             {platform === "other" && <OtherSteps />}
 
             <p className="mt-5 text-[11.5px] text-muted-foreground leading-relaxed">
-              Суулгасны дараа дэлгэцэн дээрх <strong>BDI</strong>{" "}
-              дүрс дээр дарж дотроос нь шууд нэвтэрнэ.
+              Суулгасны дараа дэлгэцэн дээрх <strong>BDI</strong> дүрс дээр дарж
+              дотроос нь шууд нэвтэрнэ.
             </p>
           </div>
         </SheetContent>
@@ -223,8 +223,8 @@ function IosSteps() {
           icon={<Share className="h-4 w-4 text-primary" />}
           title={
             <>
-              Доод талын <span className="text-primary">Хуваалцах</span>{" "}
-              товчийг дарна
+              Доод талын <span className="text-primary">Хуваалцах</span> товчийг
+              дарна
             </>
           }
           body="Дөрвөлжин дотроос дээш чиглэсэн сум хэлбэртэй товч. Safari-н ёроолд байрладаг."
@@ -337,10 +337,6 @@ function AndroidManualSteps() {
 function OtherSteps() {
   return (
     <>
-      <div className="rounded-xl bg-muted/50 px-3 py-2 mb-4 text-[11.5px] text-muted-foreground">
-        Компьютерын хөтөч дээр энэ сайтыг хадгалах боломжтой ч хамгийн сайн
-        туршлагыг утсан дээр авна.
-      </div>
       <ol className="space-y-4">
         <Step
           n={1}
