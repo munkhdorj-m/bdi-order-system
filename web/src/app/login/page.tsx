@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, homePathForRole } from "@/lib/auth";
+import { InstallAppHint } from "@/components/install-app-hint";
 import { signIn } from "./actions";
 
 type SearchParams = Promise<{
@@ -149,6 +150,13 @@ export default async function LoginPage({
               Бүртгүүлэх
             </Link>
           </p>
+
+          {/* Tutorial trigger — opens a platform-aware Sheet that walks
+              the user through "Add to Home Screen" on iOS / "Install
+              app" on Android. Renders nothing when the app is already
+              installed (so the standalone window doesn't show the
+              install hint to a user who's already in the app). */}
+          <InstallAppHint />
 
           <div className="hidden lg:block mt-12 text-center text-[11px] text-muted-foreground">
             © {new Date().getFullYear()} BDI · Захиалгын систем
