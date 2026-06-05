@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Minus, Package, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -42,6 +42,13 @@ export function AddToCartForm({
 
   const [unit, setUnit] = useState<Unit>("piece");
   const [qtyInUnit, setQtyInUnit] = useState(1);
+  // Local typing draft for the editable count input. Synced down to
+  // qtyInUnit on blur/Enter; synced up from qtyInUnit when the +/-
+  // buttons or unit switch change the canonical value.
+  const [qtyDraft, setQtyDraft] = useState<string>("1");
+  useEffect(() => {
+    setQtyDraft(String(qtyInUnit));
+  }, [qtyInUnit]);
   const router = useRouter();
 
   const piecesPerUnit = unit === "box" ? piecesPerBox : 1;
@@ -55,6 +62,30 @@ export function AddToCartForm({
   function switchUnit(next: Unit) {
     setUnit(next);
     setQtyInUnit(1);
+  }
+
+  function commitQtyDraft() {
+    const trimmed = qtyDraft.trim();
+    // Empty / invalid / zero — the buyer must add at least one of
+    // something, so snap back to 1 rather than letting them submit a
+    // no-op order line.
+    if (trimmed === "") {
+      setQtyDraft(String(qtyInUnit));
+      return;
+    }
+    const n = Number(trimmed);
+    if (!Number.isFinite(n) || n < 1) {
+      setQtyInUnit(1);
+      setQtyDraft("1");
+      return;
+    }
+    const floored = Math.floor(n);
+    if (floored !== qtyInUnit) {
+      setQtyInUnit(floored);
+    } else {
+      // Same number but possibly with leading zeros — re-normalize.
+      setQtyDraft(String(floored));
+    }
   }
 
   function describe(qty: number, u: Unit): string {
@@ -130,9 +161,31 @@ export function AddToCartForm({
             >
               <Minus className="h-4 w-4" strokeWidth={2.4} />
             </button>
-            <span className="px-3.5 flex items-center font-bold tabular-nums text-[15px] min-w-12 justify-center">
-              {qtyInUnit}
-            </span>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={qtyDraft}
+              onChange={(e) => {
+                // Numeric-only — strip anything else as the user types.
+                const cleaned = e.target.value.replace(/[^0-9]/g, "");
+                setQtyDraft(cleaned);
+              }}
+              onFocus={(e) => e.target.select()}
+              onBlur={commitQtyDraft}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  (e.target as HTMLInputElement).blur();
+                } else if (e.key === "Escape") {
+                  setQtyDraft(String(qtyInUnit));
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              aria-label="Тоо ширхэг"
+              maxLength={4}
+              className="px-3.5 flex items-center font-bold tabular-nums text-[15px] min-w-12 text-center bg-transparent border-0 outline-none focus:bg-muted/50 transition-colors"
+            />
             <button
               type="button"
               onClick={() => setQtyInUnit(qtyInUnit + 1)}
