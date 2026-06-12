@@ -10,6 +10,19 @@ type SearchParams = Promise<{
   phone?: string;
 }>;
 
+/**
+ * Bold full-bleed login: the entire viewport is the brand gradient and
+ * the form floats in a white card on top. One column on every screen
+ * size — the buyer is a store manager on a phone, and desktop gets the
+ * same hero treatment scaled up instead of a corporate split panel.
+ *
+ * Background layering (top → bottom):
+ *   1. Brand gradient (always present, no asset needed)
+ *   2. Optional /login-hero.jpg overlay — drop a photo into
+ *      web/public/login-hero.jpg and it blends in. A missing file just
+ *      404s silently and the gradient remains.
+ *   3. Light blooms + vignette so the card and headline stay readable.
+ */
 export default async function LoginPage({
   searchParams,
 }: {
@@ -20,79 +33,44 @@ export default async function LoginPage({
   const { error, success, phone } = await searchParams;
 
   return (
-    <main className="flex-1 flex flex-col lg:flex-row min-h-screen">
-      {/* Brand panel — full-width hero on mobile, 2/5 column on lg+.
-          Background layering (top → bottom):
-            1. Brand-gradient fallback (always present, no asset needed)
-            2. Optional /login-hero.jpg overlay — drop a hero image into
-               web/public/login-hero.jpg and it shows here. Missing file
-               just 404s silently and the gradient remains.
-            3. Dark overlay on top of the image so the white headline
-               text stays legible regardless of the photo's brightness. */}
+    <main className="relative flex-1 min-h-screen flex flex-col items-center justify-center overflow-hidden px-5 py-10 text-white bg-brand-gradient">
+      {/* Optional photo layer — kept subtle so the brand color dominates. */}
       <div
-        className="relative lg:w-2/5 lg:min-h-screen flex flex-col justify-between px-6 pt-12 pb-10 lg:px-12 lg:pt-16 lg:pb-12 text-white overflow-hidden"
-        style={{
-          background:
-            "linear-gradient(155deg, var(--primary) 0%, color-mix(in oklch, var(--primary) 78%, black) 100%)",
-        }}
-      >
-        {/* Optional photo layer — opacity ~0.55 so the gradient bleeds
-            through and the brand colour still dominates. If you don't
-            have an image yet, drop one at web/public/login-hero.jpg
-            (any aspect; we use bg-cover bg-center). */}
-        <div
-          className="absolute inset-0 bg-cover bg-center opacity-55 mix-blend-overlay"
-          style={{ backgroundImage: "url('/login-hero.jpg')" }}
-          aria-hidden
-        />
-        {/* Soft vignette so headline reads on bright photos */}
-        <div
-          className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/30 pointer-events-none"
-          aria-hidden
-        />
+        className="absolute inset-0 bg-cover bg-center opacity-40 mix-blend-overlay"
+        style={{ backgroundImage: "url('/login-hero.jpg')" }}
+        aria-hidden
+      />
+      {/* Light blooms — the gradient reads as lit, not flat. */}
+      <div
+        className="absolute -top-32 -right-24 size-96 rounded-full bg-white/15 blur-3xl pointer-events-none"
+        aria-hidden
+      />
+      <div
+        className="absolute -bottom-40 -left-28 size-96 rounded-full bg-white/10 blur-3xl pointer-events-none"
+        aria-hidden
+      />
+      {/* Soft vignette for legibility over bright photos. */}
+      <div
+        className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/25 pointer-events-none"
+        aria-hidden
+      />
 
-        <div className="relative">
-          <div className="size-12 rounded-2xl bg-white/15 backdrop-blur ring-1 ring-white/25 flex items-center justify-center font-bold text-base">
+      <div className="relative w-full max-w-sm page-enter">
+        {/* Brand mark + headline above the card */}
+        <div className="text-center mb-7">
+          <div className="size-16 mx-auto rounded-[1.4rem] bg-white/15 backdrop-blur-md ring-1 ring-white/30 shadow-lg shadow-black/10 flex items-center justify-center font-extrabold text-xl tracking-tight">
             BDI
           </div>
-          <h1 className="mt-8 lg:mt-12 text-[26px] lg:text-[34px] font-bold tracking-tight leading-tight">
-            Захиалга өгөх
-            <br />
-            хамгийн хялбар арга
+          <h1 className="mt-5 text-[28px] font-extrabold tracking-tight leading-tight">
+            Тавтай морил
           </h1>
-          <p className="mt-3 text-[14px] lg:text-[14.5px] opacity-85 max-w-[320px] leading-relaxed">
-            BDI-н бөөний бараагаа дэлгүүрээсээ шууд захиалаарай.
+          <p className="mt-1.5 text-[14px] text-white/80">
+            Бөөний бараагаа дэлгүүрээсээ шууд захиалаарай
           </p>
         </div>
 
-        {/* Soft light blooms so the brand panel reads as lit, not flat. */}
-        <div
-          className="absolute -top-20 -right-20 size-72 rounded-full bg-white/10 blur-3xl pointer-events-none"
-          aria-hidden
-        />
-        <div
-          className="absolute -bottom-24 -left-16 size-64 rounded-full bg-white/[0.07] blur-3xl pointer-events-none"
-          aria-hidden
-        />
-
-        {/* Curved bottom transition on mobile — visual handoff into the form. */}
-        <div className="lg:hidden absolute left-0 right-0 -bottom-px h-5 bg-background rounded-t-3xl" />
-      </div>
-
-      {/* Form panel — phone-only login. Email was removed app-wide; the
-          buyer is a store manager on their phone and admin accounts are
-          provisioned via /admin/users/new. */}
-      <div className="flex-1 flex items-center justify-center bg-background bg-aurora px-6 pt-8 pb-12 lg:p-10">
-        <div className="w-full max-w-sm page-enter">
-          <div className="lg:mb-8">
-            <div className="text-[11px] uppercase tracking-[0.1em] font-bold text-primary">
-              Нэвтрэх
-            </div>
-            <h2 className="mt-1 text-[24px] lg:text-[26px] font-bold tracking-tight">
-              Тавтай морил
-            </h2>
-          </div>
-
+        {/* Floating form card */}
+        <div className="rounded-[1.75rem] bg-card text-card-foreground shadow-2xl shadow-black/25 ring-1 ring-black/5 dark:ring-white/10 p-6">
           <form action={signIn} className="space-y-4">
             <div>
               <label htmlFor="phone" className="input-label">
@@ -128,7 +106,7 @@ export default async function LoginPage({
             </div>
 
             {success && (
-              <p className="text-caption rounded-lg px-3 py-2 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+              <p className="text-caption rounded-xl px-3 py-2 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
                 {success === "phone-verified"
                   ? "Утас баталгаажлаа. BDI-н ажилтан таны бүртгэлийг идэвхжүүлмэгц нэвтэрч орох боломжтой."
                   : success}
@@ -136,38 +114,38 @@ export default async function LoginPage({
             )}
             {error && (
               <p
-                className="text-caption rounded-lg px-3 py-2 bg-destructive/10 text-destructive"
+                className="text-caption rounded-xl px-3 py-2 bg-destructive/10 text-destructive"
                 role="alert"
               >
                 {error}
               </p>
             )}
 
-            <button type="submit" className="btn-primary w-full">
+            <button type="submit" className="btn-primary w-full h-12 text-[15px]">
               Нэвтрэх
             </button>
           </form>
+        </div>
 
-          <p className="mt-6 text-caption text-muted-foreground text-center">
-            Шинэ хэрэглэгч үү?{" "}
-            <Link
-              href="/register/phone"
-              className="text-primary font-semibold hover:underline"
-            >
-              Бүртгүүлэх
-            </Link>
-          </p>
+        <p className="mt-6 text-[13px] text-white/80 text-center">
+          Шинэ хэрэглэгч үү?{" "}
+          <Link
+            href="/register/phone"
+            className="text-white font-bold underline underline-offset-4 decoration-white/50 hover:decoration-white"
+          >
+            Бүртгүүлэх
+          </Link>
+        </p>
 
-          {/* Tutorial trigger — opens a platform-aware Sheet that walks
-              the user through "Add to Home Screen" on iOS / "Install
-              app" on Android. Renders nothing when the app is already
-              installed (so the standalone window doesn't show the
-              install hint to a user who's already in the app). */}
+        {/* Install tutorial trigger — recolored for the gradient via the
+            wrapper (the component itself is theme-neutral). The Sheet it
+            opens portals to <body>, so card styles inside are unaffected. */}
+        <div className="flex justify-center [&>button]:text-white/70 [&>button:hover]:text-white">
           <InstallAppHint />
+        </div>
 
-          <div className="hidden lg:block mt-12 text-center text-[11px] text-muted-foreground">
-            © {new Date().getFullYear()} BDI · Захиалгын систем
-          </div>
+        <div className="mt-8 text-center text-[11px] text-white/55">
+          © {new Date().getFullYear()} BDI · Захиалгын систем
         </div>
       </div>
     </main>

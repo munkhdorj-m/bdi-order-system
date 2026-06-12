@@ -39,9 +39,9 @@ export const metadata: Metadata = {
  * area and use env(safe-area-inset-*) on sticky bars / tab bars.
  */
 export const viewport: Viewport = {
-  // Keep in sync with --primary in globals.css (oklch 0.51 0.2 264).
+  // Keep in sync with --primary / --background in globals.css.
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#4a3cd4" },
+    { media: "(prefers-color-scheme: light)", color: "#4338ca" },
     { media: "(prefers-color-scheme: dark)", color: "#1e1b4b" },
   ],
   viewportFit: "cover",

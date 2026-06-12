@@ -49,7 +49,7 @@ export async function placeOrder(
     await Promise.all([
       supabase
         .from("supermarket_prices")
-        .select("product_id, name, effective_price, category_id")
+        .select("product_id, name, effective_price, category_id, stock")
         .eq("supermarket_id", supermarketId)
         .in("product_id", productIds),
       // Active discount rules visible via RLS (the policy already filters by
@@ -81,6 +81,16 @@ export async function placeOrder(
   const missing = cleaned.filter((i) => !priceMap.has(i.product_id));
   if (missing.length > 0) {
     return { error: "Зарим бараа боломжгүй болсон байна. Сагсаа шинэчилнэ үү." };
+  }
+
+  // Stock gate — the catalog hides sold-out products, but a cart built
+  // earlier (localStorage survives days) can still hold one. Name the
+  // product so the buyer knows exactly which line to drop.
+  const soldOut = (priced ?? []).filter((p) => (p.stock ?? 0) <= 0);
+  if (soldOut.length > 0) {
+    return {
+      error: `"${soldOut[0].name}" дууссан байна. Сагснаасаа хасаад дахин илгээнэ үү.`,
+    };
   }
 
   const { data: orderNumberRow, error: numErr } = await supabase.rpc(

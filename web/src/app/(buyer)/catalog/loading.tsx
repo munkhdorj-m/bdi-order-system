@@ -10,22 +10,22 @@ function ShimmerBlock({ className = "" }: { className?: string }) {
 
 export default function CatalogLoading() {
   return (
-    <div className="relative min-h-[calc(100vh-3.5rem)] bg-gradient-to-b from-background via-background to-muted/20">
-      <div className="sticky top-14 z-[5] bg-background/75 backdrop-blur-2xl border-b border-border/50">
-        <div className="px-3 sm:px-4 pt-2 pb-1.5 max-w-7xl mx-auto">
-          <div className="flex items-center gap-4">
-            <div className="flex gap-1.5 flex-1 min-w-0 overflow-hidden">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="shrink-0 w-[58px] flex flex-col items-center gap-1"
-                >
-                  <ShimmerBlock className="size-11 rounded-xl" />
-                  <ShimmerBlock className="h-2 w-10 rounded-full" />
-                </div>
-              ))}
-            </div>
-            <ShimmerBlock className="h-9 w-48 md:w-64 rounded-full shrink-0 hidden sm:block" />
+    <div className="relative min-h-[calc(100vh-3.5rem)] bg-background">
+      {/* Tool-chrome placeholder — same footprint as the real search +
+          category rail so the streamed page doesn't jump when it swaps in. */}
+      <div className="lg:hidden sticky top-14 z-[5] bg-background/85 backdrop-blur-2xl">
+        <div className="px-3 sm:px-4 pt-3 pb-2 space-y-2.5">
+          <ShimmerBlock className="h-11 w-full rounded-2xl" />
+          <div className="flex gap-1.5 min-w-0 overflow-hidden">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div
+                key={i}
+                className="shrink-0 w-[58px] flex flex-col items-center gap-1"
+              >
+                <ShimmerBlock className="size-11 rounded-xl" />
+                <ShimmerBlock className="h-2 w-10 rounded-full" />
+              </div>
+            ))}
           </div>
         </div>
       </div>

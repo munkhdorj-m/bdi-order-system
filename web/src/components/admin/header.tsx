@@ -29,7 +29,9 @@ export async function AdminHeader({ phone, name }: Props) {
   const unread = items.filter((n) => !n.read_at).length;
 
   return (
-    <header className="h-14 border-b flex items-center gap-2 px-4 lg:px-6 bg-background">
+    <header className="sticky top-0 z-10 h-14 flex items-center gap-2 px-4 lg:px-6 glass-strong">
+      {/* Brand-tinted hairline — same chrome language as the buyer shell. */}
+      <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
       <MobileNav />
       <div className="lg:hidden font-semibold">BDI Admin</div>
       <div className="flex-1" />

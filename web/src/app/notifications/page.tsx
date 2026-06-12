@@ -3,6 +3,7 @@ import { Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
+import { MarkAllReadButton } from "@/components/mark-all-read-button";
 import type { NotificationItem } from "@/components/notifications-bell";
 
 const KIND_LABELS: Record<NotificationItem["kind"], string> = {
@@ -38,12 +39,27 @@ export default async function NotificationsPage() {
 
   const items = (data as unknown as NotificationItem[] | null) ?? [];
 
+  const unreadCount = items.filter((n) => !n.read_at).length;
+
   return (
     <div className="max-w-2xl mx-auto px-3 sm:px-4 py-5">
-      <h1 className="text-[22px] font-bold tracking-tight mb-1">Мэдэгдэл</h1>
-      <p className="text-[13px] text-muted-foreground mb-4">
-        Сүүлийн 200 мэдэгдэл
-      </p>
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <h1 className="text-[22px] font-bold tracking-tight mb-1">
+            Мэдэгдэл
+          </h1>
+          <p className="text-[13px] text-muted-foreground">
+            Сүүлийн 200 мэдэгдэл
+            {unreadCount > 0 && (
+              <span className="font-semibold text-primary">
+                {" "}
+                · {unreadCount} шинэ
+              </span>
+            )}
+          </p>
+        </div>
+        {unreadCount > 0 && <MarkAllReadButton />}
+      </div>
 
       {items.length === 0 ? (
         <Card className="p-12 text-center text-muted-foreground">

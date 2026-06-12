@@ -48,13 +48,18 @@ export function BuyerBottomTabBar() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-20 glass-strong pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_-12px_rgb(0_0_0/0.12)]"
+      className="fixed bottom-0 left-0 right-0 z-20 glass-strong pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_-12px_rgb(0_0_0/0.15)]"
       aria-label="Үндсэн цэс"
     >
       {/* Brand-tinted hairline — mirrors the header's bottom hairline so
           the two chrome bars read as a matched pair framing the content. */}
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
 
+      {/* Material-style navigation bar: labels stay visible on EVERY tab
+          (recognition beats recall — buyers shouldn't have to decode bare
+          icons), and the active tab's icon sits in a filled brand capsule
+          so "where am I" is answerable at a glance. Bar stays h-14 — the
+          product/cart/order sticky bars offset against that height. */}
       <ul className="flex min-h-14 max-w-lg mx-auto px-2">
         {tabs.map((t) => {
           const active = t.match(pathname);
@@ -64,34 +69,24 @@ export function BuyerBottomTabBar() {
               <Link
                 href={t.href}
                 aria-current={active ? "page" : undefined}
-                className={cn(
-                  "relative flex flex-col items-center justify-center h-full gap-1 py-2 transition-colors",
-                  active
-                    ? "text-primary"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
+                className="flex flex-col items-center justify-center h-full gap-1 py-1.5 group active:scale-95 transition-transform"
               >
-                {/* Soft pill behind the active tab — scales+fades in so
-                    switching tabs feels springy rather than a hard swap. */}
                 <span
-                  aria-hidden
                   className={cn(
-                    "absolute inset-x-3 inset-y-1.5 rounded-2xl bg-primary/10 transition-all duration-300 ease-out",
-                    active ? "opacity-100 scale-100" : "opacity-0 scale-75",
+                    "relative flex items-center justify-center h-7 w-12 rounded-full transition-all duration-300 ease-out",
+                    active
+                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                      : "text-muted-foreground group-hover:bg-muted/70 group-hover:text-foreground",
                   )}
-                />
-                <div className="relative">
-                  <Icon
-                    className={cn(
-                      "h-5 w-5 transition-transform duration-300",
-                      active && "-translate-y-px",
-                    )}
-                    strokeWidth={active ? 2.4 : 2}
-                  />
+                >
+                  <Icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.5 : 2} />
                   {typeof t.badge === "number" && t.badge > 0 && (
                     <span
                       className={cn(
-                        "absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold tabular-nums flex items-center justify-center ring-2 ring-background",
+                        "absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold tabular-nums flex items-center justify-center ring-2 ring-background",
+                        active
+                          ? "bg-foreground text-background"
+                          : "bg-primary text-primary-foreground",
                         bounce && "animate-cart-bounce",
                       )}
                       aria-label={`Сагсанд ${t.badge} ширхэг`}
@@ -99,11 +94,13 @@ export function BuyerBottomTabBar() {
                       {t.badge > 99 ? "99+" : t.badge}
                     </span>
                   )}
-                </div>
+                </span>
                 <span
                   className={cn(
-                    "relative text-[10.5px] leading-none transition-all",
-                    active ? "font-bold" : "font-medium",
+                    "text-[10.5px] leading-none transition-colors",
+                    active
+                      ? "text-primary font-bold"
+                      : "text-muted-foreground font-medium group-hover:text-foreground",
                   )}
                 >
                   {t.label}

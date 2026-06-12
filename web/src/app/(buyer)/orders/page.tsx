@@ -81,7 +81,8 @@ function etaLine(o: OrderRow): string {
 }
 
 const STATUS_PILL: Record<OrderStatus, string> = {
-  pending: "bg-amber-100 text-amber-900 ring-amber-300/60 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-800/60",
+  pending:
+    "bg-amber-100 text-amber-900 ring-amber-300/60 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-800/60",
   confirmed:
     "bg-[color-mix(in_oklch,var(--primary)_10%,var(--card))] text-primary ring-[color-mix(in_oklch,var(--primary)_30%,transparent)]",
   shipped:
@@ -102,8 +103,7 @@ const STATUS_DOT: Record<OrderStatus, string> = {
 
 function ProgressBar({ status }: { status: OrderStatus }) {
   // For cancelled orders, no step is lit.
-  const step =
-    status === "cancelled" ? -1 : statusStepIndex(status);
+  const step = status === "cancelled" ? -1 : statusStepIndex(status);
   return (
     <div className="flex gap-1 mt-3">
       {STATUS_STEPS.map((_, i) => (
@@ -144,9 +144,7 @@ function OrderCard({ o }: { o: OrderRow }) {
           <div
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ring-1 text-[11px] font-bold ${STATUS_PILL[o.status]}`}
           >
-            <span
-              className={`size-1.5 rounded-full ${STATUS_DOT[o.status]}`}
-            />
+            <span className={`size-1.5 rounded-full ${STATUS_DOT[o.status]}`} />
             {STATUS_LABELS[o.status]}
           </div>
         </div>
@@ -258,6 +256,7 @@ export default async function BuyerOrdersPage({
               ? "Идэвхтэй захиалга алга байна."
               : "Захиалга алга байна."}
           </p>
+          {/* Dead-ends frustrate — always offer the obvious next step. */}
         </div>
       ) : (
         <div className="mt-4 flex flex-col gap-2.5">

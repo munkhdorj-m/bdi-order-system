@@ -12,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { OrderStatusPill } from "@/components/admin/order-status-pill";
+import { QuickAdvanceButton } from "@/components/admin/quick-advance-button";
 import { ACTIVE_STATUSES, type OrderStatus } from "@/lib/order-status";
 import { formatMnt } from "@/lib/format";
 
@@ -283,7 +284,10 @@ export default async function AdminDashboard() {
                 <div className="ml-auto text-[14px] font-bold tabular-nums w-24 text-right">
                   {formatMnt(o.subtotal)}
                 </div>
-                <Button asChild variant="outline" size="sm">
+                {/* Confirm without leaving the dashboard — detail page is
+                    still one click away for anything more involved. */}
+                <QuickAdvanceButton orderId={o.id} status={o.status} />
+                <Button asChild variant="ghost" size="sm">
                   <Link href={`/admin/orders/${o.id}`}>Үзэх</Link>
                 </Button>
               </div>

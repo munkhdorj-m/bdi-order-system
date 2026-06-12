@@ -26,23 +26,30 @@ export function RepHeader({
   const router = useRouter();
 
   return (
-    <header className="sticky top-0 z-10 h-14 border-b bg-background flex items-center px-3 sm:px-4">
+    <header className="sticky top-0 z-10 h-14 glass-strong flex items-center gap-1 px-2 sm:px-4">
+      {/* Brand-tinted hairline — matches the buyer/admin chrome. */}
+      <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
+
       {backHref ? (
-        <Link href={backHref} className="-ml-2 mr-1 p-2 rounded-md hover:bg-muted">
+        <Link
+          href={backHref}
+          aria-label="Буцах"
+          className="shrink-0 size-9 rounded-xl flex items-center justify-center bg-muted/60 hover:bg-muted ring-1 ring-border/60 hover:ring-border active:scale-95 transition-all"
+        >
           <ChevronLeft className="h-5 w-5" />
         </Link>
       ) : (
         <button
           type="button"
           onClick={() => router.back()}
-          className="-ml-2 mr-1 p-2 rounded-md hover:bg-muted"
+          className="shrink-0 size-9 rounded-xl flex items-center justify-center bg-muted/60 hover:bg-muted ring-1 ring-border/60 hover:ring-border active:scale-95 transition-all"
           aria-label="Буцах"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
       )}
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold leading-tight truncate">{title}</div>
+      <div className="flex-1 min-w-0 ml-1.5">
+        <div className="text-sm font-bold leading-tight truncate">{title}</div>
         {subtitle && (
           <div className="text-[11px] text-muted-foreground leading-tight truncate">
             {subtitle}
@@ -53,12 +60,12 @@ export function RepHeader({
       {cartHref && (
         <Link
           href={cartHref}
-          className="ml-2 relative p-2 rounded-md hover:bg-muted"
+          className="relative size-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/70 active:scale-95 transition-all"
           aria-label="Сагс"
         >
           <ShoppingCart className="h-5 w-5" />
           {qty > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-5 h-5 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-medium flex items-center justify-center">
+            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold tabular-nums flex items-center justify-center ring-2 ring-background">
               {qty}
             </span>
           )}
@@ -67,13 +74,13 @@ export function RepHeader({
 
       <ThemeToggle variant="admin" />
 
-      <form action="/auth/signout" method="post" className="ml-1">
+      <form action="/auth/signout" method="post">
         <button
           type="submit"
-          className="p-2 rounded-md hover:bg-muted"
+          className="size-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/70 active:scale-95 transition-all"
           aria-label="Гарах"
         >
-          <LogOut className="h-5 w-5" />
+          <LogOut className="h-[18px] w-[18px]" />
         </button>
       </form>
     </header>

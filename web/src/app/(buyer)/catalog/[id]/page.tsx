@@ -23,6 +23,7 @@ type PriceRow = {
   unit: string | null;
   pack_size: number | null;
   box_count: number | null;
+  stock: number;
   description: string | null;
 };
 
@@ -50,7 +51,7 @@ export default async function ProductDetailPage({
       supabase
         .from("supermarket_prices")
         .select(
-          "product_id, sku, name, brand, image_url, category_id, effective_price, unit, pack_size, box_count",
+          "product_id, sku, name, brand, image_url, category_id, effective_price, unit, pack_size, box_count, stock",
         )
         .eq("supermarket_id", supermarketId)
         .eq("product_id", id)
@@ -80,6 +81,8 @@ export default async function ProductDetailPage({
     rules,
   );
   const buyPrice = sale ? sale.net : p.effective_price;
+  const outOfStock = p.stock <= 0;
+  const lowStock = !outOfStock && p.stock < 10;
 
   return (
     <div className="relative">
@@ -167,8 +170,23 @@ export default async function ProductDetailPage({
           {/* Pack-tier chips — show all three units the buyer might be
               thinking in (single piece / pack-of-N / box-of-N). Each chip
               only renders when its number is meaningful and distinct from
-              the others, so a product without packaging stays clean. */}
+              the others, so a product without packaging stays clean.
+              Stock chip leads the row: availability is the first thing a
+              weekly bulk-order decision hinges on. */}
           <div className="mt-2.5 flex items-center gap-2 flex-wrap text-[12px]">
+            {outOfStock ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 ring-1 ring-rose-300/60 font-bold dark:bg-rose-950/50 dark:text-rose-300 dark:ring-rose-800/60">
+                Дууссан
+              </span>
+            ) : lowStock ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 ring-1 ring-amber-300/60 font-bold dark:bg-amber-950/50 dark:text-amber-200 dark:ring-amber-800/60">
+                Цөөн үлдсэн · {p.stock}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300/60 font-bold dark:bg-emerald-950/50 dark:text-emerald-300 dark:ring-emerald-800/60">
+                Бэлэн
+              </span>
+            )}
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
               <Package className="h-3 w-3" strokeWidth={2} />1 ширхэг
             </span>
@@ -217,25 +235,31 @@ export default async function ProductDetailPage({
         }}
       >
         <div className="max-w-2xl mx-auto">
-          {/* Pass the ORIGINAL list price into the cart (not the
-              discounted one) so the cart engine can itemize the
-              per-product discount as its own line. category_id lets
-              the engine match category-wide rules. */}
-          <AddToCartForm
-            product={{
-              product_id: p.product_id,
-              name: p.name,
-              brand: p.brand,
-              image_url: p.image_url,
-              unit_price: p.effective_price,
-              category_id: p.category_id,
-            }}
-            // CTA total surfaces the actual amount the buyer will pay
-            // for this product, so it reads as the sale price even
-            // though the cart stores the pre-discount unit_price.
-            displayPrice={buyPrice}
-            boxCount={p.box_count}
-          />
+          {outOfStock ? (
+            <div className="h-12 rounded-2xl bg-muted text-muted-foreground font-bold text-[14px] flex items-center justify-center select-none">
+              Энэ бараа түр дууссан байна
+            </div>
+          ) : (
+            /* Pass the ORIGINAL list price into the cart (not the
+               discounted one) so the cart engine can itemize the
+               per-product discount as its own line. category_id lets
+               the engine match category-wide rules. */
+            <AddToCartForm
+              product={{
+                product_id: p.product_id,
+                name: p.name,
+                brand: p.brand,
+                image_url: p.image_url,
+                unit_price: p.effective_price,
+                category_id: p.category_id,
+              }}
+              // CTA total surfaces the actual amount the buyer will pay
+              // for this product, so it reads as the sale price even
+              // though the cart stores the pre-discount unit_price.
+              displayPrice={buyPrice}
+              boxCount={p.box_count}
+            />
+          )}
         </div>
       </div>
     </div>

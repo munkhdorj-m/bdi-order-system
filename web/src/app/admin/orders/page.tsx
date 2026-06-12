@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { OrderStatusPill } from "@/components/admin/order-status-pill";
+import { QuickAdvanceButton } from "@/components/admin/quick-advance-button";
 import {
   ACTIVE_STATUSES,
   STATUS_LABELS,
@@ -577,8 +578,13 @@ async function OrderList({
                         {formatShortDate(o.created_at)}
                       </div>
                     </div>
-                    <div className="text-sm font-semibold shrink-0">
-                      {formatMnt(o.subtotal)}
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <div className="text-sm font-semibold">
+                        {formatMnt(o.subtotal)}
+                      </div>
+                      {/* Inline next-status action — stopPropagation inside
+                          the button keeps the surrounding Link inert. */}
+                      <QuickAdvanceButton orderId={o.id} status={o.status} />
                     </div>
                   </div>
                 </Link>
@@ -595,6 +601,7 @@ async function OrderList({
                     <TableHead>Статус</TableHead>
                     <TableHead className="text-right">Дүн</TableHead>
                     <TableHead>Огноо</TableHead>
+                    <TableHead className="w-32" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -620,6 +627,12 @@ async function OrderList({
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDateTime(o.created_at)}
                       </TableCell>
+                      <TableCell className="text-right">
+                        <QuickAdvanceButton
+                          orderId={o.id}
+                          status={o.status}
+                        />
+                      </TableCell>
                     </TableRow>
                   ))}
                   {/* Day subtotal footer row — only on desktop where the
@@ -634,7 +647,7 @@ async function OrderList({
                     <TableCell className="text-right font-bold tabular-nums">
                       {formatMnt(g.total)}
                     </TableCell>
-                    <TableCell />
+                    <TableCell colSpan={2} />
                   </TableRow>
                 </TableBody>
               </Table>

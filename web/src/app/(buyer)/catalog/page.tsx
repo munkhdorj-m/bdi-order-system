@@ -33,6 +33,7 @@ type PriceRow = {
   unit: string | null;
   pack_size: number | null;
   box_count: number | null;
+  stock: number;
 };
 
 /**
@@ -94,56 +95,52 @@ export default async function CatalogPage({
   const streamKey = `${q ?? ""}|${category ?? ""}|${sort}`;
 
   return (
-    <div className="relative min-h-[calc(100vh-3.5rem)] bg-gradient-to-b from-background via-background to-muted/20">
-      {/* Visually hidden — the search pill + category rail serve as the visible
+    <div className="relative min-h-[calc(100vh-3.5rem)] bg-background">
+      {/* Visually hidden — the hero + category rail serve as the visible
           page heading, but screen readers + a11y tools need a real h1. */}
       <h1 className="sr-only">Каталог</h1>
 
-      {/* Sticky filter chrome — shown on mobile / sm / md only. lg+ uses
-          the vertical sidebar below instead. */}
-      <header className="lg:hidden sticky top-14 z-[5] bg-background/75 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/55 border-b border-border/50">
-        <div className="px-3 sm:px-4 pt-2 pb-1.5">
-          <div className="flex items-center gap-4">
-            <div className="flex-1 min-w-0">
-              <CatalogCategoryRail
-                categories={cats}
-                activeId={category}
-                q={q}
-                sort={sortParam}
-              />
-            </div>
+      {/* Sticky tool chrome — mobile / sm / md only (lg+ uses the
+          sidebar below). Function over flourish: a big always-visible
+          search bar and the category rail, nothing else between the
+          buyer and the products. */}
+      <header className="lg:hidden sticky top-14 z-[5] bg-background/85 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/65">
+        <div className="px-3 sm:px-4 pt-3 pb-2 space-y-2.5">
+          <form method="get" className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-muted-foreground pointer-events-none" />
+            <input
+              type="search"
+              name="q"
+              defaultValue={q ?? ""}
+              placeholder="Бараа, брэнд, SKU хайх..."
+              autoComplete="off"
+              className="w-full h-11 rounded-2xl bg-card ring-1 ring-border shadow-sm pl-11 pr-10 text-[15px] placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
+            />
+            {q && (
+              <Link
+                href={buildHref({ category, sort: sortParam })}
+                aria-label="Хайлт цэвэрлэх"
+                className="absolute right-2 top-1/2 -translate-y-1/2 size-8 flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground active:scale-90 transition-all"
+              >
+                <X className="h-4 w-4" />
+              </Link>
+            )}
+            {category && (
+              <input type="hidden" name="category" defaultValue={category} />
+            )}
+            {sortParam && (
+              <input type="hidden" name="sort" defaultValue={sortParam} />
+            )}
+          </form>
 
-            <form
-              method="get"
-              className="relative shrink-0 w-48 md:w-64 hidden sm:block"
-            >
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <input
-                type="search"
-                name="q"
-                defaultValue={q ?? ""}
-                placeholder="Хайх..."
-                autoComplete="off"
-                className="w-full h-9 rounded-full bg-muted/60 border border-transparent pl-9 pr-8 text-sm placeholder:text-muted-foreground/80 focus:outline-none focus:bg-card focus:border-primary/40 focus:ring-2 focus:ring-primary/15 transition-all"
-              />
-              {q && (
-                <Link
-                  href={buildHref({ category, sort: sortParam })}
-                  aria-label="Хайлт цэвэрлэх"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 size-6 flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground active:scale-90 transition-all"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Link>
-              )}
-              {category && (
-                <input type="hidden" name="category" defaultValue={category} />
-              )}
-              {sortParam && (
-                <input type="hidden" name="sort" defaultValue={sortParam} />
-              )}
-            </form>
-          </div>
+          <CatalogCategoryRail
+            categories={cats}
+            activeId={category}
+            q={q}
+            sort={sortParam}
+          />
         </div>
+        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
       </header>
 
       {/* Desktop (lg+) layout — sidebar + content split. The sidebar has
@@ -227,7 +224,7 @@ async function ProductGrid({
   let query = supabase
     .from("supermarket_prices")
     .select(
-      "product_id, sku, name, brand, image_url, category_id, effective_price, unit, pack_size, box_count",
+      "product_id, sku, name, brand, image_url, category_id, effective_price, unit, pack_size, box_count, stock",
     )
     .eq("supermarket_id", supermarketId)
     .order(sortCfg.column, { ascending: sortCfg.ascending });
@@ -367,6 +364,8 @@ function ProductCard({
     p.effective_price,
     rules,
   );
+  const outOfStock = p.stock <= 0;
+  const lowStock = !outOfStock && p.stock < 10;
 
   return (
     <ProductCardShell
@@ -389,12 +388,30 @@ function ProductCard({
               unoptimized
               priority={priority}
               loading={priority ? "eager" : "lazy"}
-              className="object-cover transition-transform duration-500 ease-out md:group-hover:scale-[1.06]"
+              className={`object-cover transition-transform duration-500 ease-out md:group-hover:scale-[1.06] ${outOfStock ? "grayscale opacity-60" : ""}`}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40">
               <PackageSearch className="h-8 w-8" strokeWidth={1.4} />
             </div>
+          )}
+          {/* Stock states surfaced BEFORE the buyer wastes a tap: sold-out
+              gets a clear overlay chip; low stock a subtle amber corner
+              pill so big weekly orders can plan around it. */}
+          {outOfStock ? (
+            <div className="absolute inset-x-0 bottom-0 flex justify-center pb-2">
+              <span className="px-2.5 py-1 rounded-full bg-foreground/80 text-background text-[10.5px] font-bold backdrop-blur-sm">
+                Дууссан
+              </span>
+            </div>
+          ) : (
+            lowStock && (
+              <div className="absolute left-2 bottom-2">
+                <span className="px-2 py-0.5 rounded-full bg-amber-100/95 text-amber-900 ring-1 ring-amber-300/70 text-[10px] font-bold dark:bg-amber-950/80 dark:text-amber-200 dark:ring-amber-800/70">
+                  Цөөн · {p.stock}
+                </span>
+              </div>
+            )
           )}
         </div>
         <div className="p-3 flex flex-col flex-1 gap-1.5">
@@ -435,22 +452,28 @@ function ProductCard({
         </div>
       </Link>
       <div className="px-3 pb-3 pt-1">
-        <CatalogCartControl
-          product={{
-            product_id: p.product_id,
-            name: p.name,
-            brand: p.brand,
-            image_url: p.image_url,
-            // Push the ORIGINAL list price into the cart so the
-            // discount engine can itemize the per-product discount as
-            // its own line in the cart breakdown. Avoids
-            // double-counting: catalog shows the strikethrough +
-            // emerald net price already, and cart re-derives the same
-            // number via lib/discount.ts.
-            unit_price: p.effective_price,
-            category_id: p.category_id,
-          }}
-        />
+        {outOfStock ? (
+          <div className="w-full h-10 rounded-lg bg-muted/60 text-muted-foreground text-xs font-semibold flex items-center justify-center select-none">
+            Дууссан
+          </div>
+        ) : (
+          <CatalogCartControl
+            product={{
+              product_id: p.product_id,
+              name: p.name,
+              brand: p.brand,
+              image_url: p.image_url,
+              // Push the ORIGINAL list price into the cart so the
+              // discount engine can itemize the per-product discount as
+              // its own line in the cart breakdown. Avoids
+              // double-counting: catalog shows the strikethrough +
+              // emerald net price already, and cart re-derives the same
+              // number via lib/discount.ts.
+              unit_price: p.effective_price,
+              category_id: p.category_id,
+            }}
+          />
+        )}
       </div>
     </ProductCardShell>
   );

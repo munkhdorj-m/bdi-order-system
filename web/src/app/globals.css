@@ -50,25 +50,24 @@
 }
 
 :root {
-  /* Surfaces carry a faint cool undertone (hue 264) so neutrals feel composed
-     rather than flat gray. The canvas sits a hair below pure white while cards
-     stay at 100% white — that 1.2% gap is what makes cards read as "floating"
-     without needing heavy borders or shadows. */
-  --background: oklch(0.988 0.003 264);
+  /* Clean near-white canvas with a sub-perceptual cool undertone; cards sit
+     at pure white. High contrast first — every text token clears WCAG AA on
+     the surfaces it's used on. */
+  --background: oklch(0.99 0.002 264);
   --foreground: oklch(0.18 0.02 264);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.18 0.02 264);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0.02 264);
-  /* BDI brand: electric cobalt-indigo. Confident B2B trust signal, deliberately
-     offset from the status-color palette (amber/sky/violet/emerald/rose at hues
+  /* BDI brand: cobalt-indigo. Confident B2B trust signal, deliberately offset
+     from the status palette (amber/sky/violet/emerald/rose at hues
      75/225/295/155/15) so brand chrome never collides with status pills. */
-  --primary: oklch(0.51 0.2 264);
+  --primary: oklch(0.5 0.18 263);
   --primary-foreground: oklch(0.99 0 0);
   --secondary: oklch(0.97 0.004 264);
   --secondary-foreground: oklch(0.22 0.02 264);
-  --muted: oklch(0.97 0.004 264);
-  --muted-foreground: oklch(0.52 0.02 264);
+  --muted: oklch(0.96 0.005 264);
+  --muted-foreground: oklch(0.5 0.02 264);
   --accent: oklch(0.96 0.03 263);
   --accent-foreground: oklch(0.32 0.14 263);
   --destructive: oklch(0.59 0.22 25);
@@ -83,7 +82,8 @@
   --chart-3: oklch(0.7 0.14 195);
   --chart-4: oklch(0.72 0.16 85);
   --chart-5: oklch(0.45 0.02 264);
-  --radius: 0.625rem;
+  /* Soft, friendly geometry — a notch rounder than shadcn's default. */
+  --radius: 0.75rem;
   --sidebar: oklch(0.985 0.004 264);
   --sidebar-foreground: oklch(0.18 0.02 264);
   --sidebar-primary: oklch(0.5 0.18 263);
@@ -198,23 +198,19 @@
   .input-field {
     @apply w-full h-11 rounded-xl border border-input bg-card px-3.5 text-[16px] placeholder:text-muted-foreground/70 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/15 transition-all;
   }
-  /* Primary CTA: vertical gradient + inner top highlight + brand glow.
-     The gradient is subtle (8% lighter at the top) so it reads as depth,
-     not as a "web 2.0" bevel; the glow shadow lifts it off the canvas. */
+  /* Primary CTA. Solid bg-primary is the base (so the button can never
+     render transparent even if the decorative overlay fails); a white-alpha
+     gradient on top gives it a lit, tactile top edge. */
   .btn-primary {
-    @apply h-11 px-4 rounded-xl text-primary-foreground text-sm font-semibold inline-flex items-center justify-center gap-1.5 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all;
+    @apply h-11 px-4 rounded-xl bg-primary text-primary-foreground text-sm font-semibold inline-flex items-center justify-center gap-1.5 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all shadow-md shadow-primary/30;
     background-image: linear-gradient(
       180deg,
-      color-mix(in oklch, var(--primary) 92%, white),
-      var(--primary)
+      rgb(255 255 255 / 0.14),
+      rgb(255 255 255 / 0) 45%
     );
-    box-shadow:
-      inset 0 1px 0 color-mix(in oklch, white 22%, transparent),
-      0 1px 2px rgb(0 0 0 / 0.1),
-      0 8px 20px -6px color-mix(in oklch, var(--primary) 50%, transparent);
   }
   .btn-primary:hover {
-    filter: brightness(1.06);
+    filter: brightness(1.07);
   }
 
   /* Frosted-glass surface used by floating action bars (cart submit dock,
@@ -241,6 +237,20 @@
       135deg,
       var(--primary),
       color-mix(in oklch, var(--primary) 80%, black)
+    );
+  }
+
+  /* Full-bleed brand surface behind the auth screens. LITERAL color
+     stops on top of a solid fallback — never derived from theme vars,
+     identical in light and dark mode — so the white text and floating
+     white card sitting on it are always readable, no matter what. */
+  .bg-brand-gradient {
+    background-color: oklch(0.48 0.18 263);
+    background-image: linear-gradient(
+      160deg,
+      oklch(0.56 0.18 263) 0%,
+      oklch(0.48 0.18 263) 48%,
+      oklch(0.37 0.15 263) 100%
     );
   }
 
