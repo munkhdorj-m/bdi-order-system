@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -38,10 +38,17 @@ export function CatalogCartControl({ product }: Props) {
   // is focused; we only commit to the cart on blur or Enter. Without
   // this, every keystroke would either thrash the cart or fight the
   // user's typing as the cart re-renders.
+  //
+  // External cart changes (+/- buttons, other tabs) sync into the
+  // draft via render-time adjustment — comparing against the qty from
+  // the previous render — rather than an effect, so there's no
+  // post-paint cascade render.
   const [draft, setDraft] = useState<string>(String(qty));
-  useEffect(() => {
+  const [prevQty, setPrevQty] = useState(qty);
+  if (prevQty !== qty) {
+    setPrevQty(qty);
     setDraft(String(qty));
-  }, [qty]);
+  }
 
   function handleAdd(e: React.MouseEvent) {
     e.preventDefault();

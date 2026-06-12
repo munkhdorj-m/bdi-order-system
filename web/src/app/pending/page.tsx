@@ -5,8 +5,8 @@ export default async function PendingPage() {
   const session = await requireSession();
 
   return (
-    <main className="flex-1 flex items-center justify-center px-6 py-12">
-      <div className="max-w-md text-center">
+    <main className="flex-1 flex items-center justify-center px-6 py-12 bg-aurora">
+      <div className="max-w-md text-center page-enter">
         <div className="text-5xl mb-4">⏳</div>
         <h1 className="text-2xl font-semibold tracking-tight mb-3">
           Бүртгэл хүлээгдэж байна

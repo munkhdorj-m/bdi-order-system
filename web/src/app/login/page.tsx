@@ -65,6 +65,16 @@ export default async function LoginPage({
           </p>
         </div>
 
+        {/* Soft light blooms so the brand panel reads as lit, not flat. */}
+        <div
+          className="absolute -top-20 -right-20 size-72 rounded-full bg-white/10 blur-3xl pointer-events-none"
+          aria-hidden
+        />
+        <div
+          className="absolute -bottom-24 -left-16 size-64 rounded-full bg-white/[0.07] blur-3xl pointer-events-none"
+          aria-hidden
+        />
+
         {/* Curved bottom transition on mobile — visual handoff into the form. */}
         <div className="lg:hidden absolute left-0 right-0 -bottom-px h-5 bg-background rounded-t-3xl" />
       </div>
@@ -72,8 +82,8 @@ export default async function LoginPage({
       {/* Form panel — phone-only login. Email was removed app-wide; the
           buyer is a store manager on their phone and admin accounts are
           provisioned via /admin/users/new. */}
-      <div className="flex-1 flex items-center justify-center bg-background px-6 pt-8 pb-12 lg:p-10">
-        <div className="w-full max-w-sm">
+      <div className="flex-1 flex items-center justify-center bg-background bg-aurora px-6 pt-8 pb-12 lg:p-10">
+        <div className="w-full max-w-sm page-enter">
           <div className="lg:mb-8">
             <div className="text-[11px] uppercase tracking-[0.1em] font-bold text-primary">
               Нэвтрэх

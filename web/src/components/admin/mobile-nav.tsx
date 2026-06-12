@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
@@ -18,9 +18,15 @@ export function MobileNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
+  // Close the drawer when navigation lands on a new route. Done as a
+  // render-time adjustment ("storing information from previous renders"
+  // per react.dev) instead of an effect — React re-renders immediately
+  // before painting, so the drawer never flashes on the new page.
+  const [prevPath, setPrevPath] = useState(pathname);
+  if (prevPath !== pathname) {
+    setPrevPath(pathname);
     setOpen(false);
-  }, [pathname]);
+  }
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>

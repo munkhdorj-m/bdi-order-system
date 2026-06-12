@@ -124,9 +124,15 @@ export default async function MyStoresPage() {
                 {session.profile.full_name ?? session.profile.phone ?? "—"}
               </div>
             </div>
-            <button className="size-9 rounded-xl bg-white/15 backdrop-blur ring-1 ring-white/20 flex items-center justify-center">
+            {/* Links to the shared notification feed — RLS scopes it to
+                this rep's rows. Was a dead <button> before. */}
+            <Link
+              href="/notifications"
+              aria-label="Мэдэгдэл"
+              className="size-9 rounded-xl bg-white/15 backdrop-blur ring-1 ring-white/20 flex items-center justify-center"
+            >
               <Bell className="h-4 w-4" strokeWidth={2.2} />
-            </button>
+            </Link>
             <form action="/auth/signout" method="post">
               <button
                 type="submit"

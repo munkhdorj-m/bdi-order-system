@@ -11,8 +11,8 @@ export default async function RegisterByPhonePage({
   const { error, phone, name } = await searchParams;
 
   return (
-    <main className="flex-1 flex items-center justify-center px-6 py-12 bg-gradient-to-br from-background via-background to-muted/30">
-      <div className="w-full max-w-sm">
+    <main className="flex-1 flex items-center justify-center px-6 py-12 bg-aurora">
+      <div className="w-full max-w-sm page-enter">
         <div className="mb-10 text-center">
           <h1 className="text-large-title">BDI Захиалга</h1>
           <p className="text-body text-muted-foreground mt-2">

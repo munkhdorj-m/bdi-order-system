@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 export type CartItem = {
   product_id: string;
@@ -110,28 +110,62 @@ export function totalAmount(items?: CartItem[]): number {
 
 export { formatMnt } from "./format";
 
-export function useCart(scope?: CartScope): CartItem[] {
-  const [items, setItems] = useState<CartItem[]>([]);
-  const scopedKey = scope?.storeId ?? "";
+// ---- useCart: useSyncExternalStore plumbing -------------------------
+//
+// The cart lives in localStorage and broadcasts changes via a custom
+// event — a textbook external store, so useSyncExternalStore is the
+// right hook (the previous useState+useEffect version triggered the
+// react-hooks/set-state-in-effect lint error and an extra render).
+//
+// getSnapshot must return a referentially-stable value when nothing
+// changed, or React loops forever re-rendering. localStorage hands us a
+// fresh string each read, so we cache the parsed array per storage key
+// and only re-parse when the raw JSON actually differs.
 
-  useEffect(() => {
-    setItems(getCart(scope));
-    const refresh = (e?: Event) => {
-      // Only refresh if the change was for our scope (or storage event from another tab)
-      const detail = (e as CustomEvent | undefined)?.detail as
-        | { key?: string }
-        | undefined;
-      if (detail?.key && detail.key !== keyFor(scope)) return;
-      setItems(getCart(scope));
-    };
-    window.addEventListener(EVENT_NAME, refresh);
-    window.addEventListener("storage", refresh);
-    return () => {
-      window.removeEventListener(EVENT_NAME, refresh);
-      window.removeEventListener("storage", refresh);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopedKey]);
+const EMPTY_CART: CartItem[] = [];
+const snapshotCache = new Map<string, { raw: string; items: CartItem[] }>();
 
+function getCartSnapshot(key: string): CartItem[] {
+  const raw = localStorage.getItem(key);
+  if (raw === null) return EMPTY_CART;
+  const cached = snapshotCache.get(key);
+  if (cached && cached.raw === raw) return cached.items;
+  let items: CartItem[];
+  try {
+    const parsed = JSON.parse(raw) as CartItem[];
+    items = Array.isArray(parsed) ? parsed : EMPTY_CART;
+  } catch {
+    items = EMPTY_CART;
+  }
+  snapshotCache.set(key, { raw, items });
   return items;
+}
+
+function subscribeToCart(key: string, onChange: () => void): () => void {
+  const refresh = (e?: Event) => {
+    // Same-window writes tag the event with the storage key they
+    // touched — skip changes for other scopes. Cross-tab "storage"
+    // events have no detail; let those through unconditionally.
+    const detail = (e as CustomEvent | undefined)?.detail as
+      | { key?: string }
+      | undefined;
+    if (detail?.key && detail.key !== key) return;
+    onChange();
+  };
+  window.addEventListener(EVENT_NAME, refresh);
+  window.addEventListener("storage", refresh);
+  return () => {
+    window.removeEventListener(EVENT_NAME, refresh);
+    window.removeEventListener("storage", refresh);
+  };
+}
+
+export function useCart(scope?: CartScope): CartItem[] {
+  const key = keyFor(scope);
+  const subscribe = useCallback(
+    (onChange: () => void) => subscribeToCart(key, onChange),
+    [key],
+  );
+  const getSnapshot = useCallback(() => getCartSnapshot(key), [key]);
+  return useSyncExternalStore(subscribe, getSnapshot, () => EMPTY_CART);
 }

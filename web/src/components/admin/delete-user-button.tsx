@@ -64,7 +64,8 @@ export function DeleteUserButton({
         <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0 text-destructive" />
         <div className="min-w-0">
           <div className="text-[13.5px] font-bold text-destructive">
-            Та "{displayName}" хэрэглэгчийг устгахдаа итгэлтэй байна уу?
+            Та &quot;{displayName}&quot; хэрэглэгчийг устгахдаа итгэлтэй байна
+            уу?
           </div>
           <div className="text-[12px] text-destructive/85 mt-1 leading-relaxed">
             Энэ үйлдлийг буцаах боломжгүй. Хэрэглэгчийн бүртгэл болон

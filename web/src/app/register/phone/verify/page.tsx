@@ -49,8 +49,8 @@ export default async function VerifyOtpPage({
   }
 
   return (
-    <main className="flex-1 flex items-center justify-center px-6 py-12 bg-gradient-to-br from-background via-background to-muted/30">
-      <div className="w-full max-w-sm">
+    <main className="flex-1 flex items-center justify-center px-6 py-12 bg-aurora">
+      <div className="w-full max-w-sm page-enter">
         <div className="mb-8 text-center">
           <div className="size-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
             <ShieldCheck className="h-7 w-7" strokeWidth={1.75} />
@@ -66,8 +66,13 @@ export default async function VerifyOtpPage({
             handler is registered; most desktop users will type the code
             manually using the code chip below. */}
         {row.sms_uri && (
-          <a href={row.sms_uri} className="block btn-primary w-full text-center">
-            <MessageSquareText className="inline h-4 w-4 mr-2" />
+          // .btn-primary already applies `inline-flex items-center
+          // justify-center gap-1.5`. Adding `block` here breaks that
+          // (display: block wins over inline-flex), which is what
+          // pushed the icon + text off-center. Stay with btn-primary's
+          // defaults and let `w-full` stretch the inline-flex anchor.
+          <a href={row.sms_uri} className="btn-primary w-full">
+            <MessageSquareText className="h-4 w-4" />
             SMS илгээх
           </a>
         )}

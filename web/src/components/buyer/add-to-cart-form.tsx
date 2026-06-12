@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Minus, Package, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -42,13 +42,16 @@ export function AddToCartForm({
 
   const [unit, setUnit] = useState<Unit>("piece");
   const [qtyInUnit, setQtyInUnit] = useState(1);
-  // Local typing draft for the editable count input. Synced down to
-  // qtyInUnit on blur/Enter; synced up from qtyInUnit when the +/-
-  // buttons or unit switch change the canonical value.
+  // Local typing draft for the editable count input. Committed back to
+  // qtyInUnit on blur/Enter; when the +/- buttons or unit switch change
+  // the canonical value we re-sync the draft via render-time adjustment
+  // (compare against last render's qty) instead of an effect.
   const [qtyDraft, setQtyDraft] = useState<string>("1");
-  useEffect(() => {
+  const [prevQtyInUnit, setPrevQtyInUnit] = useState(qtyInUnit);
+  if (prevQtyInUnit !== qtyInUnit) {
+    setPrevQtyInUnit(qtyInUnit);
     setQtyDraft(String(qtyInUnit));
-  }, [qtyInUnit]);
+  }
   const router = useRouter();
 
   const piecesPerUnit = unit === "box" ? piecesPerBox : 1;

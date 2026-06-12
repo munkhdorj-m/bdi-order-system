@@ -51,18 +51,19 @@
 
 :root {
   /* Surfaces carry a faint cool undertone (hue 264) so neutrals feel composed
-     rather than flat gray. The shift is below perceptual threshold for "tinted"
-     but ties the whole UI to the brand hue. */
-  --background: oklch(1 0 0);
+     rather than flat gray. The canvas sits a hair below pure white while cards
+     stay at 100% white — that 1.2% gap is what makes cards read as "floating"
+     without needing heavy borders or shadows. */
+  --background: oklch(0.988 0.003 264);
   --foreground: oklch(0.18 0.02 264);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.18 0.02 264);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0.02 264);
-  /* BDI brand: cobalt-indigo. Confident B2B trust signal, deliberately offset
-     from the status-color palette (amber/sky/violet/emerald/rose at hues
+  /* BDI brand: electric cobalt-indigo. Confident B2B trust signal, deliberately
+     offset from the status-color palette (amber/sky/violet/emerald/rose at hues
      75/225/295/155/15) so brand chrome never collides with status pills. */
-  --primary: oklch(0.5 0.18 263);
+  --primary: oklch(0.51 0.2 264);
   --primary-foreground: oklch(0.99 0 0);
   --secondary: oklch(0.97 0.004 264);
   --secondary-foreground: oklch(0.22 0.02 264);
@@ -138,6 +139,32 @@
   html {
     @apply font-sans;
   }
+
+  /* Brand-tinted text selection — tiny detail, big "designed" signal. */
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 24%, transparent);
+  }
+
+  /* Slim, rounded scrollbars on pointer devices. `scrollbar-*` covers
+     Firefox + Chromium 121+; older WebKit gets the pseudo-element pair. */
+  @media (pointer: fine) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: color-mix(in oklch, var(--foreground) 18%, transparent)
+        transparent;
+    }
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: color-mix(in oklch, var(--foreground) 18%, transparent);
+      border-radius: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+  }
 }
 
 @layer components {
@@ -171,8 +198,23 @@
   .input-field {
     @apply w-full h-11 rounded-xl border border-input bg-card px-3.5 text-[16px] placeholder:text-muted-foreground/70 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/15 transition-all;
   }
+  /* Primary CTA: vertical gradient + inner top highlight + brand glow.
+     The gradient is subtle (8% lighter at the top) so it reads as depth,
+     not as a "web 2.0" bevel; the glow shadow lifts it off the canvas. */
   .btn-primary {
-    @apply h-11 px-4 rounded-xl bg-primary text-primary-foreground text-sm font-semibold inline-flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all shadow-sm shadow-primary/20;
+    @apply h-11 px-4 rounded-xl text-primary-foreground text-sm font-semibold inline-flex items-center justify-center gap-1.5 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all;
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--primary) 92%, white),
+      var(--primary)
+    );
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 22%, transparent),
+      0 1px 2px rgb(0 0 0 / 0.1),
+      0 8px 20px -6px color-mix(in oklch, var(--primary) 50%, transparent);
+  }
+  .btn-primary:hover {
+    filter: brightness(1.06);
   }
 
   /* Frosted-glass surface used by floating action bars (cart submit dock,
@@ -200,6 +242,31 @@
       var(--primary),
       color-mix(in oklch, var(--primary) 80%, black)
     );
+  }
+
+  /* Ambient brand wash for empty-canvas pages (auth, verify, empty
+     states): two soft radial blobs in opposite corners. Built from
+     var(--primary) so it adapts to dark mode automatically. */
+  .bg-aurora {
+    background-image:
+      radial-gradient(
+        36rem 26rem at 88% -8%,
+        color-mix(in oklch, var(--primary) 9%, transparent),
+        transparent 70%
+      ),
+      radial-gradient(
+        30rem 22rem at -12% 108%,
+        color-mix(in oklch, var(--primary) 7%, transparent),
+        transparent 70%
+      );
+  }
+
+  /* Layered ambient+key shadow for floating surfaces (docks, popcards).
+     Reads softer than Tailwind's shadow-lg at similar visual weight. */
+  .shadow-soft {
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.05),
+      0 12px 32px -12px rgb(0 0 0 / 0.18);
   }
 }
 
@@ -276,12 +343,29 @@
     animation: fade-in-scale 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  /* Page/card entrance: gentle rise + fade with an expo-out curve.
+     Used by auth screens so each step of the flow feels alive. */
+  @keyframes page-up {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .page-enter {
+    animation: page-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .catalog-card-enter,
     .shimmer,
     .animate-cart-bounce,
     .animate-fade-in,
-    .animate-fade-in-scale {
+    .animate-fade-in-scale,
+    .page-enter {
       animation: none;
     }
   }

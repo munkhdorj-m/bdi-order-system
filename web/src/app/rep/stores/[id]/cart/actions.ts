@@ -105,17 +105,6 @@ export async function placeOrderForStore(
     .insert(itemsToInsert);
   if (itemsErr) return { error: itemsErr.message };
 
-  const { data: storeRow } = await supabase
-    .from("supermarkets")
-    .select("name")
-    .eq("id", input.supermarketId)
-    .single();
-
-  const subtotal = itemsToInsert.reduce(
-    (sum, i) => sum + i.qty * i.unit_price,
-    0,
-  );
-
   revalidatePath(`/rep/stores/${input.supermarketId}`);
   revalidatePath(`/rep/orders/${orderRow.id}`);
   return { orderId: orderRow.id, orderNumber: orderRow.order_number };

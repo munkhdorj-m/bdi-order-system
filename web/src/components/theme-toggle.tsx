@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { Moon, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useMounted } from "@/lib/use-mounted";
 
 type Variant = "buyer" | "admin";
 
@@ -19,13 +19,9 @@ type Variant = "buyer" | "admin";
  */
 export function ThemeToggle({ variant = "admin" }: { variant?: Variant }) {
   const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  // useTheme only resolves on the client. Render a placeholder during SSR
-  // so the trigger size doesn't pop after hydration.
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  // useTheme only resolves on the client — gate on mounted so the SSR
+  // render (which doesn't know the theme) matches what hydration sees.
+  const mounted = useMounted();
 
   const isDark = mounted && resolvedTheme === "dark";
 

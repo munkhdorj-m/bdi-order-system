@@ -367,7 +367,6 @@ function ProductCard({
     p.effective_price,
     rules,
   );
-  const cartPrice = sale ? sale.net : p.effective_price;
 
   return (
     <ProductCardShell

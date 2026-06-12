@@ -48,10 +48,14 @@ export function BuyerBottomTabBar() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 pb-[env(safe-area-inset-bottom)]"
+      className="fixed bottom-0 left-0 right-0 z-20 glass-strong pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_-12px_rgb(0_0_0/0.12)]"
       aria-label="Үндсэн цэс"
     >
-      <ul className="flex min-h-14 max-w-lg mx-auto">
+      {/* Brand-tinted hairline — mirrors the header's bottom hairline so
+          the two chrome bars read as a matched pair framing the content. */}
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
+
+      <ul className="flex min-h-14 max-w-lg mx-auto px-2">
         {tabs.map((t) => {
           const active = t.match(pathname);
           const Icon = t.icon;
@@ -61,14 +65,29 @@ export function BuyerBottomTabBar() {
                 href={t.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex flex-col items-center justify-center h-full gap-1 py-2 transition-colors",
+                  "relative flex flex-col items-center justify-center h-full gap-1 py-2 transition-colors",
                   active
                     ? "text-primary"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
+                {/* Soft pill behind the active tab — scales+fades in so
+                    switching tabs feels springy rather than a hard swap. */}
+                <span
+                  aria-hidden
+                  className={cn(
+                    "absolute inset-x-3 inset-y-1.5 rounded-2xl bg-primary/10 transition-all duration-300 ease-out",
+                    active ? "opacity-100 scale-100" : "opacity-0 scale-75",
+                  )}
+                />
                 <div className="relative">
-                  <Icon className="h-5 w-5" strokeWidth={active ? 2.4 : 2} />
+                  <Icon
+                    className={cn(
+                      "h-5 w-5 transition-transform duration-300",
+                      active && "-translate-y-px",
+                    )}
+                    strokeWidth={active ? 2.4 : 2}
+                  />
                   {typeof t.badge === "number" && t.badge > 0 && (
                     <span
                       className={cn(
@@ -81,7 +100,12 @@ export function BuyerBottomTabBar() {
                     </span>
                   )}
                 </div>
-                <span className="text-[10.5px] font-medium leading-none">
+                <span
+                  className={cn(
+                    "relative text-[10.5px] leading-none transition-all",
+                    active ? "font-bold" : "font-medium",
+                  )}
+                >
                   {t.label}
                 </span>
               </Link>

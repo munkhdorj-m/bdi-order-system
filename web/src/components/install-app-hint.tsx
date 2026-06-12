@@ -17,6 +17,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { useMounted } from "@/lib/use-mounted";
 
 /**
  * Install-app tutorial shown on the login screen.
@@ -81,17 +82,15 @@ function isAlreadyInstalled(): boolean {
 
 export function InstallAppHint() {
   const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [platform, setPlatform] = useState<Platform>("other");
-  const [installed, setInstalled] = useState(false);
+  const mounted = useMounted();
+  // Flipped by the `appinstalled` event or an accepted native prompt.
+  // The initial "was it already installed before this page load" check
+  // is a cheap pure read (matchMedia) we do during render below.
+  const [installedThisSession, setInstalledThisSession] = useState(false);
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
-    setMounted(true);
-    setPlatform(detectPlatform());
-    setInstalled(isAlreadyInstalled());
-
     // Cache Chrome's "this site can be installed" event so we can fire
     // the prompt later from a click handler (Chrome only allows it from
     // a user gesture — we save it on capture, call prompt() on click).
@@ -100,7 +99,7 @@ export function InstallAppHint() {
       setDeferredPrompt(e as BeforeInstallPromptEvent);
     }
     function handleInstalled() {
-      setInstalled(true);
+      setInstalledThisSession(true);
       setDeferredPrompt(null);
       setOpen(false);
     }
@@ -112,6 +111,13 @@ export function InstallAppHint() {
     };
   }, []);
 
+  // Pure browser reads, computed during render once mounted. Keeping
+  // them out of state avoids the setState-in-effect cascade; the values
+  // can't change without a reload anyway (platform) or are covered by
+  // the appinstalled listener (installed).
+  const platform: Platform = mounted ? detectPlatform() : "other";
+  const installed = installedThisSession || (mounted && isAlreadyInstalled());
+
   // Don't render anything until we've checked the install state on the
   // client. Otherwise the SSR render would show the pill to users who
   // already have the app installed, which flashes ugly until hydration.
@@ -122,7 +128,7 @@ export function InstallAppHint() {
     await deferredPrompt.prompt();
     const choice = await deferredPrompt.userChoice;
     if (choice.outcome === "accepted") {
-      setInstalled(true);
+      setInstalledThisSession(true);
       setOpen(false);
     }
     // Either way the prompt is single-use — drop the reference.

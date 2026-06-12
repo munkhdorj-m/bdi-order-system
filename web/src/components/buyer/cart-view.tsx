@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -573,9 +573,13 @@ function CartLineQtyStepper({
   qty: number;
 }) {
   const [draft, setDraft] = useState<string>(String(qty));
-  useEffect(() => {
+  // Sync external qty changes (the +/- buttons, other tabs) into the
+  // draft with a render-time adjustment instead of an effect.
+  const [prevQty, setPrevQty] = useState(qty);
+  if (prevQty !== qty) {
+    setPrevQty(qty);
     setDraft(String(qty));
-  }, [qty]);
+  }
 
   function commit() {
     const trimmed = draft.trim();
