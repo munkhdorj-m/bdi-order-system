@@ -1,12 +1,17 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Manrope } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
-const inter = Inter({
+// Manrope — geometric grotesque with squared terminals and full Cyrillic
+// coverage. Swapping the typeface is the single biggest "this is a new
+// product" lever: every word on every screen renders differently, and at
+// bold weights it gives headings a confident, modern voice that Inter's
+// neutrality never had.
+const manrope = Manrope({
   variable: "--font-sans",
-  subsets: ["latin", "cyrillic", "cyrillic-ext"],
+  subsets: ["latin", "cyrillic"],
   display: "swap",
 });
 
@@ -64,7 +69,7 @@ export default function RootLayout({
       // Tells Next router transitions to ignore the global `scroll-behavior: smooth`
       // rule so route jumps don't smooth-scroll (which feels janky on Next).
       data-scroll-behavior="smooth"
-      className={`${inter.variable} h-full antialiased`}
+      className={`${manrope.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider

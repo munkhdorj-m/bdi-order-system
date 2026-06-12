@@ -71,6 +71,30 @@ function buildPayload(
     }
   }
 
+  // Store targeting (fix 30). include/exclude must name at least one
+  // price list — an empty include would apply nowhere (surely a mistake)
+  // and an empty exclude is just 'all' in disguise.
+  const targetModeRaw = parseString(formData.get("target_mode")) ?? "all";
+  if (
+    targetModeRaw !== "all" &&
+    targetModeRaw !== "include" &&
+    targetModeRaw !== "exclude"
+  ) {
+    return { error: "Хамрах хүрээний горим буруу." };
+  }
+  const targetListIds =
+    targetModeRaw === "all"
+      ? []
+      : formData
+          .getAll("target_price_list_ids")
+          .map((v) => String(v).trim())
+          .filter(Boolean);
+  if (targetModeRaw !== "all" && targetListIds.length === 0) {
+    return {
+      error: "Дор хаяж нэг үнийн жагсаалт сонгоно уу (эсвэл «Бүх дэлгүүр»).",
+    };
+  }
+
   return {
     payload: {
       name,
@@ -88,6 +112,8 @@ function buildPayload(
       starts_at: startsAt ? new Date(startsAt).toISOString() : null,
       ends_at: endsAt ? new Date(endsAt).toISOString() : null,
       notes,
+      target_mode: targetModeRaw,
+      target_price_list_ids: targetListIds,
     },
   };
 }

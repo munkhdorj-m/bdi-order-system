@@ -63,6 +63,8 @@ export type DiscountBonus = {
  * loose type rather than imported from supabase-js so this file stays
  * usable from the client bundle without dragging the DB types graph.
  */
+export type DiscountTargetMode = "all" | "include" | "exclude";
+
 export type DiscountRule = {
   id: string;
   name: string;
@@ -77,7 +79,38 @@ export type DiscountRule = {
   product_id: string | null;
   category_id: string | null;
   ends_at?: string | null;
+  /** Store targeting via price lists (fix 30). Absent on old fetches →
+   *  treated as 'all' so untargeted rules keep applying everywhere. */
+  target_mode?: DiscountTargetMode | string | null;
+  target_price_list_ids?: string[] | null;
 };
+
+/**
+ * Does this rule apply to a store on the given price list?
+ *
+ *   all      → yes, always
+ *   include  → only if the store's price list is in the target set
+ *   exclude  → only if it ISN'T (stores without a price list count as
+ *              "not in the set", so they match exclude-mode rules)
+ */
+export function ruleAppliesToPriceList(
+  rule: DiscountRule,
+  priceListId: string | null,
+): boolean {
+  const mode = rule.target_mode ?? "all";
+  if (mode !== "include" && mode !== "exclude") return true;
+  const ids = rule.target_price_list_ids ?? [];
+  const inSet = priceListId !== null && ids.includes(priceListId);
+  return mode === "include" ? inSet : !inSet;
+}
+
+/** Filter a rule set down to what applies for one store's price list. */
+export function rulesForPriceList(
+  rules: DiscountRule[],
+  priceListId: string | null,
+): DiscountRule[] {
+  return rules.filter((r) => ruleAppliesToPriceList(r, priceListId));
+}
 
 export function gross(lines: CartLine[]): number {
   let sum = 0;

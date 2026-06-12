@@ -18,25 +18,46 @@ export default async function EditDiscountPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const [{ data: discount }, { data: products }, { data: categories }] =
-    await Promise.all([
-      supabase
-        .from("discounts")
-        .select(
-          "id, name, kind, pct, step_amount, step_qty, bonus_n, product_id, category_id, active, starts_at, ends_at, notes",
-        )
-        .eq("id", id)
-        .single(),
-      supabase
-        .from("products")
-        .select("id, name, sku")
-        .eq("active", true)
-        .order("name")
-        .limit(500),
-      supabase.from("categories").select("id, name").order("sort_order"),
-    ]);
+  const [
+    { data: discount },
+    { data: products },
+    { data: categories },
+    { data: priceListRows },
+    { data: storeListRows },
+  ] = await Promise.all([
+    supabase
+      .from("discounts")
+      .select(
+        "id, name, kind, pct, step_amount, step_qty, bonus_n, product_id, category_id, active, starts_at, ends_at, notes, target_mode, target_price_list_ids",
+      )
+      .eq("id", id)
+      .single(),
+    supabase
+      .from("products")
+      .select("id, name, sku")
+      .eq("active", true)
+      .order("name")
+      .limit(500),
+    supabase.from("categories").select("id, name").order("sort_order"),
+    supabase.from("price_lists").select("id, name").order("name"),
+    supabase
+      .from("supermarkets")
+      .select("price_list_id")
+      .not("price_list_id", "is", null),
+  ]);
 
   if (!discount) notFound();
+
+  const countByList = new Map<string, number>();
+  for (const row of storeListRows ?? []) {
+    const plId = row.price_list_id as string;
+    countByList.set(plId, (countByList.get(plId) ?? 0) + 1);
+  }
+  const priceLists = (priceListRows ?? []).map((pl) => ({
+    id: pl.id as string,
+    name: pl.name as string,
+    storeCount: countByList.get(pl.id as string) ?? 0,
+  }));
 
   const action = updateDiscount.bind(null, id);
   // Form-action signature wants (FormData) => Promise<void>. deleteDiscount
@@ -64,6 +85,7 @@ export default async function EditDiscountPage({
         defaults={discount}
         products={products ?? []}
         categories={categories ?? []}
+        priceLists={priceLists}
         action={action}
         submitLabel="Хадгалах"
       />

@@ -17,6 +17,7 @@ import { ProductCardShell } from "@/components/buyer/product-card-shell";
 import { formatMnt } from "@/lib/format";
 import {
   priceWithProductDiscount,
+  rulesForPriceList,
   type DiscountRule,
 } from "@/lib/discount";
 
@@ -237,22 +238,32 @@ async function ProductGrid({
   }
   if (category) query = query.eq("category_id", category);
 
-  const [{ data: products }, { data: discountRows }] = await Promise.all([
-    query,
-    // Pull only kind='product' rules — the catalog page just needs them
-    // for the per-product sale badges on individual product cards. The
-    // full deals catalog (sales + threshold-bonus rewards) lives in the
-    // header chip drawer (`<DiscountsChip>`) and is fetched by the
-    // buyer layout, so we don't duplicate that work here.
-    supabase
-      .from("discounts")
-      .select(
-        "id, name, kind, pct, step_amount, step_qty, bonus_n, product_id, category_id, ends_at",
-      )
-      .eq("kind", "product"),
-  ]);
+  const [{ data: products }, { data: discountRows }, { data: storeRow }] =
+    await Promise.all([
+      query,
+      // Pull only kind='product' rules — the catalog page just needs them
+      // for the per-product sale badges on individual product cards. The
+      // full deals catalog (sales + threshold-bonus rewards) lives in the
+      // header chip drawer (`<DiscountsChip>`) and is fetched by the
+      // buyer layout, so we don't duplicate that work here.
+      supabase
+        .from("discounts")
+        .select(
+          "id, name, kind, pct, step_amount, step_qty, bonus_n, product_id, category_id, ends_at, target_mode, target_price_list_ids",
+        )
+        .eq("kind", "product"),
+      // Store targeting (fix 30) needs this store's price list.
+      supabase
+        .from("supermarkets")
+        .select("price_list_id")
+        .eq("id", supermarketId)
+        .single(),
+    ]);
   const rows = (products as PriceRow[] | null) ?? [];
-  const rules = (discountRows as unknown as DiscountRule[] | null) ?? [];
+  const rules = rulesForPriceList(
+    (discountRows as unknown as DiscountRule[] | null) ?? [],
+    (storeRow?.price_list_id as string | null) ?? null,
+  );
 
   return (
     <>

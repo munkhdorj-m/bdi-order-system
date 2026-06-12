@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/auth";
-import { computeDiscount, type DiscountRule } from "@/lib/discount";
+import {
+  computeDiscount,
+  rulesForPriceList,
+  type DiscountRule,
+} from "@/lib/discount";
 import { isPaymentMethod, type PaymentMethod } from "@/lib/payment-method";
 import { formatMnt } from "@/lib/format";
 import { listAdminIds, notifyMany } from "@/lib/notify";
@@ -45,21 +49,31 @@ export async function placeOrder(
   // Re-fetch current effective prices server-side. Never trust client prices.
   // Also pull category_id per line so per-category discount rules can match.
   const productIds = cleaned.map((i) => i.product_id);
-  const [{ data: priced, error: priceErr }, { data: discountRows }] =
-    await Promise.all([
-      supabase
-        .from("supermarket_prices")
-        .select("product_id, name, effective_price, category_id, stock")
-        .eq("supermarket_id", supermarketId)
-        .in("product_id", productIds),
-      // Active discount rules visible via RLS (the policy already filters by
-      // active + starts_at/ends_at window).
-      supabase
-        .from("discounts")
-        .select(
-          "id, name, kind, pct, step_amount, step_qty, bonus_n, product_id, category_id",
-        ),
-    ]);
+  const [
+    { data: priced, error: priceErr },
+    { data: discountRows },
+    { data: storePlRow },
+  ] = await Promise.all([
+    supabase
+      .from("supermarket_prices")
+      .select("product_id, name, effective_price, category_id, stock")
+      .eq("supermarket_id", supermarketId)
+      .in("product_id", productIds),
+    // Active discount rules visible via RLS (the policy already filters by
+    // active + starts_at/ends_at window).
+    supabase
+      .from("discounts")
+      .select(
+        "id, name, kind, pct, step_amount, step_qty, bonus_n, product_id, category_id, target_mode, target_price_list_ids",
+      ),
+    // Store targeting (fix 30) — needed to drop rules that don't apply
+    // to this store's price list before the discount math runs.
+    supabase
+      .from("supermarkets")
+      .select("price_list_id")
+      .eq("id", supermarketId)
+      .single(),
+  ]);
   if (priceErr) return { error: priceErr.message };
 
   const priceMap = new Map<
@@ -76,7 +90,10 @@ export async function placeOrder(
     ]),
   );
 
-  const rules = (discountRows as unknown as DiscountRule[] | null) ?? [];
+  const rules = rulesForPriceList(
+    (discountRows as unknown as DiscountRule[] | null) ?? [],
+    (storePlRow?.price_list_id as string | null) ?? null,
+  );
 
   const missing = cleaned.filter((i) => !priceMap.has(i.product_id));
   if (missing.length > 0) {

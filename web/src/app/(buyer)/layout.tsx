@@ -8,7 +8,7 @@ import {
 } from "@/components/notifications-bell";
 import { DiscountsChip } from "@/components/buyer/discounts-chip";
 import type { DiscountCard } from "@/components/buyer/discount-hero";
-import type { DiscountRule } from "@/lib/discount";
+import { ruleAppliesToPriceList, type DiscountRule } from "@/lib/discount";
 
 export default async function BuyerLayout({
   children,
@@ -29,7 +29,7 @@ export default async function BuyerLayout({
     await Promise.all([
       supabase
         .from("supermarkets")
-        .select("name")
+        .select("name, price_list_id")
         .eq("id", session.profile.supermarket_id)
         .single(),
       supabase
@@ -43,7 +43,7 @@ export default async function BuyerLayout({
       supabase
         .from("discounts")
         .select(
-          "id, name, kind, pct, step_amount, step_qty, bonus_n, product_id, category_id, ends_at, products:product_id(name), categories:category_id(name)",
+          "id, name, kind, pct, step_amount, step_qty, bonus_n, product_id, category_id, ends_at, target_mode, target_price_list_ids, products:product_id(name), categories:category_id(name)",
         ),
     ]);
 
@@ -62,6 +62,11 @@ export default async function BuyerLayout({
     > | null) ?? [];
   const dealCards: DiscountCard[] = rawRules
     .filter((r) => r.kind === "product" || r.kind === "threshold_bonus")
+    // Store targeting (fix 30) — only show deals that apply to THIS
+    // store's price list, so a BSB-only sale never teases other buyers.
+    .filter((r) =>
+      ruleAppliesToPriceList(r, (store?.price_list_id as string | null) ?? null),
+    )
     .map((r) => ({
       rule: {
         id: r.id,

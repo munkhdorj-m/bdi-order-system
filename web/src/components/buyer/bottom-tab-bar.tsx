@@ -47,6 +47,10 @@ export function BuyerBottomTabBar() {
   ];
 
   return (
+    /* Light glass dock, consistent with the app's token palette. Labels
+       stay visible on every tab; the active tab's icon sits in a filled
+       cobalt capsule. Bar keeps min-h-14 — the product/cart/order sticky
+       bars offset against that height. */
     <nav
       className="fixed bottom-0 left-0 right-0 z-20 glass-strong pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_-12px_rgb(0_0_0/0.15)]"
       aria-label="Үндсэн цэс"
@@ -55,11 +59,6 @@ export function BuyerBottomTabBar() {
           the two chrome bars read as a matched pair framing the content. */}
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
 
-      {/* Material-style navigation bar: labels stay visible on EVERY tab
-          (recognition beats recall — buyers shouldn't have to decode bare
-          icons), and the active tab's icon sits in a filled brand capsule
-          so "where am I" is answerable at a glance. Bar stays h-14 — the
-          product/cart/order sticky bars offset against that height. */}
       <ul className="flex min-h-14 max-w-lg mx-auto px-2">
         {tabs.map((t) => {
           const active = t.match(pathname);

@@ -45,8 +45,9 @@ export function BuyerShell({
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <header className="sticky top-0 z-20 h-14 bg-background/70 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/55">
-        {/* Subtle brand-tinted hairline at the bottom — replaces the plain border
-            with a gradient that picks up the brand color in the centre. */}
+        {/* Subtle brand-tinted hairline at the bottom — replaces the plain
+            border with a gradient that picks up the brand color in the
+            centre. */}
         <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
 
         {/* Flex layout: left-cluster takes leftover width (truncates the

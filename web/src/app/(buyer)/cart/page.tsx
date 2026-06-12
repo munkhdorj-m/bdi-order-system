@@ -5,7 +5,7 @@ import {
   formatNextDeliveryLabel,
   resolveDeliveryDay,
 } from "@/lib/delivery";
-import type { DiscountRule } from "@/lib/discount";
+import { rulesForPriceList, type DiscountRule } from "@/lib/discount";
 
 /**
  * Buyer cart route. Server component that resolves the delivery weekday
@@ -20,11 +20,12 @@ export default async function CartPage() {
 
   let deliveryLabel: string | null = null;
   let storeName: string | null = null;
+  let priceListId: string | null = null;
 
   if (supermarketId) {
     const { data: store } = await supabase
       .from("supermarkets")
-      .select("name, district, delivery_day")
+      .select("name, district, delivery_day, price_list_id")
       .eq("id", supermarketId)
       .maybeSingle();
     if (store) {
@@ -34,17 +35,22 @@ export default async function CartPage() {
       });
       deliveryLabel = formatNextDeliveryLabel(day);
       storeName = store.name;
+      priceListId = (store.price_list_id as string | null) ?? null;
     }
   }
 
   // Pull active rules so the cart can itemize each discount. RLS
-  // already filters by active=true + starts_at/ends_at window.
+  // already filters by active=true + starts_at/ends_at window; we then
+  // drop rules that don't target this store's price list (fix 30).
   const { data: discountRows } = await supabase
     .from("discounts")
     .select(
-      "id, name, kind, pct, step_amount, step_qty, bonus_n, product_id, category_id, ends_at",
+      "id, name, kind, pct, step_amount, step_qty, bonus_n, product_id, category_id, ends_at, target_mode, target_price_list_ids",
     );
-  const rules = (discountRows as unknown as DiscountRule[] | null) ?? [];
+  const rules = rulesForPriceList(
+    (discountRows as unknown as DiscountRule[] | null) ?? [],
+    priceListId,
+  );
 
   // Map product_id → { name, image_url } for bonus-row rendering.
   // Cart bonus lines show the actual product thumbnail + name so the

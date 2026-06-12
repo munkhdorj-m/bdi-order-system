@@ -7,6 +7,7 @@ import { AddToCartForm } from "@/components/buyer/add-to-cart-form";
 import { formatMnt } from "@/lib/format";
 import {
   priceWithProductDiscount,
+  rulesForPriceList,
   type DiscountRule,
 } from "@/lib/discount";
 
@@ -46,26 +47,36 @@ export default async function ProductDetailPage({
   const supermarketId = session.profile.supermarket_id!;
   const supabase = await createClient();
 
-  const [{ data: priced }, { data: extras }, { data: discountRows }] =
-    await Promise.all([
-      supabase
-        .from("supermarket_prices")
-        .select(
-          "product_id, sku, name, brand, image_url, category_id, effective_price, unit, pack_size, box_count, stock",
-        )
-        .eq("supermarket_id", supermarketId)
-        .eq("product_id", id)
-        .single(),
-      supabase.from("products").select("description").eq("id", id).single(),
-      // RLS scopes to active in-window product discounts. We only need
-      // product-kind rules here to compute the per-product sale price.
-      supabase
-        .from("discounts")
-        .select(
-          "id, name, kind, pct, step_amount, step_qty, bonus_n, product_id, category_id, ends_at",
-        )
-        .eq("kind", "product"),
-    ]);
+  const [
+    { data: priced },
+    { data: extras },
+    { data: discountRows },
+    { data: storeRow },
+  ] = await Promise.all([
+    supabase
+      .from("supermarket_prices")
+      .select(
+        "product_id, sku, name, brand, image_url, category_id, effective_price, unit, pack_size, box_count, stock",
+      )
+      .eq("supermarket_id", supermarketId)
+      .eq("product_id", id)
+      .single(),
+    supabase.from("products").select("description").eq("id", id).single(),
+    // RLS scopes to active in-window product discounts. We only need
+    // product-kind rules here to compute the per-product sale price.
+    supabase
+      .from("discounts")
+      .select(
+        "id, name, kind, pct, step_amount, step_qty, bonus_n, product_id, category_id, ends_at, target_mode, target_price_list_ids",
+      )
+      .eq("kind", "product"),
+    // Store targeting (fix 30) needs this store's price list.
+    supabase
+      .from("supermarkets")
+      .select("price_list_id")
+      .eq("id", supermarketId)
+      .single(),
+  ]);
 
   if (!priced) notFound();
   const p = {
@@ -73,7 +84,10 @@ export default async function ProductDetailPage({
     description: extras?.description ?? null,
   };
 
-  const rules = (discountRows as unknown as DiscountRule[] | null) ?? [];
+  const rules = rulesForPriceList(
+    (discountRows as unknown as DiscountRule[] | null) ?? [],
+    (storeRow?.price_list_id as string | null) ?? null,
+  );
   const sale = priceWithProductDiscount(
     p.product_id,
     p.category_id,

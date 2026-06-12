@@ -202,7 +202,7 @@
      render transparent even if the decorative overlay fails); a white-alpha
      gradient on top gives it a lit, tactile top edge. */
   .btn-primary {
-    @apply h-11 px-4 rounded-xl bg-primary text-primary-foreground text-sm font-semibold inline-flex items-center justify-center gap-1.5 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all shadow-md shadow-primary/30;
+    @apply h-11 px-5 rounded-full bg-primary text-primary-foreground text-sm font-bold inline-flex items-center justify-center gap-1.5 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all shadow-md shadow-primary/30;
     background-image: linear-gradient(
       180deg,
       rgb(255 255 255 / 0.14),

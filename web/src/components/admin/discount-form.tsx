@@ -5,10 +5,14 @@ import Link from "next/link";
 import {
   AlertCircle,
   Calendar,
+  Check,
   Gift,
+  ListChecks,
+  ListX,
   Percent,
   Power,
   Sparkles,
+  Store,
   Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,6 +28,7 @@ import { ActiveSwitch } from "@/components/ui/active-switch";
 type ActionState = { error?: string };
 
 type DiscountKind = "product" | "threshold_bonus";
+type TargetMode = "all" | "include" | "exclude";
 
 export type DiscountFormDefaults = {
   id?: string;
@@ -39,15 +44,25 @@ export type DiscountFormDefaults = {
   starts_at?: string | null;
   ends_at?: string | null;
   notes?: string | null;
+  target_mode?: TargetMode | string | null;
+  target_price_list_ids?: string[] | null;
 };
 
 export type ProductOption = { id: string; name: string; sku: string };
 export type CategoryOption = { id: string; name: string };
+export type PriceListOption = {
+  id: string;
+  name: string;
+  /** How many stores point at this list — shown so the admin knows the
+   *  blast radius of including/excluding it. */
+  storeCount: number;
+};
 
 type Props = {
   defaults?: DiscountFormDefaults;
   products: ProductOption[];
   categories: CategoryOption[];
+  priceLists: PriceListOption[];
   action: (prev: ActionState, formData: FormData) => Promise<ActionState>;
   submitLabel: string;
 };
@@ -67,11 +82,34 @@ export function DiscountForm({
   defaults = {},
   products,
   categories,
+  priceLists,
   action,
   submitLabel,
 }: Props) {
   const [kind, setKind] = useState<DiscountKind>(defaults.kind ?? "product");
+  const defaultMode: TargetMode =
+    defaults.target_mode === "include" || defaults.target_mode === "exclude"
+      ? defaults.target_mode
+      : "all";
+  const [targetMode, setTargetMode] = useState<TargetMode>(defaultMode);
+  const [selectedLists, setSelectedLists] = useState<Set<string>>(
+    () => new Set(defaults.target_price_list_ids ?? []),
+  );
   const [state, formAction, pending] = useActionState(action, {});
+
+  function toggleList(id: string) {
+    setSelectedLists((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  // Live summary so the admin sees the blast radius before saving.
+  const selectedStoreCount = priceLists
+    .filter((p) => selectedLists.has(p.id))
+    .reduce((sum, p) => sum + p.storeCount, 0);
 
   const productOptions: SelectOption[] = products.map((p) => ({
     value: p.id,
@@ -252,7 +290,119 @@ export function DiscountForm({
         )}
       </Section>
 
-      {/* Section 3 — schedule */}
+      {/* Section 3 — store scope. Targeting works through PRICE LISTS
+          because chains already map to one list each ("BSB сүлжээ",
+          "Ази Фарма"...) — picking a list = picking the whole chain in
+          one tap. */}
+      <Section
+        icon={<Store className="h-3.5 w-3.5" />}
+        title="Хамрах дэлгүүр"
+        subtitle="Аль дэлгүүрүүдэд энэ хямдрал үйлчлэх вэ"
+      >
+        <input type="hidden" name="target_mode" value={targetMode} />
+        {targetMode !== "all" &&
+          [...selectedLists].map((id) => (
+            <input
+              key={id}
+              type="hidden"
+              name="target_price_list_ids"
+              value={id}
+            />
+          ))}
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <KindCard
+            active={targetMode === "all"}
+            icon={<Store className="h-4 w-4" />}
+            label="Бүх дэлгүүр"
+            hint="Хязгааргүй — бүгдэд үйлчилнэ"
+            onClick={() => setTargetMode("all")}
+          />
+          <KindCard
+            active={targetMode === "include"}
+            icon={<ListChecks className="h-4 w-4" />}
+            label="Зөвхөн сонгосон"
+            hint="Сонгосон жагсаалтын дэлгүүрүүдэд л"
+            onClick={() => setTargetMode("include")}
+          />
+          <KindCard
+            active={targetMode === "exclude"}
+            icon={<ListX className="h-4 w-4" />}
+            label="Сонгосноос бусад"
+            hint="Сонгосон жагсаалтыг хасаад бусдад нь"
+            onClick={() => setTargetMode("exclude")}
+          />
+        </div>
+
+        {targetMode !== "all" && (
+          <div>
+            <div className="flex items-baseline justify-between gap-2 mb-2">
+              <Label className="text-[11.5px] uppercase tracking-[0.08em] font-bold text-muted-foreground">
+                Үнийн жагсаалт сонгох
+              </Label>
+              {selectedLists.size > 0 && (
+                <span className="text-[11.5px] font-semibold text-primary tabular-nums">
+                  {selectedLists.size} жагсаалт · {selectedStoreCount} дэлгүүр
+                  {targetMode === "exclude" ? " хасагдана" : ""}
+                </span>
+              )}
+            </div>
+
+            {priceLists.length === 0 ? (
+              <p className="text-[12.5px] text-muted-foreground rounded-xl bg-muted/50 px-3 py-2.5">
+                Үнийн жагсаалт алга байна. Эхлээд «Үнийн жагсаалт» хэсэгт
+                жагсаалт үүсгэж дэлгүүрүүдээ оноогоорой.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {priceLists.map((pl) => {
+                  const checked = selectedLists.has(pl.id);
+                  return (
+                    <button
+                      key={pl.id}
+                      type="button"
+                      onClick={() => toggleList(pl.id)}
+                      aria-pressed={checked}
+                      className={`flex items-center gap-2.5 text-left rounded-xl ring-1 px-3 py-2.5 transition-all ${
+                        checked
+                          ? "ring-primary bg-[color-mix(in_oklch,var(--primary)_8%,var(--card))]"
+                          : "ring-border bg-card hover:bg-muted/40"
+                      }`}
+                    >
+                      <span
+                        className={`size-5 shrink-0 rounded-md flex items-center justify-center ring-1 transition-colors ${
+                          checked
+                            ? "bg-primary ring-primary text-primary-foreground"
+                            : "ring-border bg-card"
+                        }`}
+                      >
+                        {checked && (
+                          <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                        )}
+                      </span>
+                      <span className="min-w-0 leading-tight">
+                        <span className="block text-[13px] font-semibold truncate">
+                          {pl.name}
+                        </span>
+                        <span className="block text-[11px] text-muted-foreground">
+                          {pl.storeCount} дэлгүүр
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <p className="text-[11.5px] text-muted-foreground mt-2">
+              Үнийн жагсаалтгүй дэлгүүрүүд: «Зөвхөн сонгосон» горимд
+              хамаарахгүй, «Сонгосноос бусад» горимд хамаарна.
+            </p>
+          </div>
+        )}
+      </Section>
+
+      {/* Section 4 — schedule */}
       <Section
         icon={<Calendar className="h-3.5 w-3.5" />}
         title="Хугацаа"

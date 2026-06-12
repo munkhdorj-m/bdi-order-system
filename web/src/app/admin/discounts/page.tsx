@@ -20,6 +20,8 @@ type Row = {
   active: boolean;
   starts_at: string | null;
   ends_at: string | null;
+  target_mode: "all" | "include" | "exclude" | null;
+  target_price_list_ids: string[] | null;
   products: { name: string } | null;
   categories: { name: string } | null;
 };
@@ -79,7 +81,7 @@ export default async function AdminDiscountsPage() {
   const { data, error } = await supabase
     .from("discounts")
     .select(
-      "id, name, kind, pct, step_amount, step_qty, bonus_n, product_id, category_id, active, starts_at, ends_at, products:product_id(name), categories:category_id(name)",
+      "id, name, kind, pct, step_amount, step_qty, bonus_n, product_id, category_id, active, starts_at, ends_at, target_mode, target_price_list_ids, products:product_id(name), categories:category_id(name)",
     )
     .order("active", { ascending: false })
     .order("created_at", { ascending: false });
@@ -150,6 +152,18 @@ export default async function AdminDiscountsPage() {
                 <div className="text-[12px] text-muted-foreground mt-0.5 line-clamp-2">
                   {describeRow(r)}
                 </div>
+                {/* Store scope chip — only for targeted rules so the
+                    common all-stores case stays clean. */}
+                {(r.target_mode === "include" ||
+                  r.target_mode === "exclude") && (
+                  <div className="mt-1.5">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 ring-1 ring-sky-300/60 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-800/60">
+                      {r.target_mode === "include"
+                        ? `Зөвхөн ${r.target_price_list_ids?.length ?? 0} жагсаалт`
+                        : `${r.target_price_list_ids?.length ?? 0} жагсаалтаас бусад`}
+                    </span>
+                  </div>
+                )}
                 {(r.starts_at || r.ends_at) && (
                   <div className="text-[10.5px] text-muted-foreground/80 mt-1.5 tabular-nums">
                     {formatDay(r.starts_at)} → {formatDay(r.ends_at)}

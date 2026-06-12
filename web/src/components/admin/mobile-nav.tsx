@@ -39,22 +39,29 @@ export function MobileNav() {
           <Menu className="h-5 w-5" />
         </button>
       </SheetTrigger>
+      {/* Mirrors the desktop sidebar: light token surface, filled cobalt
+          pill on the active page. */}
       <SheetContent
         side="left"
         className="w-64 p-0 bg-sidebar text-sidebar-foreground"
       >
         <SheetHeader className="h-14 px-5 border-b justify-center">
-          <SheetTitle className="text-left text-base">BDI Admin</SheetTitle>
+          <SheetTitle className="text-left text-base flex items-center gap-2.5">
+            <span className="size-7 rounded-lg bg-gradient-to-br from-primary to-primary/75 text-primary-foreground flex items-center justify-center font-extrabold text-[12px]">
+              B
+            </span>
+            BDI Admin
+          </SheetTitle>
         </SheetHeader>
         <nav className="px-3 py-4 overflow-y-auto">
           {navSections.map((section, i) => (
             <div key={section.label ?? `top-${i}`} className={i > 0 ? "mt-5" : ""}>
               {section.label && (
-                <div className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/50">
+                <div className="px-3.5 mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-sidebar-foreground/45">
                   {section.label}
                 </div>
               )}
-              <ul className="space-y-0.5">
+              <ul className="space-y-1">
                 {section.items.map((item) => {
                   const active = isActive(pathname, item.href);
                   const Icon = item.icon;
@@ -63,13 +70,13 @@ export function MobileNav() {
                       <Link
                         href={item.href}
                         className={cn(
-                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                          "flex items-center gap-3 rounded-full px-3.5 py-2 text-sm transition-all",
                           active
-                            ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                            : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                            ? "bg-primary text-primary-foreground font-bold shadow-md shadow-primary/25"
+                            : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
                         )}
                       >
-                        <Icon className="h-4 w-4" />
+                        <Icon className="h-4 w-4" strokeWidth={active ? 2.4 : 2} />
                         {item.label}
                       </Link>
                     </li>
