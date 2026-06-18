@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, ShoppingBag, ShoppingCart } from "lucide-react";
+import {
+  ClipboardList,
+  Headset,
+  ShoppingBag,
+  ShoppingCart,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCart, totalQty } from "@/lib/cart";
 
@@ -43,6 +48,12 @@ export function BuyerBottomTabBar() {
       icon: ShoppingCart,
       match: (p: string) => p === "/cart",
       badge: cartQty,
+    },
+    {
+      href: "/contact",
+      label: "Тусламж",
+      icon: Headset,
+      match: (p: string) => p === "/contact",
     },
   ];
 

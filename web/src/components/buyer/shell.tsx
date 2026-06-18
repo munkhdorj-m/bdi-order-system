@@ -24,7 +24,7 @@ type Props = {
 };
 
 // Top-level pages that anchor the bottom tab bar — no back button needed here.
-const ROOT_PATHS = new Set(["/catalog", "/orders", "/cart"]);
+const ROOT_PATHS = new Set(["/catalog", "/orders", "/cart", "/contact"]);
 
 function storeInitial(name: string): string {
   const trimmed = name.trim();

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, homePathForRole } from "@/lib/auth";
+import { Phone } from "lucide-react";
 import { InstallAppHint } from "@/components/install-app-hint";
+import { getContactLinks } from "@/lib/contact";
 import { signIn } from "./actions";
 
 type SearchParams = Promise<{
@@ -31,6 +33,10 @@ export default async function LoginPage({
   const session = await getSession();
   if (session) redirect(homePathForRole(session.profile));
   const { error, success, phone } = await searchParams;
+
+  // Only the phone goes on the login screen (centered, below). Full
+  // contact + social list is on the in-app Холбоо барих tab.
+  const phoneLink = getContactLinks().find((l) => l.type === "phone");
 
   return (
     <main className="relative flex-1 min-h-screen flex flex-col items-center justify-center overflow-hidden px-5 py-10 text-white bg-brand-gradient">
@@ -144,7 +150,22 @@ export default async function LoginPage({
           <InstallAppHint />
         </div>
 
-        <div className="mt-8 text-center text-[11px] text-white/55">
+        {/* Just the phone here — the full contact + social list lives on
+            the in-app "Холбоо барих" tab. A locked-out user only needs a
+            number to call. */}
+        {phoneLink && (
+          <a
+            href={phoneLink.href}
+            className="mt-6 mx-auto flex items-center justify-center gap-2 text-white/90 hover:text-white transition-colors"
+          >
+            <Phone className="h-4 w-4" strokeWidth={2} />
+            <span className="text-[14px] font-semibold tabular-nums">
+              {phoneLink.display}
+            </span>
+          </a>
+        )}
+
+        <div className="mt-6 text-center text-[11px] text-white/55">
           © {new Date().getFullYear()} BDI · Захиалгын систем
         </div>
       </div>
