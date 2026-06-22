@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { fetchAllStores } from "@/lib/stores";
 import {
   UserCreateForm,
   type SupermarketOption,
@@ -13,18 +13,9 @@ import {
  * (no client fetch needed).
  */
 export default async function AdminCreateUserPage() {
-  const supabase = await createClient();
-  const { data: stores } = await supabase
-    .from("supermarkets")
-    .select("id, name, address")
-    .eq("active", true)
-    .order("name");
-
-  const supermarkets: SupermarketOption[] = (stores ?? []).map((s) => ({
-    id: s.id as string,
-    name: s.name as string,
-    address: (s.address as string | null) ?? null,
-  }));
+  // Page past the server row cap so all stores (active + inactive) reach
+  // the picker — not just the first 1000 by name.
+  const supermarkets: SupermarketOption[] = await fetchAllStores();
 
   return (
     <div className="max-w-3xl">

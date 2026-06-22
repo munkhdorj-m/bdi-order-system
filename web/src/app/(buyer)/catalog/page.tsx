@@ -221,26 +221,35 @@ async function ProductGrid({
   const supermarketId = session.profile.supermarket_id!;
   const supabase = await createClient();
 
+  const term = (q ?? "").trim();
+  const searching = term.length > 0;
   const sortCfg = SORT_CONFIG[sort];
-  let query = supabase
-    .from("supermarket_prices")
-    .select(
-      "product_id, sku, name, brand, image_url, category_id, effective_price, unit, pack_size, box_count, stock",
-    )
-    .eq("supermarket_id", supermarketId)
-    .order(sortCfg.column, { ascending: sortCfg.ascending });
 
-  if (q && q.trim()) {
-    const term = q.trim();
-    query = query.or(
-      `name.ilike.%${term}%,sku.ilike.%${term}%,brand.ilike.%${term}%`,
-    );
-  }
-  if (category) query = query.eq("category_id", category);
+  // Searching → the search_products RPC (fix 31): multi-word, order-
+  // independent, typo-tolerant, ranked best-match-first. Browsing →
+  // the plain view query with the chosen sort. Both return the same
+  // columns so the cards render identically.
+  const productsQuery = searching
+    ? supabase.rpc("search_products", {
+        p_supermarket_id: supermarketId,
+        p_query: term,
+        p_category: category ?? null,
+      })
+    : (() => {
+        let q2 = supabase
+          .from("supermarket_prices")
+          .select(
+            "product_id, sku, name, brand, image_url, category_id, effective_price, unit, pack_size, box_count, stock",
+          )
+          .eq("supermarket_id", supermarketId)
+          .order(sortCfg.column, { ascending: sortCfg.ascending });
+        if (category) q2 = q2.eq("category_id", category);
+        return q2;
+      })();
 
   const [{ data: products }, { data: discountRows }, { data: storeRow }] =
     await Promise.all([
-      query,
+      productsQuery,
       // Pull only kind='product' rules — the catalog page just needs them
       // for the per-product sale badges on individual product cards. The
       // full deals catalog (sales + threshold-bonus rewards) lives in the
@@ -259,7 +268,7 @@ async function ProductGrid({
         .eq("id", supermarketId)
         .single(),
     ]);
-  const rows = (products as PriceRow[] | null) ?? [];
+  const rows = (products as unknown as PriceRow[] | null) ?? [];
   const rules = rulesForPriceList(
     (discountRows as unknown as DiscountRule[] | null) ?? [],
     (storeRow?.price_list_id as string | null) ?? null,
@@ -272,12 +281,16 @@ async function ProductGrid({
       <div className="flex items-center justify-between mb-3 px-0.5">
         <p className="text-[13px]">
           <span className="font-bold tabular-nums">{rows.length}</span>
-          <span className="text-muted-foreground"> бараа</span>
+          <span className="text-muted-foreground">
+            {searching ? " илэрц" : " бараа"}
+          </span>
           {activeCategory && (
             <span className="text-muted-foreground"> · {activeCategory.name}</span>
           )}
         </p>
-        {rows.length > 1 && <CatalogSortSelect value={sort} />}
+        {/* Hide the sort selector while searching — results are ordered by
+            relevance, which is the only sensible order for a query. */}
+        {!searching && rows.length > 1 && <CatalogSortSelect value={sort} />}
       </div>
 
       {rows.length === 0 ? (

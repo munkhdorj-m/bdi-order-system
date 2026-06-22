@@ -37,7 +37,7 @@ export default async function EditDiscountPage({
       .select("id, name, sku")
       .eq("active", true)
       .order("name")
-      .limit(500),
+      .limit(10000),
     supabase.from("categories").select("id, name").order("sort_order"),
     supabase.from("price_lists").select("id, name").order("name"),
     supabase

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { searchNormalize } from "@/lib/translit";
 
 export type SelectOption = {
   value: string;
@@ -40,6 +41,27 @@ type Props = {
   disabled?: boolean;
 };
 
+// Romanize (Cyrillic → Latin) + strip accents + collapse whitespace, so
+// the picker is case-, accent-, AND script-insensitive: typing "habudai"
+// finds "Хабудай", "kola" finds "Кола". See lib/translit.
+const normalize = searchNormalize;
+
+// How many matches to render at once. Filtering runs over ALL loaded
+// options (so nothing is "missing"), but we only paint the top slice to
+// keep the DOM light when the list is large.
+const RENDER_CAP = 80;
+
+/**
+ * Searchable single-select. Filtering is SELF-CONTROLLED (cmdk's built-in
+ * filter is disabled via shouldFilter={false}) so matching is predictable:
+ *
+ *   - case- and accent-insensitive
+ *   - multi-word, order-independent (each typed word must appear somewhere
+ *     in label + description) — "хан уул" finds "Минии дэлгүүр, Хан-Уул"
+ *   - substring (partial words match)
+ *
+ * If an option is in `options`, typing its name WILL surface it.
+ */
 export function SearchableSelect({
   name,
   options,
@@ -54,12 +76,44 @@ export function SearchableSelect({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState<string>(defaultValue ?? "");
+  const [query, setQuery] = useState("");
   const selected = options.find((o) => o.value === value);
+
+  // Precompute a normalized haystack per option once.
+  const indexed = useMemo(
+    () =>
+      options.map((o) => ({
+        opt: o,
+        hay: normalize(`${o.label} ${o.description ?? ""}`),
+      })),
+    [options],
+  );
+
+  const filtered = useMemo(() => {
+    const tokens = normalize(query).split(" ").filter(Boolean);
+    const matches =
+      tokens.length === 0
+        ? indexed
+        : indexed.filter(({ hay }) => tokens.every((t) => hay.includes(t)));
+    return matches.slice(0, RENDER_CAP).map((m) => m.opt);
+  }, [indexed, query]);
+
+  const hiddenCount =
+    query.trim().length === 0
+      ? Math.max(0, options.length - RENDER_CAP)
+      : 0;
 
   return (
     <>
       <input type="hidden" name={name} value={value} />
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          // Reset the query when closing so reopening starts fresh.
+          if (!next) setQuery("");
+        }}
+      >
         <PopoverTrigger asChild>
           <Button
             type="button"
@@ -83,24 +137,28 @@ export function SearchableSelect({
           className="w-[var(--radix-popover-trigger-width)] p-0"
           align="start"
         >
-          <Command
-            filter={(value, search) => {
-              // cmdk's default filter is fuzzy substring on `value`. We pass
-              // label+description as the cmdk value (see CommandItem below)
-              // so both fields are searched.
-              return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
-            }}
-          >
-            <CommandInput placeholder={searchPlaceholder} />
+          {/* We own the filtering (the `filtered` array above); force cmdk
+              to keep everything we render by scoring every item 1. Using
+              the `filter` prop rather than `shouldFilter` because that's
+              the one reliably forwarded through the shadcn wrapper — and
+              our items' cmdk `value` is the UUID, which would never match
+              the typed text if cmdk's own filter ran. */}
+          <Command filter={() => 1}>
+            <CommandInput
+              placeholder={searchPlaceholder}
+              value={query}
+              onValueChange={setQuery}
+            />
             <CommandList>
               <CommandEmpty>{emptyLabel}</CommandEmpty>
               <CommandGroup>
-                {allowEmpty && (
+                {allowEmpty && query.trim().length === 0 && (
                   <CommandItem
                     value="__none__"
                     onSelect={() => {
                       setValue("");
                       setOpen(false);
+                      setQuery("");
                     }}
                   >
                     <Check
@@ -114,13 +172,14 @@ export function SearchableSelect({
                     </span>
                   </CommandItem>
                 )}
-                {options.map((o) => (
+                {filtered.map((o) => (
                   <CommandItem
                     key={o.value}
-                    value={`${o.label} ${o.description ?? ""}`}
+                    value={o.value}
                     onSelect={() => {
                       setValue(o.value);
                       setOpen(false);
+                      setQuery("");
                     }}
                   >
                     <Check
@@ -139,6 +198,11 @@ export function SearchableSelect({
                     </div>
                   </CommandItem>
                 ))}
+                {hiddenCount > 0 && (
+                  <div className="px-2 py-1.5 text-[11px] text-muted-foreground">
+                    +{hiddenCount} бусад — хайж нэрээ бичнэ үү
+                  </div>
+                )}
               </CommandGroup>
             </CommandList>
           </Command>

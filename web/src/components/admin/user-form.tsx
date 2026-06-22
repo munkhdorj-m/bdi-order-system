@@ -29,6 +29,7 @@ export type SupermarketOption = {
   id: string;
   name: string;
   address?: string | null;
+  active?: boolean;
 };
 
 type ActionState = { error?: string };
@@ -58,7 +59,12 @@ export function UserForm({ defaults, supermarkets, action, isSelf }: Props) {
       supermarkets.map((s) => ({
         value: s.id,
         label: s.name,
-        description: s.address ?? undefined,
+        // Address + an "идэвхгүй" flag for deactivated stores (also makes
+        // them searchable by that word). Joined so the picker shows both.
+        description:
+          [s.address, s.active === false ? "идэвхгүй" : null]
+            .filter(Boolean)
+            .join(" · ") || undefined,
       })),
     [supermarkets],
   );

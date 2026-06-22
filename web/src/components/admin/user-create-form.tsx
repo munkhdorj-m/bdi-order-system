@@ -28,6 +28,7 @@ export type SupermarketOption = {
   id: string;
   name: string;
   address?: string | null;
+  active?: boolean;
 };
 
 /**
@@ -50,7 +51,12 @@ export function UserCreateForm({
   const storeOptions = supermarkets.map((s) => ({
     value: s.id,
     label: s.name,
-    description: s.address ?? undefined,
+    // Address + an "идэвхгүй" flag for deactivated stores (also searchable
+    // by that word).
+    description:
+      [s.address, s.active === false ? "идэвхгүй" : null]
+        .filter(Boolean)
+        .join(" · ") || undefined,
   }));
 
   return (

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/auth";
+import { fetchAllStores } from "@/lib/stores";
 import { UserForm } from "@/components/admin/user-form";
 import { DeleteUserButton } from "@/components/admin/delete-user-button";
 import { updateUser } from "../actions";
@@ -14,17 +15,15 @@ export default async function EditUserPage({ params }: { params: Params }) {
   const supabase = await createClient();
   const session = await getSession();
 
-  const [{ data: user }, { data: supermarkets }] = await Promise.all([
+  // fetchAllStores pages past the server row cap so every store (active +
+  // inactive) reaches the picker, not just the first 1000 by name.
+  const [{ data: user }, supermarkets] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, phone, full_name, role, supermarket_id, active")
       .eq("id", id)
       .single(),
-    supabase
-      .from("supermarkets")
-      .select("id, name, address")
-      .eq("active", true)
-      .order("name"),
+    fetchAllStores(),
   ]);
 
   if (!user) notFound();
@@ -51,7 +50,7 @@ export default async function EditUserPage({ params }: { params: Params }) {
 
       <UserForm
         defaults={user}
-        supermarkets={supermarkets ?? []}
+        supermarkets={supermarkets}
         action={update}
         isSelf={isSelf}
       />

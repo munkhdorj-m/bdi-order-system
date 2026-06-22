@@ -66,53 +66,51 @@ export default async function RepCatalogPage({
   }
   const store = storeRaw as unknown as StoreContext;
 
-  // supermarket_prices view exposes effective_price (post-override). We
-  // join the source products row separately to get the base list price so
-  // the "Тусгай үнэ" badge can flag where an override is in effect.
-  let pricesQuery = supabase
-    .from("supermarket_prices")
-    .select(
-      `product_id, sku, name, brand, image_url, category_id, effective_price, box_count,
-       products!inner(base_price)`,
-    )
-    .eq("supermarket_id", id)
-    .order("name");
+  // Searching → the shared search_products RPC (fix 31): multi-word,
+  // typo-tolerant, ranked. Browsing → the plain view query ordered by
+  // name. The view exposes base_price directly now, so the "Тусгай үнэ"
+  // badge compares effective_price vs base_price with no extra join.
+  const term = (q ?? "").trim();
+  const searching = term.length > 0;
 
-  if (q && q.trim()) {
-    const term = q.trim();
-    pricesQuery = pricesQuery.or(
-      `name.ilike.%${term}%,sku.ilike.%${term}%,brand.ilike.%${term}%`,
-    );
-  }
-  if (category) pricesQuery = pricesQuery.eq("category_id", category);
+  const productsQuery = searching
+    ? supabase.rpc("search_products", {
+        p_supermarket_id: id,
+        p_query: term,
+        p_category: category ?? null,
+      })
+    : (() => {
+        let pq = supabase
+          .from("supermarket_prices")
+          .select(
+            "product_id, sku, name, brand, image_url, category_id, effective_price, box_count, base_price",
+          )
+          .eq("supermarket_id", id)
+          .order("name");
+        if (category) pq = pq.eq("category_id", category);
+        return pq;
+      })();
 
   const [{ data: rawProducts }, cats] = await Promise.all([
-    pricesQuery,
+    productsQuery,
     getCategories(),
   ]);
 
-  // Normalize the joined shape — Supabase types the joined relation as an
-  // array even when it's a single row, so map it out.
   const rows: PriceRow[] = (
     (rawProducts as unknown as Array<
-      Omit<PriceRow, "list_price"> & {
-        products: { base_price: number } | { base_price: number }[];
-      }
+      Omit<PriceRow, "list_price"> & { base_price: number | null }
     >) ?? []
-  ).map((p) => {
-    const joined = Array.isArray(p.products) ? p.products[0] : p.products;
-    return {
-      product_id: p.product_id,
-      sku: p.sku,
-      name: p.name,
-      brand: p.brand,
-      image_url: p.image_url,
-      category_id: p.category_id,
-      effective_price: p.effective_price,
-      box_count: p.box_count,
-      list_price: joined?.base_price ?? p.effective_price,
-    };
-  });
+  ).map((p) => ({
+    product_id: p.product_id,
+    sku: p.sku,
+    name: p.name,
+    brand: p.brand,
+    image_url: p.image_url,
+    category_id: p.category_id,
+    effective_price: p.effective_price,
+    box_count: p.box_count,
+    list_price: p.base_price ?? p.effective_price,
+  }));
 
   function chipHref(opts: { category?: string }) {
     const p = new URLSearchParams();
