@@ -8,6 +8,12 @@ import {
   createPhoneVerification,
   normalizeMnPhone,
 } from "@/lib/sms/verify-mn";
+import {
+  finalizeRegistration,
+  parsePendingDraft,
+  PENDING_COOKIE,
+  type RegisterDraft,
+} from "@/lib/register-finalize";
 
 // ---------- tunables ----------
 const MIN_PASSWORD = 8;
@@ -15,15 +21,9 @@ const MIN_PASSWORD = 8;
 // Cookie carrying the in-flight registration draft between the phone-entry
 // step and the verify step. httpOnly so JS can't read the password.
 // 10-minute TTL matches verify.mn's 300s session window plus a buffer.
-const PENDING_COOKIE = "bdi-verify-mn-pending";
 const PENDING_COOKIE_TTL_S = 600;
 
-type PendingDraft = {
-  sessionId: string;
-  phone: string;
-  fullName: string;
-  password: string;
-};
+type PendingDraft = RegisterDraft;
 
 async function setPendingCookie(draft: PendingDraft): Promise<void> {
   const store = await cookies();
@@ -38,21 +38,7 @@ async function setPendingCookie(draft: PendingDraft): Promise<void> {
 
 async function readPendingCookie(): Promise<PendingDraft | null> {
   const store = await cookies();
-  const raw = store.get(PENDING_COOKIE)?.value;
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as PendingDraft;
-    if (
-      typeof parsed?.sessionId === "string" &&
-      typeof parsed?.phone === "string" &&
-      typeof parsed?.password === "string"
-    ) {
-      return parsed;
-    }
-    return null;
-  } catch {
-    return null;
-  }
+  return parsePendingDraft(store.get(PENDING_COOKIE)?.value);
 }
 
 async function clearPendingCookie(): Promise<void> {
@@ -127,9 +113,6 @@ export async function startVerification(formData: FormData) {
   // Duplicate-check BEFORE calling verify.mn — every verify.mn session
   // costs 150₮ per verified phone, so we want to fail fast if the
   // phone is already registered. We also save the user a wasted SMS.
-  //
-  // Match against both stored formats ("+97699112233" and "97699112233")
-  // since legacy rows can be in either shape.
   {
     const admin = createAdminClient();
     const { data: existingProfile } = await admin
@@ -139,7 +122,7 @@ export async function startVerification(formData: FormData) {
       .maybeSingle();
     if (existingProfile?.id) {
       redirect(
-        `/login?method=phone&phone=${encodeURIComponent(rawPhone)}&error=${encodeURIComponent(
+        `/login?phone=${encodeURIComponent(rawPhone)}&error=${encodeURIComponent(
           existingProfile.active
             ? "Энэ утас аль хэдийн бүртгэлтэй байна. Нэвтэрнэ үү."
             : "Энэ утас бүртгэгдсэн ба админы баталгаажилт хүлээж байна. Бид баталгаажуулмагц нэвтрэх боломжтой.",
@@ -148,28 +131,15 @@ export async function startVerification(formData: FormData) {
     }
   }
 
-  // Build the absolute callback URL verify.mn will hit when the user's
-  // SMS lands. The {sessionId} segment lets the route handler identify
-  // which session to mark verified.
   const origin = await siteOrigin();
 
+  // verify.mn fires its callback to a fixed URL with no per-session
+  // substitution, and that server-to-server ping has no user cookie — so
+  // it can't create the account (no password). We point it at a no-op and
+  // do account creation server-side from the poll route + completeVerification
+  // (both of which DO carry the user's cookie). The callback is just an ack.
   let session;
   try {
-    // We pass a placeholder URL on first try; verify.mn assigns the
-    // sessionId in its response. Once we have it, the callback URL is
-    // baked into our route (which the verify.mn server pings with the
-    // sessionId-bearing path). To produce a URL containing the
-    // sessionId BEFORE we have one, we use a verify-mn convention:
-    // include `{sessionId}` literal in the URL and verify.mn will not
-    // substitute. So instead we accept that the callback URL is
-    // session-aware: we let our route handler look the sessionId up
-    // via the path param.
-    // verify.mn requires a callback URL but fires GET to that exact URL
-    // with no sessionId substitution — so a per-session callback URL
-    // isn't reachable from inside the createSession call (we don't have
-    // the sessionId yet). Point it at a single no-op endpoint; the
-    // client poller handles verification discovery via direct status
-    // polls, which is the source of truth anyway.
     session = await createPhoneVerification({
       phone,
       callbackUrl: `${origin}/api/verify-mn/callback/noop`,
@@ -184,29 +154,18 @@ export async function startVerification(formData: FormData) {
     );
   }
 
-  // Now that we know the sessionId, write the actual callback URL into
-  // our own DB row — verify.mn already has the URL it'll ping, but we
-  // track the sessionId so callback + poll can find our row. (If we
-  // ever need verify.mn to ping a session-specific URL we'd need a
-  // second updateSession API call, which verify.mn doesn't expose;
-  // for now the single placeholder path is fine because our callback
-  // route reads sessionId from the path param.)
-  //
-  // Insert the DB row tracking this session. callback + poll both
-  // need it to confirm verification.
+  // Track the session so callback + poll can confirm verification.
   const admin = createAdminClient();
-  const { error: insertErr } = await admin
-    .from("verify_mn_sessions")
-    .insert({
-      session_id: session.sessionId,
-      phone,
-      purpose: "register",
-      code: session.text,
-      sms_uri: session.smsUri,
-      display_instruction: session.displayInstruction,
-      verified: false,
-      expires_at: session.expiresAt,
-    });
+  const { error: insertErr } = await admin.from("verify_mn_sessions").insert({
+    session_id: session.sessionId,
+    phone,
+    purpose: "register",
+    code: session.text,
+    sms_uri: session.smsUri,
+    display_instruction: session.displayInstruction,
+    verified: false,
+    expires_at: session.expiresAt,
+  });
   if (insertErr) {
     console.error(
       "[register/phone] verify_mn_sessions insert failed:",
@@ -219,7 +178,6 @@ export async function startVerification(formData: FormData) {
     );
   }
 
-  // Stash the draft + sessionId for the verify step.
   await setPendingCookie({
     sessionId: session.sessionId,
     phone,
@@ -227,14 +185,17 @@ export async function startVerification(formData: FormData) {
     password,
   });
 
-  redirect(`/register/phone/verify?session=${encodeURIComponent(session.sessionId)}`);
+  redirect(
+    `/register/phone/verify?session=${encodeURIComponent(session.sessionId)}`,
+  );
 }
 
 // ============================================================
-// completeVerification — called from the verify page once the client
-// poller has confirmed the session is verified. Reads the cookie,
-// double-checks the DB row, creates the auth user with phone+password,
-// clears the cookie.
+// completeVerification — called from the verify page's client poller once
+// the session is verified. The poll route may have already created the
+// account server-side (see api/verify-mn/poll); finalizeRegistration is
+// idempotent, so this either creates it or finds the existing one, then
+// lands the user back on /login.
 // ============================================================
 export async function completeVerification() {
   const pending = await readPendingCookie();
@@ -244,195 +205,29 @@ export async function completeVerification() {
     );
   }
 
-  const admin = createAdminClient();
-  const { data: row, error: rowErr } = await admin
-    .from("verify_mn_sessions")
-    .select("session_id, verified")
-    .eq("session_id", pending.sessionId)
-    .maybeSingle();
-  if (rowErr || !row) {
-    console.error("[register/phone] completeVerification: row missing");
-    redirect(
-      `/register/phone?error=${encodeURIComponent("Сесс олдсонгүй. Дахин эхлүүлнэ үү.")}`,
-    );
-  }
-  if (!row.verified) {
+  const result = await finalizeRegistration(pending);
+
+  if (result.status === "not_verified") {
     redirect(
       `/register/phone/verify?session=${encodeURIComponent(pending.sessionId)}&error=${encodeURIComponent("Утас баталгаажаагүй байна.")}`,
     );
   }
 
-  // Step 1: figure out the auth user id. Either find an existing
-  // profile with this phone (means a previous attempt got partway
-  // through), or create a fresh auth user.
-  let userId: string | null = null;
-
-  // Hard duplicate-check: if a profile already exists for this phone,
-  // the account is fully registered (whether active=true or pending
-  // admin approval). Refuse the re-registration — the user should log
-  // in OR contact admin to reset their password. Without this guard a
-  // re-register would silently overwrite the existing profile's name
-  // and reset `active=false`, undoing prior admin approval.
-  {
-    const { data: existingProfile, error: existingErr } = await admin
-      .from("profiles")
-      .select("id, active")
-      .in("phone", phoneVariants(pending.phone))
-      .maybeSingle();
-    if (existingErr) {
-      console.error(
-        "[register/phone] profile lookup by phone failed:",
-        existingErr.message,
-      );
-    }
-    if (existingProfile?.id) {
-      console.info(
-        "[register/phone] duplicate phone — sending user to login",
-        pending.phone,
-      );
-      await clearPendingCookie();
-      redirect(
-        `/login?method=phone&phone=${encodeURIComponent(pending.phone)}&error=${encodeURIComponent(
-          existingProfile.active
-            ? "Энэ утас аль хэдийн бүртгэлтэй байна. Нэвтэрнэ үү."
-            : "Энэ утас бүртгэгдсэн ба админы баталгаажилт хүлээж байна. Бид баталгаажуулмагц нэвтрэх боломжтой.",
-        )}`,
-      );
-    }
-  }
-
-  // No existing profile → create the auth user.
-  if (!userId) {
-    const { data: created, error: createErr } =
-      await admin.auth.admin.createUser({
-        phone: pending.phone,
-        password: pending.password,
-        phone_confirm: true,
-        user_metadata: pending.fullName
-          ? { full_name: pending.fullName }
-          : undefined,
-      });
-
-    if (createErr) {
-      // "Already registered" means there's an auth.users row but no
-      // matching profile (we'd have caught it above otherwise). Look
-      // it up via listUsers so we can still attach a profile.
-      if (/already (registered|exists)/i.test(createErr.message)) {
-        console.warn(
-          "[register/phone] createUser said already-exists; looking up by phone",
-        );
-        const { data: list, error: listErr } =
-          await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-        if (listErr) {
-          console.error("[register/phone] listUsers failed:", listErr);
-        }
-        // Supabase stores phones WITHOUT the leading "+" while we keep
-        // E.164 internally. Match against both forms so the listUsers
-        // result doesn't silently miss a row purely because of `+`.
-        const variants = new Set(phoneVariants(pending.phone));
-        userId =
-          list?.users.find((u) => u.phone && variants.has(u.phone))?.id ??
-          null;
-        if (!userId) {
-          console.error(
-            "[register/phone] listUsers couldn't find the phone in either format; aborting",
-            "looking for:",
-            Array.from(variants).join(" or "),
-          );
-          redirect(
-            `/register/phone/verify?session=${encodeURIComponent(pending.sessionId)}&error=${encodeURIComponent("Бүртгэл үүсгэхэд алдаа гарлаа. Админд хандана уу.")}`,
-          );
-        }
-      } else {
-        console.error("[register/phone] createUser failed:", createErr);
-        redirect(
-          `/register/phone/verify?session=${encodeURIComponent(pending.sessionId)}&error=${encodeURIComponent(mapAuthError(createErr, "register"))}`,
-        );
-      }
-    } else {
-      userId = created?.user?.id ?? null;
-    }
-  }
-
-  if (!userId) {
-    // Should be unreachable — every branch above either sets userId
-    // or redirects. Belt-and-suspenders.
-    console.error(
-      "[register/phone] reached profile upsert with null userId",
-    );
+  if (result.status === "error") {
+    console.error("[register/phone] finalize failed:", result.message);
     redirect(
-      `/register/phone/verify?session=${encodeURIComponent(pending.sessionId)}&error=${encodeURIComponent("Бүртгэл үүсгэхэд алдаа гарлаа. Админд хандана уу.")}`,
+      `/register/phone/verify?session=${encodeURIComponent(pending.sessionId)}&error=${encodeURIComponent("Бүртгэл үүсгэхэд алдаа гарлаа. Дахин оролдоно уу.")}`,
     );
   }
 
-  // Belt-and-suspenders: explicitly mark phone as confirmed.
-  // `phone_confirm: true` on admin.createUser is supposed to set
-  // phone_confirmed_at, but in practice some supabase-auth versions
-  // silently ignore the flag and leave it NULL — which then blocks
-  // signInWithPassword for that user with "Invalid login credentials".
-  // updateUserById here makes sure the flag lands every time.
-  {
-    const { error: confirmErr } = await admin.auth.admin.updateUserById(
-      userId,
-      { phone_confirm: true },
-    );
-    if (confirmErr) {
-      console.warn(
-        "[register/phone] phone_confirm update failed:",
-        confirmErr.message,
-      );
-      // Not fatal — fix 28 (one-shot SQL) handles users where this
-      // failed, and admin can also flip it via SQL directly.
-    }
-  }
-
-  // Step 2: upsert the profile. This is REQUIRED — if it fails the
-  // user won't appear in /admin/users and admin can't approve them.
-  // No silent no-op like before.
-  //
-  // We store phones WITHOUT the leading "+" to match Supabase Auth's
-  // `auth.users.phone` format. Going forward, profile lookups should
-  // expect this format; the phoneVariants helper above guards against
-  // legacy data in either format.
-  const phoneStored = pending.phone.startsWith("+")
-    ? pending.phone.slice(1)
-    : pending.phone;
-  const { error: profileErr } = await admin
-    .from("profiles")
-    .upsert(
-      {
-        id: userId,
-        phone: phoneStored,
-        full_name: pending.fullName || null,
-        role: "buyer",
-        active: false,
-      },
-      { onConflict: "id" },
-    );
-
-  if (profileErr) {
-    console.error(
-      "[register/phone] profile upsert failed:",
-      profileErr.message,
-      "userId:",
-      userId,
-      "phone:",
-      pending.phone,
-    );
-    redirect(
-      `/register/phone/verify?session=${encodeURIComponent(pending.sessionId)}&error=${encodeURIComponent("Бүртгэл хадгалахад алдаа гарлаа: " + profileErr.message.slice(0, 80))}`,
-    );
-  }
-
-  console.info(
-    "[register/phone] registration complete — userId:",
-    userId,
-    "phone:",
-    pending.phone,
-    "name:",
-    pending.fullName,
-  );
-
+  // created | exists → registration is done; drop the draft cookie.
   await clearPendingCookie();
+
+  if (result.status === "exists" && result.active) {
+    redirect(
+      `/login?phone=${encodeURIComponent(pending.phone)}&error=${encodeURIComponent("Энэ утас аль хэдийн бүртгэлтэй байна. Нэвтэрнэ үү.")}`,
+    );
+  }
+
   redirect("/login?success=phone-verified");
 }

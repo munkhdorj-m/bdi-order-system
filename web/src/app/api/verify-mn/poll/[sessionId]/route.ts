@@ -1,9 +1,41 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   VERIFY_MN_MIN_POLL_MS,
   checkPhoneVerification,
 } from "@/lib/sms/verify-mn";
+import {
+  finalizeRegistration,
+  parsePendingDraft,
+  PENDING_COOKIE,
+} from "@/lib/register-finalize";
+
+/**
+ * Create the account NOW, server-side, the moment verify.mn confirms —
+ * instead of waiting for the client poller to run completeVerification.
+ * The poll fetch is same-origin so it carries the httpOnly draft cookie
+ * (name + password). This survives the user closing the tab right after
+ * verification. Idempotent + best-effort: the client path is still a
+ * backup, and a failure here just leaves the row verified for a retry.
+ */
+async function finalizeFromCookie(sessionId: string): Promise<void> {
+  try {
+    const store = await cookies();
+    const draft = parsePendingDraft(store.get(PENDING_COOKIE)?.value);
+    // Only finalize the draft that matches THIS session (the user's own).
+    if (!draft || draft.sessionId !== sessionId) return;
+    const result = await finalizeRegistration(draft);
+    if (result.status === "error") {
+      console.error(
+        "[verify.mn poll] server-side finalize failed:",
+        result.message,
+      );
+    }
+  } catch (e) {
+    console.error("[verify.mn poll] finalize threw:", e);
+  }
+}
 
 /**
  * Client-driven polling endpoint.
@@ -49,8 +81,11 @@ export async function GET(
     return NextResponse.json({ error: "session not found" }, { status: 404 });
   }
 
-  // Already verified by an earlier poll or by the callback — fast path.
+  // Already verified by an earlier poll — fast path. Still attempt finalize
+  // (idempotent): recovers the account if a prior tick flipped `verified`
+  // but its finalize didn't complete.
   if (row.verified) {
+    await finalizeFromCookie(sessionId);
     return NextResponse.json({
       verified: true,
       expired: false,
@@ -77,6 +112,9 @@ export async function GET(
         .from("verify_mn_sessions")
         .update({ verified: true, verified_at: new Date().toISOString() })
         .eq("session_id", sessionId);
+      // Create the account right now, server-side, while we have the
+      // user's cookie — don't depend on the client poller finishing.
+      await finalizeFromCookie(sessionId);
       return NextResponse.json({
         verified: true,
         expired: false,
