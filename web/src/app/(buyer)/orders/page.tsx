@@ -34,6 +34,7 @@ function parseFilter(v: string | undefined): FilterKey {
 
 function formatShortDateTime(iso: string) {
   return new Date(iso).toLocaleString("mn-MN", {
+    timeZone: "Asia/Ulaanbaatar",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -49,6 +50,7 @@ function formatRelativeDate(iso: string): string {
   if (day < 2) return "өчигдөр";
   if (day < 30) return `${day} өдрийн өмнө`;
   return d.toLocaleDateString("mn-MN", {
+    timeZone: "Asia/Ulaanbaatar",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

@@ -15,6 +15,7 @@ const KIND_LABELS: Record<NotificationItem["kind"], string> = {
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString("mn-MN", {
+    timeZone: "Asia/Ulaanbaatar",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

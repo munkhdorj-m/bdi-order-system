@@ -37,6 +37,8 @@ type OrderDetail = {
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString("mn-MN", {
+    // Always render in Mongolia time — server renders in UTC otherwise.
+    timeZone: "Asia/Ulaanbaatar",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

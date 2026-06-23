@@ -92,6 +92,7 @@ export function formatNextDeliveryLabel(
   date.setDate(date.getDate() + daysAhead);
   const day = WEEKDAY_LABELS_MN[target];
   const md = date.toLocaleDateString("mn-MN", {
+    timeZone: "Asia/Ulaanbaatar",
     month: "2-digit",
     day: "2-digit",
   });

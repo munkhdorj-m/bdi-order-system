@@ -158,6 +158,7 @@ export default async function AdminDashboard() {
           <p className="text-[13px] text-muted-foreground">
             Өнөөдөр ·{" "}
             {new Date().toLocaleDateString("mn-MN", {
+              timeZone: "Asia/Ulaanbaatar",
               year: "numeric",
               month: "2-digit",
               day: "2-digit",

@@ -40,6 +40,7 @@ type OrderRow = {
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString("mn-MN", {
+    timeZone: "Asia/Ulaanbaatar",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -50,6 +51,7 @@ function formatDateTime(iso: string) {
 
 function formatShortDate(iso: string) {
   return new Date(iso).toLocaleDateString("mn-MN", {
+    timeZone: "Asia/Ulaanbaatar",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -62,10 +64,15 @@ function formatShortDate(iso: string) {
  * groupings match how the admin reads dates.
  */
 function dayKeyOf(iso: string): string {
-  return iso.slice(0, 10);
+  // Group by the Mongolia calendar day (en-CA → yyyy-mm-dd), not the raw
+  // UTC slice — otherwise orders near midnight land in the wrong day group.
+  return new Date(iso).toLocaleDateString("en-CA", {
+    timeZone: "Asia/Ulaanbaatar",
+  });
 }
 function dayLabelOf(iso: string): string {
   return new Date(iso).toLocaleDateString("mn-MN", {
+    timeZone: "Asia/Ulaanbaatar",
     year: "numeric",
     month: "long",
     day: "numeric",

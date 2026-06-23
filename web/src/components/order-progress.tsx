@@ -18,6 +18,7 @@ type Props = {
 function formatDateTime(iso: string | null | undefined) {
   if (!iso) return null;
   return new Date(iso).toLocaleString("mn-MN", {
+    timeZone: "Asia/Ulaanbaatar",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",

@@ -28,6 +28,7 @@ type OrderRow = {
 
 function formatShortDate(iso: string) {
   return new Date(iso).toLocaleDateString("mn-MN", {
+    timeZone: "Asia/Ulaanbaatar",
     month: "2-digit",
     day: "2-digit",
   });
