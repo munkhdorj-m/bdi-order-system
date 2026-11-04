@@ -85,16 +85,26 @@ About two minutes, once.
 2. Create a Telegram group (e.g. "BDI Захиалга — админ"), add every admin,
    and **add your new bot as a member**.
 
-3. Post any message in the group, then open this URL in a browser:
+3. In the group, send `/start@YourBotName` (your bot's username). A plain
+   message like "hi" won't work: bots have *privacy mode* on by default and
+   never see ordinary group messages, only commands addressed to them. Then
+   open this URL in a browser (it contains your token — don't screenshot or
+   share it):
 
    ```
    https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates
    ```
 
-   Find `"chat":{"id":-1001234567890,...}`. The **negative** number is
-   `TELEGRAM_CHAT_ID`.
+   Find the entry whose `"type"` is `"group"` or `"supergroup"`, e.g.
+   `"chat":{"id":-5238060644,"title":"BDI Orders","type":"group"}`. That
+   **negative** `id` is `TELEGRAM_CHAT_ID`.
 
-4. Add both to `.env.local` and to Vercel.
+   > Don't use an entry with `"type":"private"`. That's your own chat with the
+   > bot, and its ID is a positive number — using it sends every alert to your
+   > private messages instead of the group.
+
+4. Add both to `.env.local` and to Vercel, then **redeploy**. Vercel only
+   applies changed environment variables to new deployments.
 
 `TELEGRAM_CHAT_ID` accepts a comma-separated list — a group plus individual
 admins works without any code change:
@@ -103,12 +113,30 @@ admins works without any code change:
 TELEGRAM_CHAT_ID=-1001234567890,987654321
 ```
 
-### If the group gets no messages
+### If alerts have no "open" button
 
-Telegram bots default to *privacy mode* in groups. That only restricts what the
-bot can **read**, not what it can **send**, so sending works regardless. If
-`getUpdates` returns an empty array, the bot wasn't in the group when you posted
-— add it, post again, re-check.
+Each alert carries a button (e.g. **Захиалга харах**) that opens the order or
+user page. Alerts sent while testing locally have no button: Telegram won't
+link to `localhost` or a LAN address. On the live site the button uses
+`NEXT_PUBLIC_SITE_URL`, or Vercel's production domain if that isn't set to a
+public address.
+
+### If alerts arrive in your private chat instead of the group
+
+`TELEGRAM_CHAT_ID` holds your own chat ID (a positive number) instead of the
+group's. Redo step 3 and use the entry with `"type":"group"`.
+
+### If the group stops getting alerts later
+
+Telegram converts a group into a *supergroup*, with a **new ID**, when you
+change some settings (for example making it public, or making chat history
+visible to new members) or it grows past 200 members. A plain group ID looks
+like `-5238060644`; a supergroup ID looks like `-1001234567890`. Vercel's
+function logs will show `group chat was upgraded to a supergroup chat` along
+with the new ID — put that in `TELEGRAM_CHAT_ID` and redeploy.
+
+If `getUpdates` shows nothing for the group, check the bot is still a member
+and send `/start@YourBotName` there again. Updates expire after 24 hours.
 
 ---
 
@@ -129,12 +157,27 @@ instruction rather than a dead button.
 
 ## Testing
 
-Local dev needs HTTPS — browsers won't register a service worker over plain
-`http://` except on `localhost`, and iOS won't at all:
+Run the dev server **from `web/`**, not the repo root:
 
 ```bash
+cd web
 npx next dev --experimental-https
 ```
+
+From the root, `npx` can't find the project's Next install, quietly downloads
+the latest Next instead, and fails with *"Couldn't find any `pages` or `app`
+directory"*. The first HTTPS run creates `web/certificates/` and appends a
+`certificates` line to `web/.gitignore` — commit that line; it keeps the local
+private key out of git.
+
+On the PC, `https://localhost:3000` works for push. (So does plain
+`npm run dev` on `http://localhost:3000` — browsers treat localhost as a secure
+origin.)
+
+**Phones can't test push against the dev server.** The "Network" URL Next
+prints (e.g. `https://192.168.x.x:3000`) uses a certificate only your PC
+trusts, and browsers won't register a service worker on a page with a
+certificate error. Test phones against the deployed Vercel site instead.
 
 Then:
 

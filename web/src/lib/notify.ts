@@ -62,6 +62,16 @@ const KIND_EMOJI: Record<NotificationKind, string> = {
   discount_new: "🎁",
 };
 
+/** Label for the Telegram button that opens the related admin page. */
+const KIND_BUTTON: Record<NotificationKind, string> = {
+  order_new: "Захиалга харах",
+  order_status: "Захиалга харах",
+  order_cancelled: "Захиалга харах",
+  user_approved: "Хэрэглэгч харах",
+  user_pending: "Хэрэглэгч харах",
+  discount_new: "Хямдрал харах",
+};
+
 /** Insert a single notification row + deliver on the enabled channels. */
 export async function notify(
   row: NotificationInsert,
@@ -91,6 +101,7 @@ export async function notify(
       title: row.title,
       body: row.body,
       href: row.href,
+      buttonText: KIND_BUTTON[row.kind],
       emoji: KIND_EMOJI[row.kind],
     });
   }
@@ -117,6 +128,7 @@ export async function notifyMany(
       title: template.title,
       body: template.body,
       href: template.href,
+      buttonText: KIND_BUTTON[template.kind],
       emoji: KIND_EMOJI[template.kind],
     });
   }
