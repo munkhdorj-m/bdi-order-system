@@ -214,17 +214,23 @@ export async function placeOrder(
     0,
   );
 
-  // In-app notification fan-out to every active admin. Swallowed inside
-  // notifyMany so it can never break the order flow.
+  // Notification fan-out to every active admin: in-app feed + device
+  // push + the shared staff Telegram chat. Runs in after() so none of
+  // it adds latency to the buyer's checkout, and every channel is
+  // swallowed inside notifyMany so it can never break the order flow.
   after(async () => {
     const adminIds = await listAdminIds();
-    await notifyMany(adminIds, {
-      kind: "order_new",
-      title: `Шинэ захиалга · ${orderRow.order_number}`,
-      body: `${storeRow?.name ?? "Дэлгүүр"} · ${formatMnt(subtotal)}`,
-      href: `/admin/orders/${orderRow.id}`,
-      order_id: orderRow.id,
-    });
+    await notifyMany(
+      adminIds,
+      {
+        kind: "order_new",
+        title: `Шинэ захиалга · ${orderRow.order_number}`,
+        body: `${storeRow?.name ?? "Дэлгүүр"} · ${formatMnt(subtotal)}`,
+        href: `/admin/orders/${orderRow.id}`,
+        order_id: orderRow.id,
+      },
+      { telegram: true },
+    );
   });
 
   revalidatePath("/orders");

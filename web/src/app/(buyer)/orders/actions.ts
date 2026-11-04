@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/auth";
+import { listAdminIds, notifyMany } from "@/lib/notify";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type Result = { error?: string; ok?: boolean };
@@ -136,7 +138,7 @@ export async function cancelOrder(orderId: string): Promise<Result> {
     .from("orders")
     .update({ status: "cancelled" })
     .eq("id", orderId)
-    .select("id, status");
+    .select("id, status, order_number");
   if (error) return { error: error.message };
   if (!data || data.length === 0) {
     // RLS silently rejected — most often because the buyer-modifications
@@ -146,6 +148,25 @@ export async function cancelOrder(orderId: string): Promise<Result> {
       error: `Захиалгыг цуцлах эрхгүй байна (role=${ctx.session.profile.role}).`,
     };
   }
+
+  // Warn the admins — a cancellation is time-sensitive in a way the
+  // in-app feed alone doesn't convey: the warehouse may already be
+  // picking this order. Same three channels as a new order.
+  const orderNumber = data[0]?.order_number ?? "";
+  after(async () => {
+    const adminIds = await listAdminIds();
+    await notifyMany(
+      adminIds,
+      {
+        kind: "order_cancelled",
+        title: `Захиалга цуцлагдлаа · ${orderNumber}`,
+        body: `${ctx.session.profile.full_name ?? "Худалдан авагч"} цуцаллаа.`,
+        href: `/admin/orders/${orderId}`,
+        order_id: orderId,
+      },
+      { telegram: true },
+    );
+  });
 
   revalidatePath(`/orders/${orderId}`);
   revalidatePath("/orders");

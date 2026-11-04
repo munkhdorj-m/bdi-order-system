@@ -4,12 +4,15 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 import { MarkAllReadButton } from "@/components/mark-all-read-button";
+import { PushToggle } from "@/components/push-toggle";
 import type { NotificationItem } from "@/components/notifications-bell";
 
 const KIND_LABELS: Record<NotificationItem["kind"], string> = {
   order_new: "Захиалга",
   order_status: "Захиалгын төлөв",
+  order_cancelled: "Цуцлагдсан",
   user_approved: "Бүртгэл",
+  user_pending: "Шинэ хэрэглэгч",
   discount_new: "Хямдрал",
 };
 
@@ -60,6 +63,20 @@ export default async function NotificationsPage() {
           </p>
         </div>
         {unreadCount > 0 && <MarkAllReadButton />}
+      </div>
+
+      {/* Per-device push opt-in. Rendered for every role, but it's the
+          admins who actually need it — a new order or signup should
+          reach a phone in a pocket, not wait for someone to refresh. */}
+      <div className="mb-4 rounded-2xl bg-card ring-1 ring-border p-4">
+        <div className="text-[13px] font-semibold mb-1">
+          Утас / компьютерт мэдэгдэл авах
+        </div>
+        <p className="text-[12px] text-muted-foreground mb-3">
+          Идэвхжүүлбэл шинэ захиалга, шинэ бүртгэл орж ирэхэд энэ төхөөрөмж
+          дээр шууд мэдэгдэл ирнэ. Төхөөрөмж бүр дээр тусад нь асаана.
+        </p>
+        <PushToggle />
       </div>
 
       {items.length === 0 ? (

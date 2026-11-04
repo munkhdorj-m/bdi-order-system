@@ -25,6 +25,31 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "5mb",
     },
   },
+  async headers() {
+    return [
+      {
+        // The push service worker must never be cached. Browsers hold a
+        // service worker until the byte-for-byte response changes, so a
+        // CDN-cached /sw.js would pin every admin's device to whatever
+        // version shipped first and silently ignore later fixes.
+        source: "/sw.js",
+        headers: [
+          {
+            key: "Content-Type",
+            value: "application/javascript; charset=utf-8",
+          },
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate",
+          },
+          {
+            key: "Content-Security-Policy",
+            value: "default-src 'self'; script-src 'self'",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

@@ -16,7 +16,13 @@ import {
 
 export type NotificationItem = {
   id: string;
-  kind: "order_new" | "order_status" | "user_approved" | "discount_new";
+  kind:
+    | "order_new"
+    | "order_status"
+    | "order_cancelled"
+    | "user_approved"
+    | "user_pending"
+    | "discount_new";
   title: string;
   body: string | null;
   href: string | null;
@@ -38,7 +44,9 @@ function relativeTime(iso: string): string {
 const KIND_DOT: Record<NotificationItem["kind"], string> = {
   order_new: "bg-primary",
   order_status: "bg-sky-500",
+  order_cancelled: "bg-rose-500",
   user_approved: "bg-emerald-500",
+  user_pending: "bg-amber-500",
   discount_new: "bg-violet-500",
 };
 

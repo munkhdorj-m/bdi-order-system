@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { listAdminIds, notifyMany } from "@/lib/notify";
 
 /**
  * Shared, idempotent finalizer for phone registration.
@@ -146,6 +147,30 @@ export async function finalizeRegistration(
     { onConflict: "id" },
   );
   if (profileErr) return { status: "error", message: profileErr.message };
+
+  // Tell the admins someone is waiting for approval. Before this, a
+  // verified signup sat silently in /admin/users until someone thought
+  // to look — the buyer meanwhile stared at the "pending" screen.
+  //
+  // Only the "created" path reaches here: whichever of the two callers
+  // loses the race returns early at the existingProfile check above, so
+  // admins get one alert per signup rather than one per caller. (A dead
+  // heat where both pass that check could still double-send — harmless,
+  // and far cheaper than serializing the finalizer for it.)
+  //
+  // notifyMany swallows every error internally, so a push or Telegram
+  // failure can never fail the signup itself.
+  const adminIds = await listAdminIds();
+  await notifyMany(
+    adminIds,
+    {
+      kind: "user_pending",
+      title: "Шинэ хэрэглэгч бүртгүүллээ",
+      body: `${draft.fullName || "Нэргүй"} · ${draft.phone} — зөвшөөрөл хүлээж байна.`,
+      href: `/admin/users/${userId}`,
+    },
+    { telegram: true },
+  );
 
   return { status: "created", userId };
 }
