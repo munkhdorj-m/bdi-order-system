@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, DollarSign, Eye } from "lucide-react";
+import { ChevronLeft, ClipboardList, DollarSign, Eye, PackagePlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getSupermarketSuggestions } from "@/lib/supermarket-suggestions";
 import { Button } from "@/components/ui/button";
@@ -58,24 +58,36 @@ export default async function EditSupermarketPage({
         Дэлгүүр жагсаалт руу
       </Link>
 
-      <div className="flex items-center justify-between mb-6 gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight min-w-0 truncate">
-          {supermarket.name}
-        </h1>
-        <div className="flex shrink-0 gap-2">
-          <Button asChild variant="outline">
-            <Link href={`/admin/supermarkets/${id}/catalog`} title="Энэ дэлгүүрт харагдах каталог">
-              <Eye className="h-4 w-4" />
-              <span className="hidden sm:inline">Каталог харах</span>
-            </Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href={`/admin/supermarkets/${id}/prices`}>
-              <DollarSign className="h-4 w-4" />
-              <span className="hidden sm:inline">Үнийн override</span>
-            </Link>
-          </Button>
-        </div>
+      <h1 className="mb-4 text-2xl font-semibold tracking-tight min-w-0 truncate">
+        {supermarket.name}
+      </h1>
+
+      {/* Everything you do for this store, one tap away. */}
+      <div className="mb-6 flex flex-wrap gap-2">
+        <Button asChild>
+          <Link href={`/admin/orders/new?store=${id}`}>
+            <PackagePlus className="h-4 w-4" />
+            Захиалга оруулах
+          </Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href={`/admin/orders?store=${id}`}>
+            <ClipboardList className="h-4 w-4" />
+            Захиалгууд
+          </Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href={`/admin/supermarkets/${id}/catalog`} title="Энэ дэлгүүрт харагдах каталог">
+            <Eye className="h-4 w-4" />
+            Каталог харах
+          </Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href={`/admin/supermarkets/${id}/prices`}>
+            <DollarSign className="h-4 w-4" />
+            Тусгай үнэ
+          </Link>
+        </Button>
       </div>
 
       <SupermarketForm

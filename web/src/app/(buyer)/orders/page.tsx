@@ -16,6 +16,7 @@ type OrderRow = {
   order_number: string;
   status: OrderStatus;
   subtotal: number;
+  discount_total: number | null;
   created_at: string;
   confirmed_at: string | null;
   shipped_at: string | null;
@@ -64,7 +65,7 @@ function formatRelativeDate(iso: string): string {
 function etaLine(o: OrderRow): string {
   switch (o.status) {
     case "pending":
-      return "Дэлгүүр баталгаажуулахыг хүлээж байна";
+      return "BDI баталгаажуулахыг хүлээж байна";
     case "confirmed":
       return o.confirmed_at
         ? `${formatRelativeDate(o.confirmed_at)} баталгаажсан`
@@ -155,8 +156,8 @@ function OrderCard({ o }: { o: OrderRow }) {
           <span>
             {formatShortDateTime(o.created_at)} · {items} бараа
           </span>
-          <span className="text-[15px] font-bold text-foreground tabular-nums">
-            {formatMnt(o.subtotal)}
+          <span className="font-display text-[15px] font-semibold text-foreground tabular-nums">
+            {formatMnt(o.subtotal - (o.discount_total ?? 0))}
           </span>
         </div>
 
@@ -183,7 +184,7 @@ export default async function BuyerOrdersPage({
   let query = supabase
     .from("orders")
     .select(
-      "id, order_number, status, subtotal, created_at, confirmed_at, shipped_at, delivered_at, order_items(count)",
+      "id, order_number, status, subtotal, discount_total, created_at, confirmed_at, shipped_at, delivered_at, order_items(count)",
     )
     .order("created_at", { ascending: false });
 
@@ -222,27 +223,17 @@ export default async function BuyerOrdersPage({
 
       {/* Filter tabs — pill style, primary when active. URL-driven so the
           state survives reloads and back/forward navigation. */}
-      <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar -mx-3 px-3 sm:-mx-4 sm:px-4">
+      <div className="mt-3 flex flex-wrap gap-2">
         {tabs.map((t) => {
           const active = t.key === filter;
           const href =
             t.key === "active" ? "/orders" : `/orders?status=${t.key}`;
           return (
-            <Link
-              key={t.key}
-              href={href}
-              className={`shrink-0 h-9 px-3.5 rounded-full text-[12.5px] font-semibold transition-all flex items-center gap-1.5 ${
-                active
-                  ? "bg-primary text-primary-foreground shadow-sm shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)]"
-                  : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-muted/80 dark:hover:bg-muted/60"
-              }`}
-            >
+            <Link key={t.key} href={href} className="chip" data-active={active || undefined}>
               {t.label}
               {t.badge != null && (
-                <span
-                  className={`tabular-nums ${active ? "opacity-80" : "text-foreground/70"}`}
-                >
-                  · {t.badge}
+                <span className={`tabular-nums ${active ? "opacity-80" : "text-muted-foreground"}`}>
+                  {t.badge}
                 </span>
               )}
             </Link>

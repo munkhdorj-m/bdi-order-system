@@ -12,11 +12,14 @@ import {
 import { isBuyerPaymentMethod, type PaymentMethod } from "@/lib/payment-method";
 import { formatMnt } from "@/lib/format";
 import { listAdminIds, notifyMany } from "@/lib/notify";
+import { writeOrder, type NewOrderItem } from "@/lib/orders/write";
 
 export type PlaceOrderInput = {
   items: { product_id: string; qty: number }[];
   notes: string | null;
   payment_method?: PaymentMethod;
+  /** One UUID per checkout, reused when the same checkout is re-sent. */
+  requestId?: string;
 };
 
 export type PlaceOrderResult = {
@@ -37,10 +40,13 @@ export async function placeOrder(
   if (session.profile.role !== "buyer" || !session.profile.supermarket_id) {
     return { error: "Зөвхөн худалдан авагч захиалга өгөх боломжтой." };
   }
+  if (!session.profile.active) {
+    return { error: "Таны бүртгэл идэвхгүй байна. BDI-тэй холбогдоно уу." };
+  }
   const supermarketId = session.profile.supermarket_id;
 
   const cleaned = input.items
-    .filter((i) => i.product_id && i.qty > 0)
+    .filter((i) => i.product_id && Number.isFinite(i.qty) && i.qty >= 1)
     .map((i) => ({ product_id: i.product_id, qty: Math.floor(i.qty) }));
   if (cleaned.length === 0) return { error: "Сагс хоосон байна." };
 
@@ -110,12 +116,6 @@ export async function placeOrder(
     };
   }
 
-  const { data: orderNumberRow, error: numErr } = await supabase.rpc(
-    "generate_order_number",
-  );
-  if (numErr) return { error: numErr.message };
-  const orderNumber = orderNumberRow as unknown as string;
-
   // Normalize payment method server-side — never trust a client-supplied
   // string. Default to credit so existing callers keep working.
   const paymentMethod: PaymentMethod = isBuyerPaymentMethod(input.payment_method)
@@ -137,31 +137,13 @@ export async function placeOrder(
     rules,
   );
 
-  const { data: orderRow, error: orderErr } = await supabase
-    .from("orders")
-    .insert({
-      order_number: orderNumber,
-      supermarket_id: supermarketId,
-      placed_by: session.userId,
-      notes: input.notes,
-      status: "pending",
-      payment_method: paymentMethod,
-      discount_total: discount.totalDiscount,
-    })
-    .select("id, order_number")
-    .single();
-  if (orderErr || !orderRow) {
-    return { error: orderErr?.message ?? "Захиалга үүсгэхэд алдаа." };
-  }
-
-  const itemsToInsert = cleaned.map((i) => {
+  const itemsToInsert: NewOrderItem[] = cleaned.map((i) => {
     const meta = priceMap.get(i.product_id)!;
     return {
-      order_id: orderRow.id,
       product_id: i.product_id,
       product_name_snapshot: meta.name,
       qty: i.qty,
-      unit_price: meta.price,
+      unit_price: Number(meta.price),
     };
   });
 
@@ -188,7 +170,6 @@ export async function placeOrder(
     );
     for (const b of discount.bonuses) {
       itemsToInsert.push({
-        order_id: orderRow.id,
         product_id: b.product_id,
         product_name_snapshot: `🎁 ${bonusNameById.get(b.product_id) ?? "Бэлэг бараа"}`,
         qty: b.qty,
@@ -197,10 +178,28 @@ export async function placeOrder(
     }
   }
 
-  const { error: itemsErr } = await supabase
-    .from("order_items")
-    .insert(itemsToInsert);
-  if (itemsErr) return { error: itemsErr.message };
+  // Written by the server only — prices, discount and status all come
+  // from here, never from the phone (see lib/orders/write.ts).
+  const written = await writeOrder(
+    {
+      supermarket_id: supermarketId,
+      placed_by: session.userId,
+      notes: input.notes?.trim().slice(0, 1000) || null,
+      payment_method: paymentMethod,
+      discount_total: discount.totalDiscount,
+    },
+    itemsToInsert,
+    input.requestId,
+  );
+  if ("error" in written) return { error: written.error };
+  const orderRow = { id: written.orderId, order_number: written.orderNumber };
+  // A re-sent checkout: the office was already told about this order.
+  revalidatePath("/orders");
+  revalidatePath("/admin/orders");
+  revalidatePath("/admin");
+  if (written.duplicate) {
+    return { orderId: orderRow.id, orderNumber: orderRow.order_number };
+  }
 
   // Look up the store name for the in-app admin notification (best-effort).
   const { data: storeRow } = await supabase
@@ -233,6 +232,5 @@ export async function placeOrder(
     );
   });
 
-  revalidatePath("/orders");
   return { orderId: orderRow.id, orderNumber: orderRow.order_number };
 }

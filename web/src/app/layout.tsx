@@ -1,26 +1,27 @@
 import type { Metadata, Viewport } from "next";
-import { Onest, Unbounded } from "next/font/google";
+import { Montserrat, Onest } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { ServiceWorkerRegister } from "@/components/sw-register";
 import "./globals.css";
 
 // Type pairing for the "Тэнгэр ба алт" look:
-//   Onest     — text and UI. Drawn for Cyrillic first, very readable at small
-//               sizes on phones.
-//   Unbounded — display: page titles, section titles, prices. Wide and
-//               geometric; it is what makes the app recognisable at a glance.
-// Both need "cyrillic-ext": Mongolian Ө/ө and Ү/ү live there, not in the
-// plain "cyrillic" subset (without it those letters fall back to another
-// font mid-word).
+//   Onest      — text and UI. Drawn for Cyrillic first, very readable at
+//                small sizes on phones.
+//   Montserrat — display: page titles, section titles, prices. Wide and
+//                geometric, and it has real Mongolian Ө/ө and Ү/ү glyphs.
+//                (Unbounded, tried first, lacks them — the browser borrowed
+//                those two letters from another font.)
+// Both need "cyrillic-ext": Ө/ө and Ү/ү live there, not in the plain
+// "cyrillic" subset.
 const onest = Onest({
   variable: "--font-sans",
   subsets: ["latin", "latin-ext", "cyrillic", "cyrillic-ext"],
   display: "swap",
 });
-const unbounded = Unbounded({
+const montserrat = Montserrat({
   variable: "--font-display",
-  subsets: ["latin", "cyrillic", "cyrillic-ext"],
+  subsets: ["latin", "latin-ext", "cyrillic", "cyrillic-ext"],
   display: "swap",
 });
 
@@ -53,9 +54,9 @@ export const metadata: Metadata = {
  * area and use env(safe-area-inset-*) on sticky bars / tab bars.
  */
 export const viewport: Viewport = {
-  // Keep in sync with --primary / --background in globals.css.
+  // Keep in sync with --brand-bar / dark --background in globals.css.
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#1f4fcc" },
+    { media: "(prefers-color-scheme: light)", color: "#1c49ba" },
     { media: "(prefers-color-scheme: dark)", color: "#0f1630" },
   ],
   viewportFit: "cover",
@@ -78,7 +79,7 @@ export default function RootLayout({
       // Tells Next router transitions to ignore the global `scroll-behavior: smooth`
       // rule so route jumps don't smooth-scroll (which feels janky on Next).
       data-scroll-behavior="smooth"
-      className={`${onest.variable} ${unbounded.variable} h-full antialiased`}
+      className={`${onest.variable} ${montserrat.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider

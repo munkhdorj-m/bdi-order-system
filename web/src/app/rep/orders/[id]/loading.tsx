@@ -1,5 +1,10 @@
-import { MobileDetailSkeleton } from "@/components/page-skeletons";
+import { MobileDetailSkeleton, RepBarSkeleton } from "@/components/page-skeletons";
 
 export default function RepOrderLoading() {
-  return <MobileDetailSkeleton />;
+  return (
+    <>
+      <RepBarSkeleton />
+      <MobileDetailSkeleton />
+    </>
+  );
 }

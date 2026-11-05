@@ -136,16 +136,28 @@ export default async function AdminDiscountsPage() {
                   <span className="text-[10.5px] uppercase tracking-[0.08em] font-bold text-muted-foreground">
                     {KIND_LABELS[r.kind]}
                   </span>
-                  {r.active ? (
-                    <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
-                      <span className="size-1.5 rounded-full bg-emerald-500" />
-                      идэвхтэй
-                    </span>
-                  ) : (
-                    <span className="ml-auto text-[10px] font-bold text-muted-foreground">
-                      идэвхгүй
-                    </span>
-                  )}
+                  {(() => {
+                    const now = Date.now();
+                    if (!r.active) {
+                      return <span className="ml-auto text-[11px] font-bold text-muted-foreground">идэвхгүй</span>;
+                    }
+                    if (r.ends_at && new Date(r.ends_at).getTime() < now) {
+                      return (
+                        <span className="ml-auto text-[11px] font-bold text-muted-foreground">
+                          хугацаа дууссан
+                        </span>
+                      );
+                    }
+                    if (r.starts_at && new Date(r.starts_at).getTime() > now) {
+                      return <span className="ml-auto text-[11px] font-bold text-sky-700 dark:text-sky-300">эхлээгүй</span>;
+                    }
+                    return (
+                      <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
+                        <span className="size-1.5 rounded-full bg-emerald-500" />
+                        идэвхтэй
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div className="text-[14px] font-bold tracking-tight line-clamp-1">
                   {r.name}

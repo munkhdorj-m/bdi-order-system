@@ -17,6 +17,7 @@ import {
 } from "@/lib/discount";
 import type { CartScope } from "@/lib/cart";
 import { CatalogNav, type CatalogNavItem } from "./catalog-nav";
+import { CartBar } from "./cart-bar";
 import { sectionDomId } from "./section-id";
 import {
   CartStepper,
@@ -85,6 +86,7 @@ export async function StoreCatalog({
   basePath,
   productHref,
   cartScope,
+  cartHref,
   stickyTopClass,
 }: {
   storeId: string;
@@ -96,8 +98,12 @@ export async function StoreCatalog({
   basePath: string;
   productHref: (productId: string) => string;
   cartScope?: CartScope;
+  /** Where the floating cart bar leads; no bar without it (admin preview). */
+  cartHref?: string;
   stickyTopClass?: string;
 }) {
+  // Room at the bottom so the floating cart bar never covers the last row.
+  const bottomPad = cartHref ? "pb-28" : "pb-6";
   const supabase = await createClient();
   const term = (q ?? "").trim();
   const searching = term.length > 0;
@@ -122,6 +128,9 @@ export async function StoreCatalog({
     stock: Number(p.stock) || 0,
   }));
   const catById = new Map(cats.map((c) => [c.id, c]));
+  const cartBar = cartHref ? (
+    <CartBar href={cartHref} scope={cartScope} aboveTabBar={mode === "buyer"} rules={rules} />
+  ) : null;
 
   const ctx: CardContext = {
     mode,
@@ -146,7 +155,7 @@ export async function StoreCatalog({
   /* ---------------- Search results: flat, ranked. ---------------- */
   if (searching) {
     return (
-      <div className="px-3 sm:px-4 lg:px-6 xl:px-8 pt-3 pb-6 lg:flex lg:gap-6">
+      <div className={`px-3 sm:px-4 lg:px-6 xl:px-8 pt-3 ${bottomPad} lg:flex lg:gap-6`}>
         <div className="lg:hidden mb-3">{searchForm("mobile")}</div>
         <aside className="hidden lg:block lg:w-64 shrink-0">
           <div className="sticky top-[calc(3.5rem+1rem)]">{searchForm("desktop")}</div>
@@ -159,9 +168,9 @@ export async function StoreCatalog({
             </p>
             <Link
               href={basePath}
-              className="shrink-0 inline-flex items-center gap-1 h-8 px-3 rounded-full bg-muted text-[12px] font-semibold hover:bg-muted/70"
+              className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-card ring-1 ring-border text-[13px] font-semibold hover:bg-accent/60 transition-colors"
             >
-              <X className="h-3.5 w-3.5" /> Бүх бараа
+              <X className="h-4 w-4" /> Бүх бараа
             </Link>
           </div>
           {rows.length === 0 ? (
@@ -174,6 +183,7 @@ export async function StoreCatalog({
             </ProductGrid>
           )}
         </div>
+        {cartBar}
       </div>
     );
   }
@@ -213,7 +223,8 @@ export async function StoreCatalog({
   let cardIndex = 0;
 
   return (
-    <div className="px-3 sm:px-4 lg:px-6 xl:px-8 pt-3 pb-6">
+    <div className={`px-3 sm:px-4 lg:px-6 xl:px-8 pt-3 ${bottomPad}`}>
+      {cartBar}
       <div className="lg:hidden mb-1">{searchForm("mobile")}</div>
       <div className="lg:flex lg:gap-6">
         <CatalogNav

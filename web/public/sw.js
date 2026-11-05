@@ -83,10 +83,11 @@ self.addEventListener("push", (event) => {
   const title = data.title || "BDI Захиалга";
   const options = {
     body: data.body || "",
-    /* Tray icon + the small badge Android shows in the status bar.
-       Both are served by Next's icon.tsx / apple-icon.tsx routes. */
+    /* Tray icon (app/icon.tsx) + the small status-bar badge, which
+       Android draws from the alpha channel only — so it's a white "BDI"
+       on transparent (public/badge.png), not the square app icon. */
     icon: "/icon",
-    badge: "/icon",
+    badge: "/badge.png",
     /* Same tag replaces rather than stacks — keeps a burst of orders
        from filling the whole notification shade. */
     tag: data.tag || "bdi",

@@ -462,7 +462,7 @@ export function OrderCreateForm({
                   const n = pickedIn(s);
                   return (
                     <section key={s.id} id={sectionDomId(s.id)}>
-                      <div className="flex items-center gap-2.5 border-b bg-muted/40 px-3 py-2">
+                      <div className="flex items-center gap-2.5 border-y border-border bg-secondary px-3 py-2.5">
                         <CategoryIconTile visual={s.visual} size="sm" />
                         <span className="text-[13.5px] font-bold">{s.name}</span>
                         <span className="text-[11.5px] text-muted-foreground">{s.rows.length} бараа</span>
@@ -593,7 +593,14 @@ function OrderLine({
   const box = r.box_count && r.box_count > 1 ? r.box_count : null;
   const boxes = box ? Math.floor(n / box) : 0;
   return (
-    <li className={cn("flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5", n > 0 && "bg-primary/5")}>
+    <li
+      className={cn(
+        "flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 transition-colors",
+        n > 0
+          ? "bg-primary/8 shadow-[inset_3px_0_0_var(--primary)]"
+          : "even:bg-muted/45 hover:bg-accent/60",
+      )}
+    >
       <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-muted ring-1 ring-border">
         {r.image_url ? (
           <Image src={r.image_url} alt="" fill sizes="44px" unoptimized className="object-cover" />

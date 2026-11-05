@@ -11,8 +11,8 @@ import type { MetadataRoute } from "next";
  *   - "any"      → standard app drawer / shortcut icon
  *   - "maskable" → adaptive icons that get clipped to the OS shape
  *                  (circle on Pixel, squircle on Samsung, etc.) — the
- *                  icon.tsx art keeps the "B" inside a ~58% safe zone
- *                  so the clipping never cuts the letter off.
+ *                  icon.tsx art keeps the "BDI" mark inside the safe
+ *                  zone so the clipping never cuts it off.
  *
  * theme_color matches the brand indigo so the Android system bar
  * tints when the app is open. background_color is the splash colour
@@ -27,8 +27,11 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: "#ffffff",
-    theme_color: "#4338ca",
+    // Brand blue (BRAND.blue in lib/brand.ts): the splash screen and the
+    // icon's edges are the same colour, and the status bar matches the
+    // app's blue top bar.
+    background_color: "#1c49ba",
+    theme_color: "#1c49ba",
     lang: "mn",
     dir: "ltr",
     categories: ["business", "shopping", "productivity"],

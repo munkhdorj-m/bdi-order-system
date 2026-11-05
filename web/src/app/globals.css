@@ -58,12 +58,13 @@
  * "Тэнгэр ба алт" — sky and gold.
  *   cobalt  (--primary)  the brand: headers, navigation, confirm buttons
  *   gold    (--gold)     the shopping action: "Нэмэх", cart counts
- *   cream   (--background) a warm paper canvas; cards sit on it in white
+ *   cool grey (--background) a crisp, neutral canvas; cards sit on it in
+ *                        white with clear grey lines (no warm/yellow tints)
  * Text tokens clear WCAG AA on the surfaces they're used on. Status colours
  * (amber/sky/violet/emerald/rose) stay separate from brand chrome.
  */
 :root {
-  --background: oklch(0.982 0.008 85);
+  --background: oklch(0.968 0.007 255);
   --foreground: oklch(0.22 0.045 268);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.22 0.045 268);
@@ -76,16 +77,17 @@
   /* The blue top bar of the store and rep apps. */
   --brand-bar: oklch(0.45 0.185 264);
   --brand-bar-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.955 0.012 85);
+  --secondary: oklch(0.945 0.01 258);
   --secondary-foreground: oklch(0.25 0.04 268);
-  --muted: oklch(0.953 0.011 85);
-  --muted-foreground: oklch(0.49 0.03 268);
-  --accent: oklch(0.95 0.03 264);
+  --muted: oklch(0.948 0.009 258);
+  --muted-foreground: oklch(0.48 0.03 262);
+  --accent: oklch(0.94 0.035 264);
   --accent-foreground: oklch(0.36 0.15 264);
   --destructive: oklch(0.58 0.21 27);
   --destructive-foreground: oklch(0.99 0 0);
-  --border: oklch(0.905 0.014 85);
-  --input: oklch(0.875 0.017 85);
+  /* Cool grey lines, strong enough to separate rows at a glance. */
+  --border: oklch(0.87 0.014 258);
+  --input: oklch(0.8 0.018 258);
   --ring: oklch(0.47 0.19 264);
   --chart-1: oklch(0.47 0.19 264);
   --chart-2: oklch(0.78 0.15 79);
@@ -126,8 +128,8 @@
   --accent-foreground: oklch(0.88 0.08 264);
   --destructive: oklch(0.68 0.19 25);
   --destructive-foreground: oklch(0.99 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 16%);
+  --border: oklch(1 0 0 / 15%);
+  --input: oklch(1 0 0 / 24%);
   --ring: oklch(0.7 0.15 262);
   --chart-1: oklch(0.7 0.15 262);
   --chart-2: oklch(0.8 0.14 80);
@@ -228,6 +230,21 @@
   .input-field {
     @apply w-full h-11 rounded-xl border border-input bg-card px-3.5 text-[16px] placeholder:text-muted-foreground/70 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/15 transition-all;
   }
+  /* A text field that looks exactly like <Input> — for the few plain
+     <input>s in server-rendered GET forms. Add `pl-9` when there's an icon. */
+  .field {
+    @apply h-10 w-full min-w-0 rounded-xl border border-input bg-card px-3 text-[14px] text-foreground shadow-[inset_0_1px_1px_rgb(0_0_0/0.03)] transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-muted-foreground/70 hover:border-foreground/25 focus:border-primary focus:ring-4 focus:ring-ring/15 dark:bg-input/25;
+  }
+
+  /* Filter chip (status tabs, date presets, categories). Add
+     `data-active` on the selected one. */
+  .chip {
+    @apply inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-card px-3.5 text-[13px] font-semibold text-foreground/75 ring-1 ring-border transition-[background-color,color,box-shadow] duration-150 hover:bg-accent hover:text-foreground active:scale-[0.97];
+  }
+  .chip[data-active] {
+    @apply bg-primary text-primary-foreground shadow-sm shadow-primary/25 ring-primary hover:bg-primary hover:text-primary-foreground;
+  }
+
   /* Primary CTA. Solid bg-primary is the base (so the button can never
      render transparent even if the decorative overlay fails); a white-alpha
      gradient on top gives it a lit, tactile top edge. */
@@ -273,36 +290,15 @@
   /* Full-bleed brand surface behind the auth screens. LITERAL color
      stops on top of a solid fallback — never derived from theme vars,
      identical in light and dark mode — so the white text and floating
-     white card sitting on it are always readable, no matter what. A faint
-     хээ (key pattern) runs over the sky. */
+     white card sitting on it are always readable, no matter what. */
   .bg-brand-gradient {
     background-color: oklch(0.45 0.18 264);
-    background-image:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='14' viewBox='0 0 28 14'%3E%3Cpath d='M0 13H28M21 13V1H7v8h8V5h-4' fill='none' stroke='%23ffffff' stroke-opacity='.07' stroke-width='1.2'/%3E%3C/svg%3E"),
-      linear-gradient(
-        165deg,
-        oklch(0.53 0.19 264) 0%,
-        oklch(0.45 0.18 264) 50%,
-        oklch(0.33 0.14 266) 100%
-      );
-  }
-
-  /* Gold хээ (Mongolian key pattern) trim along the bottom of the blue
-     headers — the one ornament in the app. */
-  .haee-trim {
-    position: relative;
-  }
-  .haee-trim::after {
-    content: "";
-    position: absolute;
-    inset-inline: 0;
-    bottom: 0;
-    height: 5px;
-    pointer-events: none;
-    background-repeat: repeat-x;
-    background-size: auto 5px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='5' viewBox='0 0 12 5'%3E%3Cpath d='M0 4.5H12M9 4.5V.5H3v2.5h3V1.8' fill='none' stroke='%23F2B32B' stroke-width='.9'/%3E%3C/svg%3E");
-    opacity: 0.85;
+    background-image: linear-gradient(
+      165deg,
+      oklch(0.53 0.19 264) 0%,
+      oklch(0.45 0.18 264) 50%,
+      oklch(0.33 0.14 266) 100%
+    );
   }
 
   /* Ambient brand wash for empty-canvas pages (auth, verify, empty
@@ -444,4 +440,17 @@
 .on-brand :is(button, a):focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
+}
+
+/* Shared control styles: .field, .chip (see @layer components). */
+
+/* iPhone zooms the page into any focused field under 16px and stays
+   zoomed. On touch screens every field is at least 16px. Unlayered so it
+   wins over the smaller text utilities some fields use on desktop. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
 }

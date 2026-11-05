@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminGuardError } from "@/lib/auth";
@@ -8,10 +9,16 @@ import {
   STATUS_LABELS,
   type OrderStatus,
 } from "@/lib/order-status";
+import { LIVE_STATUSES } from "@/lib/ebarimt";
 import { notify } from "@/lib/notify";
 
 type Result = { error?: string };
 
+/**
+ * One step forward. Confirmed orders don't go to "shipped" here: they ship
+ * by being put on a delivery run (/admin/dispatch), so they're on the
+ * delivery note and the loading list.
+ */
 export async function advanceOrderStatus(
   id: string,
   currentStatus: OrderStatus,
@@ -21,21 +28,29 @@ export async function advanceOrderStatus(
 
   const next = NEXT_STATUS[currentStatus];
   if (!next) return { error: "Энэ захиалгыг урагшлуулах боломжгүй." };
-  return setOrderStatus(id, next);
+  if (currentStatus === "confirmed") {
+    return { error: "Баталгаажсан захиалгыг «Хүргэлт хуваарлах» хуудсаар ачилтад оноож гаргана." };
+  }
+  return setOrderStatus(id, next, [currentStatus]);
 }
 
 export async function cancelOrder(id: string): Promise<Result> {
   const guardErr = await adminGuardError();
   if (guardErr) return { error: guardErr };
 
-  return setOrderStatus(id, "cancelled");
+  // A sent (or queued) e-Barimt must be returned first, or the tax record
+  // would point at an order that no longer exists in any list.
+  if (await hasLiveReceipt(id)) {
+    return { error: "Энэ захиалгад е-баримт илгээгдсэн байна. Эхлээд Е-баримт хуудсаас буцаана уу." };
+  }
+  return setOrderStatus(id, "cancelled", ["pending", "confirmed", "shipped"]);
 }
 
 export async function reopenOrder(id: string): Promise<Result> {
   const guardErr = await adminGuardError();
   if (guardErr) return { error: guardErr };
 
-  return setOrderStatus(id, "pending");
+  return setOrderStatus(id, "pending", ["cancelled"]);
 }
 
 /**
@@ -69,11 +84,23 @@ export async function deleteCancelledOrder(id: string): Promise<Result> {
   return {};
 }
 
+async function hasLiveReceipt(orderId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("ebarimt_receipts")
+    .select("id", { count: "exact", head: true })
+    .eq("order_id", orderId)
+    .in("status", LIVE_STATUSES);
+  return (count ?? 0) > 0;
+}
+
 // Internal — every public entry point above has already checked admin
-// guard, so this can write the DB without re-checking.
+// guard. `from` = the statuses this change is valid from, so a stale click
+// (the list was open while someone else moved the order) can't undo it.
 async function setOrderStatus(
   id: string,
   status: OrderStatus,
+  from: OrderStatus[],
 ): Promise<Result> {
   const supabase = await createClient();
 
@@ -82,35 +109,50 @@ async function setOrderStatus(
   if (status === "confirmed") update.confirmed_at = now;
   if (status === "shipped") update.shipped_at = now;
   if (status === "delivered") update.delivered_at = now;
+  // Cancelled or reopened orders leave their delivery run: they aren't
+  // going out with it, and the run can then be edited or deleted.
+  if (status === "cancelled" || status === "pending") update.shipment_id = null;
 
-  // Pull placed_by + order_number so the notification can target the
-  // buyer and link back to their order detail.
   const { data: row, error } = await supabase
     .from("orders")
     .update(update)
     .eq("id", id)
-    .select("id, order_number, placed_by")
-    .single();
+    .in("status", from)
+    .select("id, order_number, placed_by, profiles:placed_by(role)")
+    .maybeSingle();
   if (error) return { error: error.message };
+  if (!row) return { error: "Захиалгын төлөв өөрчлөгдсөн байна. Хуудсаа сэргээнэ үү." };
 
-  if (row?.placed_by) {
-    await notify({
-      user_id: row.placed_by,
-      kind: "order_status",
-      title: `${row.order_number} · ${STATUS_LABELS[status]}`,
-      body:
-        status === "cancelled"
-          ? "Захиалга цуцлагдсан."
-          : status === "delivered"
-            ? "Захиалга хүргэгдсэн."
-            : `Шинэ төлөв: ${STATUS_LABELS[status]}`,
-      href: `/orders/${row.id}`,
-      order_id: row.id,
-    });
+  // The store hears about it in the background; staff don't need a push
+  // about orders they're handling themselves.
+  const placer = row as unknown as {
+    id: string;
+    order_number: string;
+    placed_by: string | null;
+    profiles: { role: string } | null;
+  };
+  if (placer.placed_by && placer.profiles?.role !== "admin") {
+    const role = placer.profiles?.role;
+    after(() =>
+      notify({
+        user_id: placer.placed_by!,
+        kind: "order_status",
+        title: `${placer.order_number} · ${STATUS_LABELS[status]}`,
+        body:
+          status === "cancelled"
+            ? "Захиалга цуцлагдсан."
+            : status === "delivered"
+              ? "Захиалга хүргэгдсэн."
+              : `Шинэ төлөв: ${STATUS_LABELS[status]}`,
+        href: role === "rep" ? `/rep/orders/${placer.id}` : `/orders/${placer.id}`,
+        order_id: placer.id,
+      }),
+    );
   }
 
   revalidatePath("/admin/orders");
   revalidatePath(`/admin/orders/${id}`);
+  revalidatePath("/admin/dispatch");
   revalidatePath("/admin");
   return {};
 }

@@ -25,7 +25,10 @@ import {
   formatMnt,
   type CartItem,
 } from "@/lib/cart";
+import { toast } from "sonner";
 import { placeOrder } from "@/app/(buyer)/cart/actions";
+import { useCartPriceSync } from "@/components/catalog/use-cart-price-sync";
+import { useCheckoutId } from "@/lib/checkout-id";
 import { ProductPlaceholder, categoryVisual } from "@/lib/category-visual";
 import { Button } from "@/components/ui/button";
 import { computeDiscount, type DiscountRule } from "@/lib/discount";
@@ -43,22 +46,27 @@ export function CartView({
   storeName,
   rules = [],
   productInfoById = {},
+  prices,
 }: {
   deliveryLabel: string | null;
   storeName: string | null;
   rules?: DiscountRule[];
+  /** Today's price per product for this store — re-prices a saved cart. */
+  prices?: Record<string, number>;
   /** Bonus-product lookup. Server pre-fetches name + image_url for any
    *  product referenced by a threshold_bonus rule so the cart's free-item
    *  rows can render the actual product thumbnail. */
   productInfoById?: Record<string, { name: string; image_url: string | null }>;
 }) {
   const liveCart = useCart();
+  useCartPriceSync(prices);
   const [notes, setNotes] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("credit");
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [snapshot, setSnapshot] = useState<CartItem[] | null>(null);
   const [pending, startTransition] = useTransition();
+  const checkoutId = useCheckoutId();
   const router = useRouter();
 
   const cart = pending || submitted ? (snapshot ?? liveCart) : liveCart;
@@ -97,20 +105,29 @@ export function CartView({
   function handleSubmit() {
     setError(null);
     setSnapshot([...liveCart]);
+    const items = liveCart.map((i) => ({ product_id: i.product_id, qty: i.qty }));
+    const note = notes.trim() || null;
+    // Same cart re-sent → same id → the server won't make a second order.
+    const requestId = checkoutId(JSON.stringify([items, note, paymentMethod]));
     startTransition(async () => {
-      const result = await placeOrder({
-        items: liveCart.map((i) => ({ product_id: i.product_id, qty: i.qty })),
-        notes: notes.trim() || null,
-        payment_method: paymentMethod,
-      });
+      let result: Awaited<ReturnType<typeof placeOrder>>;
+      try {
+        result = await placeOrder({ items, notes: note, payment_method: paymentMethod, requestId });
+      } catch {
+        // Dropped connection. Re-sending is safe: it can't make a second order.
+        result = { error: "Холболт тасарлаа. Дахин илгээнэ үү — захиалга давхардахгүй." };
+      }
       if (result.error) {
+        // Visible even though the bottom bar covers the page's error box.
         setError(result.error);
+        toast.error(result.error);
         setSnapshot(null);
         return;
       }
       setSubmitted(true);
-      if (result.orderId) router.push(`/orders/${result.orderId}?new=1`);
       clearCart();
+      // replace: Back from the new order shouldn't land on an empty cart.
+      if (result.orderId) router.replace(`/orders/${result.orderId}?new=1`);
     });
   }
 

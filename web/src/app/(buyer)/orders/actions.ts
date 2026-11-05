@@ -2,57 +2,46 @@
 
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getSession } from "@/lib/auth";
 import { listAdminIds, notifyMany } from "@/lib/notify";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { isUuid, loadOwnPendingOrder } from "@/lib/orders/write";
 
 type Result = { error?: string; ok?: boolean };
 
-type LoadOk = {
-  supabase: SupabaseClient;
-  order: { id: string; status: string; placed_by: string | null };
-  session: NonNullable<Awaited<ReturnType<typeof getSession>>>;
-};
-type LoadErr = { error: string };
-
 /**
- * Centralized authorization gate for buyer-initiated order mutations.
- *
- * Returns the regular (cookie-bound) Supabase client — never the
- * service-role admin client. RLS policies in
- * `docs/fixes/12-buyer-order-modifications.sql` permit:
- *   - orders UPDATE when buyer + placed_by + status='pending'
- *     and the new status stays 'pending' or flips to 'cancelled'
- *   - order_items UPDATE + DELETE where the parent order matches the above
- * so every write below is RLS-enforced regardless of these app-level checks.
- *
- * The app-level guards stay as defense-in-depth + nicer error messages.
+ * Who may change an order here: the store user (or rep) who placed it,
+ * while it is still pending. Buyers and reps have no write access to
+ * orders in the database (docs/fixes/39), so the writes below use the
+ * service role and these checks are the gate. Every write also repeats
+ * "still pending" in its own filter, so an order the office confirms in
+ * the meantime is left alone.
  */
-async function loadOrderForBuyer(orderId: string): Promise<LoadOk | LoadErr> {
+async function gate(orderId: string) {
   const session = await getSession();
-  if (!session) return { error: "Нэвтрэлт хэрэгтэй." };
+  if (!session) return { error: "Нэвтрэлт хэрэгтэй." } as const;
   if (session.profile.role !== "buyer" && session.profile.role !== "rep") {
-    return {
-      error: "Зөвхөн худалдан авагч эсвэл төлөөлөгч өөрчилж болно.",
-    };
+    return { error: "Зөвхөн худалдан авагч эсвэл төлөөлөгч өөрчилж болно." } as const;
   }
-  const supabase = await createClient();
-  const { data: order, error } = await supabase
-    .from("orders")
-    .select("id, status, placed_by")
-    .eq("id", orderId)
-    .single();
-  if (error || !order) return { error: "Захиалга олдсонгүй." };
-  if (order.status !== "pending") {
-    return {
-      error: "Зөвхөн 'Хүлээгдэж буй' захиалгыг өөрчилж болно.",
-    };
+  if (!session.profile.active) {
+    return { error: "Таны бүртгэл идэвхгүй байна. BDI-тэй холбогдоно уу." } as const;
   }
-  if (order.placed_by !== session.userId) {
-    return { error: "Зөвхөн өөрийн захиалгыг өөрчилж болно." };
-  }
-  return { supabase, order, session };
+  const order = await loadOwnPendingOrder(orderId, session.userId);
+  if ("error" in order) return { error: order.error } as const;
+  return { session, order, admin: createAdminClient() } as const;
+}
+
+/** Is the order still pending right now? (Checked again just before writing.) */
+async function stillPending(admin: ReturnType<typeof createAdminClient>, orderId: string): Promise<boolean> {
+  const { data } = await admin.from("orders").select("status").eq("id", orderId).maybeSingle();
+  return data?.status === "pending";
+}
+
+function refresh(orderId: string) {
+  revalidatePath(`/orders/${orderId}`);
+  revalidatePath("/orders");
+  revalidatePath(`/admin/orders/${orderId}`);
+  revalidatePath("/admin/orders");
 }
 
 export async function updateOrderItemQty(
@@ -60,29 +49,33 @@ export async function updateOrderItemQty(
   itemId: string,
   qty: number,
 ): Promise<Result> {
-  const ctx = await loadOrderForBuyer(orderId);
+  const ctx = await gate(orderId);
   if ("error" in ctx) return { error: ctx.error };
+  if (!isUuid(itemId)) return { error: "Бараа олдсонгүй." };
 
   const cleaned = Math.floor(qty);
   if (!Number.isFinite(cleaned) || cleaned < 1) {
     return { error: "Тоо хэмжээ 1-ээс багагүй байх ёстой." };
   }
+  if (!(await stillPending(ctx.admin, orderId))) {
+    return { error: "Захиалга баталгаажсан тул өөрчлөх боломжгүй." };
+  }
 
-  const { data, error } = await ctx.supabase
+  // Only the quantity, only on this order, never a 0₮ gift line.
+  const { data, error } = await ctx.admin
     .from("order_items")
     .update({ qty: cleaned })
     .eq("id", itemId)
     .eq("order_id", orderId)
+    .gt("unit_price", 0)
     .select("id, qty");
   if (error) return { error: error.message };
   if (!data || data.length === 0) {
-    return { error: "Барааны тоог өөрчилж чадсангүй." };
+    return { error: "Энэ барааны тоог өөрчлөх боломжгүй." };
   }
 
-  // Order subtotal is recomputed by the `recompute_order_subtotal` trigger
-  // (see docs/schema.sql) — we just need to bust the route cache.
-  revalidatePath(`/orders/${orderId}`);
-  revalidatePath("/orders");
+  // orders.subtotal follows via the recompute_order_subtotal trigger.
+  refresh(orderId);
   return { ok: true };
 }
 
@@ -90,69 +83,65 @@ export async function removeOrderItem(
   orderId: string,
   itemId: string,
 ): Promise<Result> {
-  const ctx = await loadOrderForBuyer(orderId);
+  const ctx = await gate(orderId);
   if ("error" in ctx) return { error: ctx.error };
+  if (!isUuid(itemId)) return { error: "Бараа олдсонгүй." };
 
-  // Server-side mirror of the client's "can't remove last item" rule — UI
-  // already blocks this, but a hand-crafted request shouldn't slip past.
-  const { count } = await ctx.supabase
+  // Keep at least one paid line — to drop everything, cancel the order.
+  const { count } = await ctx.admin
     .from("order_items")
-    .select("*", { count: "exact", head: true })
-    .eq("order_id", orderId);
+    .select("id", { count: "exact", head: true })
+    .eq("order_id", orderId)
+    .gt("unit_price", 0);
   if ((count ?? 0) <= 1) {
     return {
       error: "Сүүлчийн барааг хасч болохгүй. Захиалгыг бүхэлд нь цуцлана уу.",
     };
   }
+  if (!(await stillPending(ctx.admin, orderId))) {
+    return { error: "Захиалга баталгаажсан тул өөрчлөх боломжгүй." };
+  }
 
-  const { data, error } = await ctx.supabase
+  const { data, error } = await ctx.admin
     .from("order_items")
     .delete()
     .eq("id", itemId)
     .eq("order_id", orderId)
+    .gt("unit_price", 0)
     .select("id");
   if (error) return { error: error.message };
   if (!data || data.length === 0) {
-    return { error: "Барааг хасч чадсангүй." };
+    return { error: "Энэ барааг хасах боломжгүй." };
   }
 
-  revalidatePath(`/orders/${orderId}`);
-  revalidatePath("/orders");
+  refresh(orderId);
   return { ok: true };
 }
 
 /**
- * Soft-cancel the order by flipping status to 'cancelled'. Matches the
- * intent stated in the buyer-modifications migration and preserves the
- * order history for the buyer + admin.
- *
- * `.select()` (no `.single()`) so a silent RLS rejection returns an empty
- * array instead of PGRST116 "Cannot coerce the result to a single JSON
- * object" — we want to localize that case ourselves.
+ * Cancel (soft): status → cancelled, history kept for the store and the
+ * office. The status filter makes it a no-op if the office confirmed the
+ * order a moment earlier.
  */
 export async function cancelOrder(orderId: string): Promise<Result> {
-  const ctx = await loadOrderForBuyer(orderId);
+  const ctx = await gate(orderId);
   if ("error" in ctx) return { error: ctx.error };
 
-  const { data, error } = await ctx.supabase
+  const { data, error } = await ctx.admin
     .from("orders")
-    .update({ status: "cancelled" })
+    .update({ status: "cancelled", shipment_id: null })
     .eq("id", orderId)
-    .select("id, status, order_number");
+    .eq("placed_by", ctx.session.userId)
+    .eq("status", "pending")
+    .select("id, order_number");
   if (error) return { error: error.message };
   if (!data || data.length === 0) {
-    // RLS silently rejected — most often because the buyer-modifications
-    // migration only grants UPDATE to role='buyer'. A rep trying to cancel
-    // hits this path. Surface a useful hint.
-    return {
-      error: `Захиалгыг цуцлах эрхгүй байна (role=${ctx.session.profile.role}).`,
-    };
+    return { error: "Захиалга баталгаажсан тул цуцлах боломжгүй. BDI-тэй холбогдоно уу." };
   }
 
-  // Warn the admins — a cancellation is time-sensitive in a way the
-  // in-app feed alone doesn't convey: the warehouse may already be
-  // picking this order. Same three channels as a new order.
-  const orderNumber = data[0]?.order_number ?? "";
+  // Warn the admins — the warehouse may already be picking this order.
+  // Same three channels as a new order.
+  const orderNumber = data[0]?.order_number ?? ctx.order.order_number;
   after(async () => {
     const adminIds = await listAdminIds();
     await notifyMany(
@@ -168,7 +157,6 @@ export async function cancelOrder(orderId: string): Promise<Result> {
     );
   });
 
-  revalidatePath(`/orders/${orderId}`);
-  revalidatePath("/orders");
+  refresh(orderId);
   return { ok: true };
 }

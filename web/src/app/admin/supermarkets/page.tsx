@@ -90,16 +90,23 @@ export default async function AdminSupermarketsPage({
     )
     .order("name");
 
-  if (q) {
-    const term = q.replace(/[%_]/g, "\\$&"); // escape ILIKE wildcards
+  // Characters with meaning in PostgREST filters can't go in an or() list.
+  const term = (q ?? "").replace(/[%_,()"\\*]/g, " ").replace(/\s+/g, " ").trim();
+  if (term) {
     query = query.or(
-      `name.ilike.%${term}%,address.ilike.%${term}%,contact_phone.ilike.%${term}%`,
+      [
+        `name.ilike.%${term}%`,
+        `address.ilike.%${term}%`,
+        `contact_phone.ilike.%${term}%`,
+        `registry_number.ilike.%${term}%`,
+        `external_id.ilike.%${term}%`,
+      ].join(","),
     );
   }
   if (typeFilter === "__other") {
-    // Anything not in the well-known buckets
-    const negated = KNOWN_TYPES.map((t) => `type.not.ilike.%${t}%`).join(",");
-    query = query.or(negated);
+    // No type, or a type matching none of the well-known buckets.
+    const noneOfThem = KNOWN_TYPES.map((t) => `type.not.ilike.%${t}%`).join(",");
+    query = query.or(`type.is.null,and(${noneOfThem})`);
   } else if (typeFilter) {
     query = query.ilike("type", `%${typeFilter}%`);
   }
@@ -161,7 +168,7 @@ export default async function AdminSupermarketsPage({
                 name="q"
                 defaultValue={q}
                 placeholder="Нэр, хаяг, утсаар хайх..."
-                className="w-full rounded-md border border-input bg-background pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="field pl-9"
               />
             </div>
             <Select

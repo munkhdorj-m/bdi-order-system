@@ -1,32 +1,54 @@
 "use client";
 
 import { useTransition } from "react";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Loader2, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { NEXT_STATUS, NEXT_STATUS_LABEL, type OrderStatus } from "@/lib/order-status";
+import { NEXT_STATUS, NEXT_STATUS_LABEL, STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
 import { advanceOrderStatus } from "@/app/admin/orders/actions";
 
 /**
- * One-tap status advance for order LIST rows (admin orders table +
- * dashboard pending queue). The single most common admin task is
- * walking the day's orders through pending → confirmed → shipped →
- * delivered; without this button every transition costs a round-trip
- * into the detail page and back.
- *
- * Renders nothing for final statuses (delivered/cancelled) — those
- * need the detail page's full controls (reopen) anyway.
+ * One-tap next step for order LIST rows (orders table, dashboard queue):
+ *   pending   → confirm here
+ *   confirmed → "Ачилтад оноох": opens the dispatch board for its delivery
+ *               day (orders ship by going on a run, so they're printed)
+ *   shipped   → mark delivered here
+ * Renders nothing for delivered/cancelled.
  */
 export function QuickAdvanceButton({
   orderId,
   status,
+  deliveryDate,
 }: {
   orderId: string;
   status: OrderStatus;
+  deliveryDate?: string | null;
 }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const next = NEXT_STATUS[status];
   const label = NEXT_STATUS_LABEL[status];
+
+  if (status === "confirmed") {
+    // A button (not a Link): mobile rows are already links.
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="text-primary border-primary/30"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          router.push(deliveryDate ? `/admin/dispatch?date=${deliveryDate}` : "/admin/dispatch");
+        }}
+      >
+        <Truck className="size-4" />
+        Ачилтад оноох
+      </Button>
+    );
+  }
 
   if (!next || !label) return null;
 
@@ -41,7 +63,7 @@ export function QuickAdvanceButton({
         toast.error(result.error);
         return;
       }
-      toast.success(label!);
+      toast.success(`${STATUS_LABELS[next!]} боллоо`);
     });
   }
 
@@ -52,14 +74,14 @@ export function QuickAdvanceButton({
       size="sm"
       disabled={pending}
       onClick={advance}
-      className="h-7 px-2.5 text-[12px] font-semibold text-primary border-primary/30 hover:bg-primary/5 hover:text-primary"
+      className="text-primary border-primary/30"
     >
       {pending ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        <Loader2 className="size-4 animate-spin" />
       ) : (
         <>
           {label}
-          <ArrowRight className="h-3.5 w-3.5" />
+          <ArrowRight className="size-4" />
         </>
       )}
     </Button>

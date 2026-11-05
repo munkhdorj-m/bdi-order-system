@@ -10,12 +10,13 @@ import {
   ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useCart, totalQty } from "@/lib/cart";
+import { useCart } from "@/lib/cart";
 
 export function BuyerBottomTabBar() {
   const pathname = usePathname();
   const cart = useCart();
-  const cartQty = totalQty(cart);
+  // Products in the cart (not pieces — boxes made it read 99+).
+  const cartQty = cart.length;
   const [bounce, setBounce] = useState(false);
   const prevQtyRef = useRef(cartQty);
 
@@ -96,7 +97,7 @@ export function BuyerBottomTabBar() {
                         "absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold tabular-nums flex items-center justify-center ring-2 ring-background bg-gold text-gold-foreground",
                         bounce && "animate-cart-bounce",
                       )}
-                      aria-label={`Сагсанд ${t.badge} ширхэг`}
+                      aria-label={`Сагсанд ${t.badge} төрлийн бараа`}
                     >
                       {t.badge > 99 ? "99+" : t.badge}
                     </span>

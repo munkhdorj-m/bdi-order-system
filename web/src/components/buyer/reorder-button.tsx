@@ -35,9 +35,13 @@ export function ReorderButton({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
+  // Gift lines (0₮) came from a deal; they're re-earned at checkout, not
+  // copied — otherwise they'd be charged at full price.
+  const paid = lines.filter((l) => l.unit_price > 0);
+
   function handleClick() {
     startTransition(() => {
-      for (const line of lines) {
+      for (const line of paid) {
         addToCart(
           {
             product_id: line.product_id,
@@ -49,8 +53,8 @@ export function ReorderButton({
           line.qty,
         );
       }
-      toast.success(`${lines.length} бараа сагсанд орлоо`, {
-        description: "Сагсаа нягтлаад илгээнэ үү.",
+      toast.success(`${paid.length} бараа сагсанд орлоо`, {
+        description: "Үнэ нь өнөөдрийн үнээр бодогдоно. Сагсаа нягтлаад илгээнэ үү.",
       });
       router.push("/cart");
     });
@@ -60,11 +64,11 @@ export function ReorderButton({
     <button
       type="button"
       onClick={handleClick}
-      disabled={pending || lines.length === 0}
+      disabled={pending || paid.length === 0}
       aria-busy={pending}
       className={
         className ??
-        "flex-1 h-11 rounded-2xl text-[13px] font-bold bg-primary text-primary-foreground shadow-md shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all flex items-center justify-center gap-1.5"
+        "flex-1 h-12 rounded-xl text-[14px] font-bold bg-gold text-gold-foreground shadow-sm shadow-gold/40 hover:brightness-[1.04] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all flex items-center justify-center gap-2"
       }
     >
       {pending ? (

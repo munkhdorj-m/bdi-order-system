@@ -155,7 +155,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
             name="q"
             defaultValue={filters.q}
             placeholder="Нэр, баркод, дотоод код, брэнд..."
-            className="h-10 w-full rounded-xl border border-input bg-background pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="field pl-9"
           />
           {filters.category && <input type="hidden" name="category" value={filters.category} />}
           {filters.status !== "all" && <input type="hidden" name="status" value={filters.status} />}

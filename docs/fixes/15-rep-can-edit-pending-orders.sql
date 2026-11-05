@@ -1,3 +1,7 @@
+-- ⚠ SUPERSEDED by fix 39 (39-orders-server-only-writes.sql): buyers and
+--   reps no longer write orders directly — the website's server does.
+--   Do NOT re-run this file; it would re-open direct writes.
+
 -- ============================================================
 -- Fix 15: reps can edit & cancel their own pending orders too
 -- ============================================================

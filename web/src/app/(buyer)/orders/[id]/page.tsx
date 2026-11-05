@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Phone, Truck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getSession } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { OrderStatusPill } from "@/components/admin/order-status-pill";
 import { OrderEditControls } from "@/components/buyer/order-edit-controls";
@@ -21,6 +22,7 @@ type OrderDetail = {
   subtotal: number;
   discount_total: number | null;
   payment_method: PaymentMethod | null;
+  placed_by: string | null;
   notes: string | null;
   created_at: string;
   confirmed_at: string | null;
@@ -77,20 +79,25 @@ export default async function OrderDetailPage({
   params: Params;
   searchParams: SearchParams;
 }) {
-  const { id } = await params;
-  const { new: isNew } = await searchParams;
+  const [{ id }, { new: isNew }] = await Promise.all([params, searchParams]);
   const supabase = await createClient();
 
-  const { data } = await supabase
-    .from("orders")
-    .select(
-      "id, order_number, status, subtotal, discount_total, payment_method, notes, created_at, confirmed_at, shipped_at, delivered_at, order_items(id, product_id, product_name_snapshot, qty, unit_price, line_total)",
-    )
-    .eq("id", id)
-    .single();
+  const [{ data }, session] = await Promise.all([
+    supabase
+      .from("orders")
+      .select(
+        "id, order_number, status, subtotal, discount_total, payment_method, placed_by, notes, created_at, confirmed_at, shipped_at, delivered_at, order_items(id, product_id, product_name_snapshot, qty, unit_price, line_total)",
+      )
+      .eq("id", id)
+      .single(),
+    getSession(), // cached — the layout already loaded it
+  ]);
 
   if (!data) notFound();
   const order = data as unknown as OrderDetail;
+  // Only whoever placed it can change it (the server enforces the same).
+  // Orders BDI staff or a rep entered for the store are view-only here.
+  const canEdit = order.status === "pending" && !!session && order.placed_by === session.userId;
 
   const reorderLines = order.order_items.map((li) => ({
     product_id: li.product_id,
@@ -131,11 +138,11 @@ export default async function OrderDetailPage({
             </div>
           </div>
           <div className="text-right">
-            <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-muted-foreground">
-              Нийт
+            <div className="text-[11px] uppercase tracking-[0.08em] font-bold text-muted-foreground">
+              Нийт төлөх
             </div>
-            <div className="text-[18px] font-bold tabular-nums">
-              {formatMnt(order.subtotal)}
+            <div className="font-display text-[18px] font-semibold tabular-nums">
+              {formatMnt(order.subtotal - (order.discount_total ?? 0))}
             </div>
           </div>
         </div>
@@ -167,7 +174,12 @@ export default async function OrderDetailPage({
           <span>Бараа · {order.order_items.length}</span>
         </div>
 
-        {order.status === "pending" ? (
+        {order.status === "pending" && !canEdit && (
+          <p className="mb-2 rounded-xl bg-muted/70 px-3 py-2 text-[12.5px] text-muted-foreground">
+            Энэ захиалгыг BDI эсвэл төлөөлөгч оруулсан. Өөрчлөх бол BDI-тэй холбогдоно уу.
+          </p>
+        )}
+        {canEdit ? (
           // Pending orders keep the inline edit controls (qty +/-, cancel)
           // wrapped in the same card chrome the rest of the page uses.
           <div className="rounded-2xl bg-card ring-1 ring-border overflow-hidden">
@@ -206,7 +218,7 @@ export default async function OrderDetailPage({
             (pending orders show the breakdown inside the edit-controls
             component). The cash 2% discount surfaces here so the buyer
             can confirm what they'll actually pay. */}
-        {order.status !== "pending" && (
+        {(
           <div className="mt-2 rounded-2xl bg-muted/40 px-3 py-2.5 space-y-1">
             <div className="flex items-center justify-between text-[12px] text-muted-foreground tabular-nums">
               <span>Дэд дүн</span>
@@ -333,11 +345,11 @@ function OrderPlacedHero({ order }: { order: OrderDetail }) {
               </div>
             </div>
             <div>
-              <div className="text-[9.5px] uppercase tracking-[0.08em] font-bold text-muted-foreground">
-                Нийт
+              <div className="text-[11px] uppercase tracking-[0.08em] font-bold text-muted-foreground">
+                Нийт төлөх
               </div>
               <div className="text-[14px] font-bold tabular-nums">
-                {formatMnt(order.subtotal)}
+                {formatMnt(order.subtotal - (order.discount_total ?? 0))}
               </div>
             </div>
             <div>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BdiLogo } from "@/components/brand/bdi-logo";
 import { redirect } from "next/navigation";
 import { getSession, homePathForRole } from "@/lib/auth";
 import { Phone } from "lucide-react";
@@ -64,9 +65,7 @@ export default async function LoginPage({
       <div className="relative w-full max-w-sm page-enter">
         {/* Brand mark + headline above the card */}
         <div className="text-center mb-7">
-          <div className="size-16 mx-auto rounded-[1.4rem] bg-white/15 backdrop-blur-md ring-1 ring-white/30 shadow-lg shadow-black/10 flex items-center justify-center font-extrabold text-xl tracking-tight">
-            BDI
-          </div>
+          <BdiLogo size="lg" tone="glass" className="mx-auto" />
           <h1 className="mt-5 text-[26px] font-bold tracking-tight leading-tight">
             Тавтай морил
           </h1>

@@ -1,4 +1,6 @@
 import { LogOut } from "lucide-react";
+import Link from "next/link";
+import { BdiLogo } from "@/components/brand/bdi-logo";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -7,6 +9,7 @@ import {
 } from "@/components/notifications-bell";
 import { createClient } from "@/lib/supabase/server";
 import { MobileNav } from "./mobile-nav";
+import { CommandPalette } from "./command-palette";
 
 type Props = {
   phone: string | null;
@@ -29,12 +32,15 @@ export async function AdminHeader({ phone, name }: Props) {
   const unread = items.filter((n) => !n.read_at).length;
 
   return (
-    <header className="sticky top-0 z-10 h-14 flex items-center gap-2 px-4 lg:px-6 glass-strong">
-      {/* Brand-tinted hairline — same chrome language as the buyer shell. */}
-      <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
+    <header className="sticky top-0 z-10 h-14 flex items-center gap-2 px-4 lg:px-6 glass-strong border-b border-border">
       <MobileNav />
-      <div className="lg:hidden font-semibold">BDI Admin</div>
-      <div className="flex-1" />
+      <Link href="/admin" aria-label="BDI — нүүр" className="shrink-0 lg:hidden">
+        <BdiLogo label="" />
+      </Link>
+      {/* Quick search: orders, stores, products, pages (Ctrl+K). */}
+      <div className="flex flex-1 justify-end sm:justify-start">
+        <CommandPalette />
+      </div>
       <div className="flex items-center gap-2">
         <div className="text-right hidden sm:block">
           {name && (

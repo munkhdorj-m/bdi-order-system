@@ -21,7 +21,7 @@ import {
   type OrderStatus,
 } from "@/lib/order-status";
 import { formatMnt } from "@/lib/format";
-import { addDays, todayUb } from "@/lib/dispatch";
+import { addDays, isIsoDay, todayUb, ubDayStart } from "@/lib/dispatch";
 
 type SearchParams = Promise<{
   status?: string;
@@ -29,6 +29,8 @@ type SearchParams = Promise<{
   range?: string;
   from?: string;
   to?: string;
+  /** Only this store's orders (linked from the store page). */
+  store?: string;
 }>;
 
 type OrderRow = {
@@ -37,6 +39,8 @@ type OrderRow = {
   status: OrderStatus;
   subtotal: number;
   created_at: string;
+  delivery_date: string | null;
+  supermarket_id: string;
   supermarkets: { name: string } | null;
 };
 
@@ -106,26 +110,17 @@ function resolveDateBounds(
   from: string | undefined,
   to: string | undefined,
 ): { fromIso: string | null; toIso: string | null } {
+  // Ulaanbaatar days, whatever timezone the server runs in (Vercel is UTC:
+  // a server-local midnight would start "today" at 08:00 UB).
   if (range) {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    if (range === "today") {
-      return { fromIso: start.toISOString(), toIso: null };
-    }
-    if (range === "7d") {
-      start.setDate(start.getDate() - 6);
-      return { fromIso: start.toISOString(), toIso: null };
-    }
-    // 30d
-    start.setDate(start.getDate() - 29);
-    return { fromIso: start.toISOString(), toIso: null };
+    const today = todayUb();
+    const days = range === "today" ? 0 : range === "7d" ? 6 : 29;
+    return { fromIso: ubDayStart(addDays(today, -days)), toIso: null };
   }
   if (!from && !to) return { fromIso: null, toIso: null };
-  // Custom range — interpret yyyy-mm-dd as local-midnight bounds.
-  const fromIso = from ? new Date(`${from}T00:00:00`).toISOString() : null;
-  // Treat `to` as inclusive-end-of-day so picking the same date as `from`
-  // yields a 24-hour window rather than 1 microsecond.
-  const toIso = to ? new Date(`${to}T23:59:59.999`).toISOString() : null;
+  const fromIso = from && isIsoDay(from) ? ubDayStart(from) : null;
+  // `to` is inclusive: everything before the next UB midnight.
+  const toIso = to && isIsoDay(to) ? ubDayStart(addDays(to, 1)) : null;
   return { fromIso, toIso };
 }
 
@@ -139,8 +134,10 @@ function buildHref(params: {
   range?: string | null;
   from?: string;
   to?: string;
+  store?: string;
 }): string {
   const sp = new URLSearchParams();
+  if (params.store) sp.set("store", params.store);
   if (params.status) sp.set("status", params.status);
   if (params.q) sp.set("q", params.q);
   if (params.range) sp.set("range", params.range);
@@ -161,6 +158,7 @@ export default async function AdminOrdersPage({
   const range = parseRange(sp.range);
   const from = sp.from?.trim() || undefined;
   const to = sp.to?.trim() || undefined;
+  const store = sp.store && /^[0-9a-f-]{36}$/i.test(sp.store) ? sp.store : undefined;
 
   // Excel of what's on screen: the date filter as UB days (today if none).
   const today = todayUb();
@@ -239,7 +237,7 @@ export default async function AdminOrdersPage({
 
   // Re-key Suspense so any filter change re-shows the skeleton instead of
   // holding stale rows during the re-fetch.
-  const streamKey = [status ?? "all", q, range ?? "", from ?? "", to ?? ""].join(
+  const streamKey = [status ?? "all", q, range ?? "", from ?? "", to ?? "", store ?? ""].join(
     "|",
   );
 
@@ -277,7 +275,7 @@ export default async function AdminOrdersPage({
       {/* Status filter chips — primary fill for active, muted ring for inactive.
           Hrefs preserve search + date filters so flipping status doesn't blow
           them away. */}
-      <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 mb-3 scrollbar-thin">
+      <div className="mb-4 flex flex-wrap gap-2">
         {tabs.map((t) => {
           const active = (t.key === null && !status) || t.key === status;
           const href = buildHref({
@@ -286,23 +284,12 @@ export default async function AdminOrdersPage({
             range,
             from,
             to,
+            store,
           });
           return (
-            <Link
-              key={t.label}
-              href={href}
-              className={`whitespace-nowrap shrink-0 rounded-full px-3.5 h-8 inline-flex items-center gap-1 text-[12px] font-semibold transition-all ${
-                active
-                  ? "bg-primary text-primary-foreground shadow-sm shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)]"
-                  : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-muted/80 dark:hover:bg-muted/60 hover:text-foreground"
-              }`}
-            >
+            <Link key={t.label} href={href} className="chip" data-active={active || undefined}>
               {t.label}
-              <span
-                className={`tabular-nums ${active ? "opacity-80" : "text-foreground/60"}`}
-              >
-                · {t.count}
-              </span>
+              <span className={`tabular-nums ${active ? "opacity-80" : "text-muted-foreground"}`}>{t.count}</span>
             </Link>
           );
         })}
@@ -314,6 +301,7 @@ export default async function AdminOrdersPage({
       <Card className="p-3 sm:p-4 mb-4">
         <form method="get" className="flex flex-col sm:flex-row gap-2 sm:gap-3 min-w-0">
           {/* Preserve current status + range/date when submitting the search */}
+          {store && <input type="hidden" name="store" defaultValue={store} />}
           {status && (
             <input type="hidden" name="status" defaultValue={status} />
           )}
@@ -328,25 +316,23 @@ export default async function AdminOrdersPage({
               name="q"
               defaultValue={q}
               placeholder="Захиалгын дугаар эсвэл дэлгүүрийн нэрээр хайх..."
-              className="w-full h-9 rounded-md border border-input bg-background pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="field pl-9 pr-9"
             />
             {q && (
               <Link
                 href={buildHref({ status, range, from, to })}
                 aria-label="Хайлт цэвэрлэх"
-                className="absolute right-1 top-1/2 -translate-y-1/2 size-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 size-7 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-4 w-4" />
               </Link>
             )}
           </div>
 
-          <button
-            type="submit"
-            className="h-9 px-3.5 rounded-md bg-secondary text-secondary-foreground text-sm font-semibold hover:bg-secondary/80 active:scale-[0.97] transition-all whitespace-nowrap"
-          >
+          <Button type="submit">
+            <Search className="size-4" />
             Хайх
-          </button>
+          </Button>
         </form>
 
         {/* Date preset chips + custom from/to. Presets clear the custom range
@@ -365,17 +351,10 @@ export default async function AdminOrdersPage({
               // Drop custom range when picking a preset
               from: undefined,
               to: undefined,
+              store,
             });
             return (
-              <Link
-                key={p.label}
-                href={href}
-                className={`inline-flex items-center h-7 px-2.5 rounded-full text-[11.5px] font-semibold transition-all leading-none ${
-                  active
-                    ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
-                    : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-muted/80 hover:text-foreground dark:hover:bg-muted/60"
-                }`}
-              >
+              <Link key={p.label} href={href} className="chip h-8 px-3" data-active={active || undefined}>
                 {p.label}
               </Link>
             );
@@ -396,7 +375,7 @@ export default async function AdminOrdersPage({
               type="date"
               name="from"
               defaultValue={from ?? ""}
-              className="h-8 rounded-md border border-input bg-background px-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-ring"
+              className="field h-9 w-auto px-2.5 text-[13px]"
               aria-label="Эхэлсэн огноо"
             />
             <span className="text-muted-foreground">—</span>
@@ -404,22 +383,16 @@ export default async function AdminOrdersPage({
               type="date"
               name="to"
               defaultValue={to ?? ""}
-              className="h-8 rounded-md border border-input bg-background px-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-ring"
+              className="field h-9 w-auto px-2.5 text-[13px]"
               aria-label="Дуусах огноо"
             />
-            <button
-              type="submit"
-              className="h-8 px-2.5 rounded-md bg-secondary text-secondary-foreground text-[12px] font-semibold hover:bg-secondary/80 active:scale-[0.97] transition-all"
-            >
+            <Button type="submit" variant="outline" size="sm">
               Шүүх
-            </button>
+            </Button>
             {(from || to) && (
-              <Link
-                href={buildHref({ status, q, range })}
-                className="h-8 px-2.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground inline-flex items-center"
-              >
-                Цэвэрлэх
-              </Link>
+              <Button asChild variant="ghost" size="sm">
+                <Link href={buildHref({ status, q, range })}>Цэвэрлэх</Link>
+              </Button>
             )}
           </form>
         </div>
@@ -437,11 +410,13 @@ export default async function AdminOrdersPage({
       </Card>
 
       <Suspense key={streamKey} fallback={<OrderListSkeleton />}>
-        <OrderList status={status} q={q} range={range} from={from} to={to} />
+        <OrderList status={status} q={q} range={range} from={from} to={to} store={store} />
       </Suspense>
     </div>
   );
 }
+
+const LIST_LIMIT = 500;
 
 async function OrderList({
   status,
@@ -449,12 +424,14 @@ async function OrderList({
   range,
   from,
   to,
+  store,
 }: {
   status?: string;
   q?: string;
   range: RangePreset | null;
   from?: string;
   to?: string;
+  store?: string;
 }) {
   const supabase = await createClient();
 
@@ -462,13 +439,16 @@ async function OrderList({
   // ILIKE through embedded relations cleanly, so we do a 2-step: get matching
   // store IDs, then filter orders by (order_number ILIKE %q% OR
   // supermarket_id IN matchingIds).
+  // Characters with meaning in PostgREST filters can't go in an or() list
+  // (a comma used to show a raw database error).
+  const term = (q ?? "").replace(/[%_,()"\\*]/g, " ").replace(/\s+/g, " ").trim();
   let matchingSupermarketIds: string[] = [];
-  if (q) {
-    const term = q.replace(/[%_]/g, "\\$&");
+  if (term) {
     const { data: stores } = await supabase
       .from("supermarkets")
       .select("id")
-      .ilike("name", `%${term}%`);
+      .ilike("name", `%${term}%`)
+      .limit(200);
     matchingSupermarketIds = ((stores as Array<{ id: string }> | null) ?? []).map(
       (s) => s.id,
     );
@@ -477,9 +457,11 @@ async function OrderList({
   let query = supabase
     .from("orders")
     .select(
-      "id, order_number, status, subtotal, created_at, supermarkets:supermarket_id(name)",
+      "id, order_number, status, subtotal, created_at, delivery_date, supermarket_id, supermarkets:supermarket_id(name)",
     )
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(LIST_LIMIT);
+  if (store) query = query.eq("supermarket_id", store);
 
   if (status === "active") {
     query = query.in("status", ACTIVE_STATUSES);
@@ -487,8 +469,7 @@ async function OrderList({
     query = query.eq("status", status);
   }
 
-  if (q) {
-    const term = q.replace(/[%_]/g, "\\$&");
+  if (term) {
     // PostgREST `.or()` accepts the in.(...) format for the supermarket
     // bucket; quote the UUIDs so an empty list short-circuits to false
     // rather than syntax-erroring.
@@ -503,10 +484,34 @@ async function OrderList({
 
   const { fromIso, toIso } = resolveDateBounds(range, from, to);
   if (fromIso) query = query.gte("created_at", fromIso);
-  if (toIso) query = query.lte("created_at", toIso);
+  if (toIso) query = query.lt("created_at", toIso);
 
-  const { data, error } = await query;
+  const [{ data, error }, storeRow] = await Promise.all([
+    query,
+    store
+      ? supabase.from("supermarkets").select("name").eq("id", store).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
   const rows = (data as unknown as OrderRow[]) ?? [];
+  const storeName = (storeRow.data as { name: string } | null)?.name ?? null;
+
+  // Which store this list is narrowed to, with a one-tap way back.
+  const storeBanner = store ? (
+    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-accent px-3 py-2.5 text-[13.5px] text-accent-foreground ring-1 ring-primary/20">
+      <span>
+        <b>{storeName ?? "Дэлгүүр"}</b> дэлгүүрийн захиалга
+      </span>
+      <Link href={`/admin/supermarkets/${store}`} className="font-semibold underline underline-offset-2">
+        Дэлгүүр рүү
+      </Link>
+      <Link
+        href={buildHref({ status, q, range: range ?? undefined, from, to })}
+        className="ml-auto inline-flex items-center gap-1 font-semibold"
+      >
+        <X className="h-4 w-4" /> Бүх дэлгүүр
+      </Link>
+    </div>
+  ) : null;
 
   if (error) {
     return (
@@ -518,10 +523,13 @@ async function OrderList({
 
   if (rows.length === 0) {
     return (
-      <Card className="p-12 text-center text-muted-foreground">
-        <ClipboardList className="h-8 w-8 mx-auto mb-3 opacity-40" />
-        <p>Захиалга алга байна.</p>
-      </Card>
+      <>
+        {storeBanner}
+        <Card className="p-12 text-center text-muted-foreground">
+          <ClipboardList className="h-8 w-8 mx-auto mb-3 opacity-40" />
+          <p>Захиалга алга байна.</p>
+        </Card>
+      </>
     );
   }
 
@@ -556,6 +564,12 @@ async function OrderList({
 
   return (
     <>
+      {storeBanner}
+      {rows.length >= LIST_LIMIT && (
+        <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-[13px] text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-200 dark:ring-amber-800/60">
+          Сүүлийн {LIST_LIMIT} захиалгыг харуулж байна. Огноо эсвэл төлвөөр шүүж нарийсгана уу.
+        </p>
+      )}
       {/* Summary banner — total across whatever filters are active, with
           the per-day count broken out so the admin sees revenue context
           at a glance. */}
@@ -622,7 +636,7 @@ async function OrderList({
                       </div>
                       {/* Inline next-status action — stopPropagation inside
                           the button keeps the surrounding Link inert. */}
-                      <QuickAdvanceButton orderId={o.id} status={o.status} />
+                      <QuickAdvanceButton orderId={o.id} status={o.status} deliveryDate={o.delivery_date} />
                     </div>
                   </div>
                 </Link>
@@ -654,7 +668,13 @@ async function OrderList({
                         </Link>
                       </TableCell>
                       <TableCell className="text-sm">
-                        {o.supermarkets?.name ?? "—"}
+                        <Link
+                          href={buildHref({ store: o.supermarket_id })}
+                          className="hover:text-primary hover:underline"
+                          title="Энэ дэлгүүрийн бүх захиалга"
+                        >
+                          {o.supermarkets?.name ?? "—"}
+                        </Link>
                       </TableCell>
                       <TableCell>
                         <OrderStatusPill status={o.status} />
@@ -669,6 +689,7 @@ async function OrderList({
                         <QuickAdvanceButton
                           orderId={o.id}
                           status={o.status}
+                          deliveryDate={o.delivery_date}
                         />
                       </TableCell>
                     </TableRow>

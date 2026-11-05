@@ -24,6 +24,8 @@ type OrderDetail = {
   confirmed_at: string | null;
   shipped_at: string | null;
   delivered_at: string | null;
+  delivery_date: string | null;
+  supermarket_id: string;
   supermarkets: {
     name: string;
     address: string | null;
@@ -69,7 +71,7 @@ export default async function AdminOrderDetailPage({
   const { data, error } = await supabase
     .from("orders")
     .select(
-      `id, order_number, status, subtotal, discount_total, payment_method, notes, created_at, confirmed_at, shipped_at, delivered_at,
+      `id, order_number, status, subtotal, discount_total, payment_method, notes, created_at, confirmed_at, shipped_at, delivered_at, delivery_date, supermarket_id,
        supermarkets:supermarket_id(name, address, contact_phone, profiles:assigned_rep_id(full_name, phone)),
        buyer:placed_by(full_name, phone),
        order_items(id, product_name_snapshot, qty, unit_price, line_total)`,
@@ -110,7 +112,7 @@ export default async function AdminOrderDetailPage({
               Падаан
             </Link>
           </Button>
-          <OrderActions orderId={order.id} status={order.status} />
+          <OrderActions orderId={order.id} status={order.status} deliveryDate={order.delivery_date} />
         </div>
       </div>
 
@@ -120,16 +122,25 @@ export default async function AdminOrderDetailPage({
         <div className="md:col-span-2 flex flex-col gap-4">
           {/* Store info card */}
           <div className="rounded-2xl bg-card ring-1 ring-border p-4 flex items-center gap-4 flex-wrap">
-            <div className="size-11 rounded-xl bg-gradient-to-br from-primary to-[oklch(0.42_0.18_263)] text-primary-foreground flex items-center justify-center font-bold text-base shrink-0">
+            <div className="size-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center font-display font-bold text-base shrink-0">
               {storeInitial(order.supermarkets?.name)}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-muted-foreground">
+              <div className="text-[11px] uppercase tracking-[0.1em] font-bold text-muted-foreground">
                 Дэлгүүр
               </div>
-              <div className="text-[15px] font-bold truncate">
+              <Link
+                href={`/admin/supermarkets/${order.supermarket_id}`}
+                className="block text-[15px] font-bold truncate hover:text-primary hover:underline"
+              >
                 {order.supermarkets?.name ?? "—"}
-              </div>
+              </Link>
+              <Link
+                href={`/admin/orders?store=${order.supermarket_id}`}
+                className="text-[12px] font-semibold text-primary hover:underline"
+              >
+                Энэ дэлгүүрийн бүх захиалга →
+              </Link>
               {order.supermarkets?.address && (
                 <div className="text-[11.5px] text-muted-foreground truncate">
                   {order.supermarkets.address}
@@ -167,12 +178,13 @@ export default async function AdminOrderDetailPage({
           <div className="rounded-2xl bg-card ring-1 ring-border overflow-hidden">
             <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
               <h2 className="text-[15px] font-bold tracking-tight">Бараа</h2>
-              <span className="text-[11px] text-muted-foreground">
-                {order.order_items.length} ширхэг
+              <span className="text-[12px] text-muted-foreground">
+                {order.order_items.length} төрөл ·{" "}
+                {order.order_items.reduce((n, i) => n + Number(i.qty || 0), 0)} ширхэг
               </span>
             </div>
-            <table className="w-full text-[12.5px]">
-              <thead className="bg-muted/40 text-[11px] uppercase tracking-[0.08em] font-bold text-muted-foreground">
+            <table className="w-full text-[13px] [&_tbody_tr:nth-child(even)]:bg-muted/45">
+              <thead className="bg-muted text-[11px] uppercase tracking-[0.08em] font-bold text-foreground/70">
                 <tr>
                   <th className="text-left px-5 py-2.5">Бараа</th>
                   <th className="text-right px-3 py-2.5 w-16">Тоо</th>

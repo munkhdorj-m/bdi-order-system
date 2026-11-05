@@ -24,7 +24,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
     <thead
       data-slot="table-header"
       className={cn(
-        "bg-muted/50 [&_tr]:border-b [&_tr]:hover:bg-transparent",
+        "bg-muted [&_tr]:border-b [&_tr]:border-border [&_tr]:hover:bg-transparent [&_tr]:even:bg-transparent",
         className
       )}
       {...props}
@@ -60,7 +60,8 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
+        // Striped rows + a clear hover so each line stands apart.
+        "border-b border-border transition-colors even:bg-muted/45 hover:bg-accent/70 has-aria-expanded:bg-accent/60 data-[state=selected]:bg-accent",
         className
       )}
       {...props}
@@ -74,7 +75,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
       data-slot="table-head"
       className={cn(
         // Quiet caps header row — lets the data carry the visual weight.
-        "h-10 px-3 text-left align-middle text-[11px] font-bold uppercase tracking-[0.08em] whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0",
+        "h-10 px-3 text-left align-middle text-[11px] font-bold uppercase tracking-[0.08em] whitespace-nowrap text-foreground/70 [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}

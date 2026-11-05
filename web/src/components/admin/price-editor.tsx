@@ -83,8 +83,10 @@ export function PriceEditor({ products, action }: Props) {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return products.filter((p) => {
-      // Tab filter
-      if (tab === "overrides" && values.get(p.id) == null) return false;
+      // Tab filter. A row that HAD a saved price stays visible after it's
+      // cleared, so its empty value is submitted and the price is removed
+      // (rows not on screen aren't submitted and stay as they are).
+      if (tab === "overrides" && values.get(p.id) == null && initialValues.get(p.id) == null) return false;
       // Search filter
       if (!q) return true;
       return (
@@ -93,7 +95,7 @@ export function PriceEditor({ products, action }: Props) {
         (p.brand?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [products, query, tab, values]);
+  }, [products, query, tab, values, initialValues]);
 
   function handleRowChange(id: string, raw: string) {
     const next = new Map(values);
@@ -136,11 +138,8 @@ export function PriceEditor({ products, action }: Props) {
         <button
           type="button"
           onClick={() => setTab("overrides")}
-          className={`h-8 px-3 rounded-full text-[12px] font-semibold inline-flex items-center gap-1 transition-all ${
-            tab === "overrides"
-              ? "bg-primary text-primary-foreground shadow-sm shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)]"
-              : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-muted/80 dark:hover:bg-muted/60"
-          }`}
+          className="chip h-8 px-3"
+          data-active={tab === "overrides" || undefined}
         >
           Зөвхөн зөрүү
           <span
@@ -152,11 +151,8 @@ export function PriceEditor({ products, action }: Props) {
         <button
           type="button"
           onClick={() => setTab("all")}
-          className={`h-8 px-3 rounded-full text-[12px] font-semibold inline-flex items-center gap-1 transition-all ${
-            tab === "all"
-              ? "bg-primary text-primary-foreground shadow-sm shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)]"
-              : "bg-muted text-muted-foreground ring-1 ring-border hover:bg-muted/80 dark:hover:bg-muted/60"
-          }`}
+          className="chip h-8 px-3"
+          data-active={tab === "all" || undefined}
         >
           Бүгд
           <span

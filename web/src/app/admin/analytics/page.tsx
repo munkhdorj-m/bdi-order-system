@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
+import { addDays, todayUb, ubDayStart } from "@/lib/dispatch";
 import { formatMnt } from "@/lib/format";
 import { OrderStatusPill } from "@/components/admin/order-status-pill";
 import {
@@ -36,6 +38,7 @@ type AggOrder = {
   subtotal: number;
   created_at: string;
   supermarket_id: string | null;
+  supermarkets?: { name: string } | null;
 };
 
 type OrderItemAgg = {
@@ -45,13 +48,6 @@ type OrderItemAgg = {
   product_name_snapshot: string;
 };
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function startOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
 
 function deltaPct(now: number, prev: number): number | null {
   if (prev === 0) {
@@ -134,57 +130,63 @@ function StatCard({
 export default async function AdminAnalyticsPage() {
   const supabase = await createClient();
 
-  const now = new Date();
-  const today = startOfDay(now);
+  // Ulaanbaatar calendar days (the server clock is UTC).
   const windowDays = 30;
-  const startCurrent = new Date(today.getTime() - (windowDays - 1) * DAY_MS); // inclusive
-  const startPrevious = new Date(
-    today.getTime() - (2 * windowDays - 1) * DAY_MS,
-  );
-  const endPreviousExclusive = startCurrent;
+  const todayKey = todayUb();
+  const startKey = addDays(todayKey, -(windowDays - 1)); // inclusive
+  const prevStartKey = addDays(todayKey, -(2 * windowDays - 1));
+  const today = new Date(ubDayStart(todayKey));
+  const startCurrent = new Date(ubDayStart(startKey));
 
-  const currentStartIso = startCurrent.toISOString();
-  const previousStartIso = startPrevious.toISOString();
-  const previousEndIso = endPreviousExclusive.toISOString();
+  const currentStartIso = ubDayStart(startKey);
+  const previousStartIso = ubDayStart(prevStartKey);
+  const previousEndIso = currentStartIso;
 
-  // Pull current-window orders WITH supermarket name (for the top-stores
-  // ranking and status breakdown) and previous-window orders without joins
-  // (we only need totals/counts for deltas).
+  // Every row of each window — paged, since one request stops at 1,000.
+  // Current orders carry their store's name for the top-stores ranking.
+  const settle = <T,>(p: Promise<T[]>) =>
+    p.then((data) => ({ data, error: null as { message: string } | null })).catch((e: Error) => ({ data: [] as T[], error: { message: e.message } }));
   const [
     { data: currentOrders, error: currErr },
     { data: previousOrders, error: prevErr },
-    { data: stores },
     { data: orderItemsRaw },
   ] = await Promise.all([
-    supabase
-      .from("orders")
-      .select("id, status, subtotal, created_at, supermarket_id")
-      .gte("created_at", currentStartIso)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("orders")
-      .select("id, status, subtotal, created_at, supermarket_id")
-      .gte("created_at", previousStartIso)
-      .lt("created_at", previousEndIso),
-    supabase.from("supermarkets").select("id, name"),
-    // order_items joined to orders for time-window filtering. Supabase lets
-    // us filter on the parent table with `orders.created_at`.
-    supabase
-      .from("order_items")
-      .select(
-        "product_id, qty, line_total, product_name_snapshot, orders!inner(created_at, status)",
-      )
-      .gte("orders.created_at", currentStartIso)
-      .neq("orders.status", "cancelled"),
+    settle(
+      fetchAll<AggOrder>(() =>
+        supabase
+          .from("orders")
+          .select("id, status, subtotal, created_at, supermarket_id, supermarkets:supermarket_id(name)")
+          .gte("created_at", currentStartIso)
+          .order("created_at", { ascending: false })
+          .order("id"),
+      ),
+    ),
+    settle(
+      fetchAll<AggOrder>(() =>
+        supabase
+          .from("orders")
+          .select("id, status, subtotal, created_at, supermarket_id")
+          .gte("created_at", previousStartIso)
+          .lt("created_at", previousEndIso)
+          .order("id"),
+      ),
+    ),
+    // Lines of the window's live orders (filtered on the parent order).
+    settle(
+      fetchAll<OrderItemAgg>(() =>
+        supabase
+          .from("order_items")
+          .select("id, product_id, qty, line_total, product_name_snapshot, orders!inner(created_at, status)")
+          .gte("orders.created_at", currentStartIso)
+          .neq("orders.status", "cancelled")
+          .order("id"),
+      ),
+    ),
   ]);
 
   const errorMsg = currErr?.message ?? prevErr?.message ?? null;
-  const current = (currentOrders as unknown as AggOrder[]) ?? [];
-  const previous = (previousOrders as unknown as AggOrder[]) ?? [];
-  const storeById = new Map<string, string>();
-  for (const s of (stores as { id: string; name: string }[] | null) ?? []) {
-    storeById.set(s.id, s.name);
-  }
+  const current = currentOrders;
+  const previous = previousOrders;
 
   // Strip out cancelled orders for revenue & average calculations — they
   // still count for the "total orders" stat but they aren't real revenue.
@@ -221,17 +223,13 @@ export default async function AdminAnalyticsPage() {
   type Bucket = { date: Date; key: string; revenue: number; orders: number };
   const buckets: Bucket[] = [];
   for (let i = 0; i < windowDays; i++) {
-    const d = new Date(startCurrent.getTime() + i * DAY_MS);
-    buckets.push({
-      date: d,
-      key: d.toISOString().slice(0, 10),
-      revenue: 0,
-      orders: 0,
-    });
+    const key = addDays(startKey, i);
+    buckets.push({ date: new Date(ubDayStart(key)), key, revenue: 0, orders: 0 });
   }
   const bucketByKey = new Map(buckets.map((b) => [b.key, b]));
   for (const o of currentRealised) {
-    const k = o.created_at.slice(0, 10);
+    // The order's day in Ulaanbaatar (UTC+8 all year).
+    const k = new Date(Date.parse(o.created_at) + 8 * 3600_000).toISOString().slice(0, 10);
     const b = bucketByKey.get(k);
     if (b) {
       b.revenue += Number(o.subtotal ?? 0);
@@ -262,7 +260,7 @@ export default async function AdminAnalyticsPage() {
   >();
   for (const o of currentRealised) {
     if (!o.supermarket_id) continue;
-    const name = storeById.get(o.supermarket_id) ?? "Үл мэдэгдэх";
+    const name = o.supermarkets?.name ?? "Үл мэдэгдэх";
     const row = storeAgg.get(o.supermarket_id) ?? {
       name,
       revenue: 0,
@@ -280,10 +278,7 @@ export default async function AdminAnalyticsPage() {
   // -------------------------------------------------------------------
   // Top products by units (current window)
   // -------------------------------------------------------------------
-  const items =
-    (orderItemsRaw as unknown as OrderItemAgg[] | null)?.filter(
-      (r) => r && r.product_id,
-    ) ?? [];
+  const items = orderItemsRaw.filter((r) => r && r.product_id);
   const productAgg = new Map<
     string,
     { name: string; units: number; revenue: number }
@@ -304,7 +299,7 @@ export default async function AdminAnalyticsPage() {
     .slice(0, 10);
 
   const fmtDay = (d: Date) =>
-    d.toLocaleDateString("mn-MN", { month: "2-digit", day: "2-digit" });
+    d.toLocaleDateString("mn-MN", { timeZone: "Asia/Ulaanbaatar", month: "2-digit", day: "2-digit" });
 
   return (
     <div className="max-w-6xl">

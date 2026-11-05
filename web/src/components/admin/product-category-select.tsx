@@ -43,7 +43,7 @@ export function ProductCategorySelect({
         });
       }}
       className={cn(
-        "h-8 w-full min-w-0 rounded-lg border border-input bg-background px-2 text-[12px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60",
+        "field h-9 rounded-lg px-2 text-[13px] disabled:opacity-60",
         !current && "border-amber-400 text-amber-800 dark:text-amber-300",
         className,
       )}

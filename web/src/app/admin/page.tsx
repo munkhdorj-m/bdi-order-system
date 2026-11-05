@@ -3,11 +3,27 @@ import {
   ArrowRight,
   Bell,
   ClipboardList,
+  FileSpreadsheet,
   Package,
+  PackagePlus,
+  Receipt,
   Store as StoreIcon,
+  Truck,
   UserCheck,
   type LucideIcon,
 } from "lucide-react";
+import { todayUb } from "@/lib/dispatch";
+
+type QuickAction = {
+  href: string;
+  label: string;
+  sub: string;
+  icon: LucideIcon;
+  primary?: boolean;
+  badge?: number;
+  /** A file download (Excel), not a page. */
+  download?: boolean;
+};
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
@@ -81,9 +97,11 @@ export default async function AdminDashboard() {
     { count: activeCount },
     { count: pendingUsersCount },
     { data: pendingOrders },
+    { count: unassignedCount },
+    { count: failedReceipts },
   ] = await Promise.all([
-    supabase.from("products").select("*", { count: "exact", head: true }),
-    supabase.from("supermarkets").select("*", { count: "exact", head: true }),
+    supabase.from("products").select("id", { count: "exact", head: true }).eq("active", true),
+    supabase.from("supermarkets").select("id", { count: "exact", head: true }).eq("active", true),
     supabase
       .from("orders")
       .select("*", { count: "exact", head: true })
@@ -94,10 +112,13 @@ export default async function AdminDashboard() {
       .in("status", ACTIVE_STATUSES),
     // Users awaiting admin approval. Surfaced as a banner at the top of
     // the dashboard so a new signup never quietly stays locked out.
+    // (A switched-off user is also active=false, but already has a store.)
     supabase
       .from("profiles")
-      .select("*", { count: "exact", head: true })
-      .eq("active", false),
+      .select("id", { count: "exact", head: true })
+      .eq("active", false)
+      .eq("role", "buyer")
+      .is("supermarket_id", null),
     // Pending queue — newest first. Capped to 6 per design; the "Бүгд"
     // link sends the admin to the full filtered list.
     supabase
@@ -108,9 +129,51 @@ export default async function AdminDashboard() {
       .eq("status", "pending")
       .order("created_at", { ascending: false })
       .limit(6),
+    // Orders still waiting for a delivery run (the dispatch board's left column).
+    supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .is("shipment_id", null)
+      .in("status", ["pending", "confirmed"]),
+    // e-Barimt receipts that need a look.
+    supabase
+      .from("ebarimt_receipts")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "failed"),
   ]);
 
   const pendingUsers = pendingUsersCount ?? 0;
+  const today = todayUb();
+  const quickActions: QuickAction[] = [
+    {
+      href: "/admin/orders/new",
+      label: "Захиалга оруулах",
+      sub: "Утсаар ирсэн захиалга",
+      icon: PackagePlus,
+      primary: true,
+    },
+    {
+      href: "/admin/dispatch",
+      label: "Хүргэлт хуваарлах",
+      sub: unassignedCount ? `${unassignedCount} хуваарлаагүй` : "Бүгд хуваарлагдсан",
+      icon: Truck,
+      badge: unassignedCount ?? 0,
+    },
+    {
+      href: "/admin/ebarimt",
+      label: "Е-баримт",
+      sub: failedReceipts ? `${failedReceipts} алдаатай` : "Илгээх, буцаах",
+      icon: Receipt,
+      badge: failedReceipts ?? 0,
+    },
+    {
+      href: `/admin/export?from=${today}&to=${today}`,
+      label: "Өнөөдрийн Excel",
+      sub: "Өнөөдөр ирсэн захиалга",
+      icon: FileSpreadsheet,
+      download: true,
+    },
+  ];
 
   const stats: Stat[] = [
     {
@@ -133,15 +196,15 @@ export default async function AdminDashboard() {
     {
       label: "Бараа",
       value: productCount ?? 0,
-      sub: "Идэвхтэй SKU",
-      href: "/admin/products",
+      sub: "Дэлгүүрт харагдаж буй",
+      href: "/admin/products?status=visible",
       icon: Package,
       tone: "violet",
     },
     {
       label: "Дэлгүүр",
       value: supermarketCount ?? 0,
-      sub: "Хариуцагчтай",
+      sub: "Идэвхтэй",
       href: "/admin/supermarkets",
       icon: StoreIcon,
       tone: "sky",
@@ -191,6 +254,51 @@ export default async function AdminDashboard() {
           </div>
         </Link>
       )}
+
+      {/* Today's work — the daily tasks one click away. */}
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {quickActions.map((a) => {
+          const Icon = a.icon;
+          const inner = (
+            <>
+              <span
+                className={`relative flex size-11 shrink-0 items-center justify-center rounded-xl ${
+                  a.primary ? "bg-white/15 text-primary-foreground" : "bg-accent text-primary"
+                }`}
+              >
+                <Icon className="h-5 w-5" />
+                {!!a.badge && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[11px] font-bold tabular-nums text-gold-foreground ring-2 ring-card">
+                    {a.badge}
+                  </span>
+                )}
+              </span>
+              <span className="min-w-0 leading-tight">
+                <span className="block truncate text-[14px] font-semibold">{a.label}</span>
+                <span
+                  className={`block truncate text-[12px] ${a.primary ? "text-primary-foreground/75" : "text-muted-foreground"}`}
+                >
+                  {a.sub}
+                </span>
+              </span>
+            </>
+          );
+          const cls = `group flex items-center gap-3 rounded-2xl p-3 transition-all duration-150 hover:-translate-y-0.5 active:scale-[0.98] ${
+            a.primary
+              ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:shadow-lg"
+              : "bg-card ring-1 ring-border hover:shadow-md hover:ring-primary/30"
+          }`;
+          return a.download ? (
+            <a key={a.href} href={a.href} className={cls}>
+              {inner}
+            </a>
+          ) : (
+            <Link key={a.href} href={a.href} className={cls}>
+              {inner}
+            </Link>
+          );
+        })}
+      </div>
 
       {/* Stat cards — Hi-Fi tone-mapped grid. Big 28px value, icon tile
           top-left, alert dot top-right when this card needs attention. */}

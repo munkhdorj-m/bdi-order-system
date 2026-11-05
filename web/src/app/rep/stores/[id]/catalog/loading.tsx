@@ -1,9 +1,10 @@
 import { StoreCatalogSkeleton } from "@/components/catalog/store-catalog";
+import { RepBarSkeleton } from "@/components/page-skeletons";
 
 export default function RepCatalogLoading() {
   return (
     <div>
-      <div className="sticky top-0 z-10 h-14 glass-strong" />
+      <RepBarSkeleton />
       <StoreCatalogSkeleton />
     </div>
   );

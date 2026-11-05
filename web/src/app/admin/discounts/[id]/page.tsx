@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { Button } from "@/components/ui/button";
+import { ConfirmSubmitButton } from "@/components/ui/confirm";
 import { DiscountForm } from "@/components/admin/discount-form";
 import { deleteDiscount, updateDiscount } from "../actions";
 
@@ -93,11 +93,17 @@ export default async function EditDiscountPage({
       {/* Delete — sits in its own form so it's a separate server-action POST. */}
       <form action={del} className="mt-8 pt-6 border-t">
         <p className="text-[12px] text-muted-foreground mb-2">
-          Энэ хямдралыг бүрэн устгахдаа итгэлтэй байна уу?
+          Хямдралыг устгавал дэлгүүрүүдэд харагдахаа болино.
         </p>
-        <Button type="submit" variant="destructive" size="sm">
+        <ConfirmSubmitButton
+          variant="destructive"
+          size="sm"
+          title={`«${discount.name}» хямдралыг устгах уу?`}
+          description="Буцаах боломжгүй."
+          confirmLabel="Устгах"
+        >
           Устгах
-        </Button>
+        </ConfirmSubmitButton>
       </form>
     </div>
   );

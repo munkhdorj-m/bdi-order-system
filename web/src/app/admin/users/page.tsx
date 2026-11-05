@@ -12,8 +12,18 @@ type UserRow = {
   phone: string | null;
   role: "admin" | "rep" | "buyer";
   active: boolean;
+  supermarket_id: string | null;
   supermarkets: { name: string } | null;
 };
+
+/**
+ * `active = false` covers two different people: a new sign-up waiting
+ * for approval (a buyer with no store yet) and someone an admin switched
+ * off. Only the first belongs under "Хүлээгдсэн" with an Approve button.
+ */
+function isPending(u: Pick<UserRow, "active" | "role" | "supermarket_id">): boolean {
+  return !u.active && u.role === "buyer" && !u.supermarket_id;
+}
 
 type FilterKey = "all" | "pending" | "admin" | "rep" | "buyer";
 
@@ -76,12 +86,12 @@ export default async function AdminUsersPage({
       let q = supabase
         .from("profiles")
         .select(
-          "id, full_name, phone, role, active, supermarkets:supermarket_id(name)",
+          "id, full_name, phone, role, active, supermarket_id, supermarkets:supermarket_id(name)",
         )
         .order("role")
         .order("created_at", { ascending: false });
       if (filter === "pending") {
-        q = q.eq("active", false);
+        q = q.eq("active", false).eq("role", "buyer").is("supermarket_id", null);
       } else if (filter !== "all") {
         q = q.eq("role", filter);
       }
@@ -108,8 +118,10 @@ export default async function AdminUsersPage({
       .then((r) => r.count ?? 0),
     supabase
       .from("profiles")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("active", false)
+      .eq("role", "buyer")
+      .is("supermarket_id", null)
       .then((r) => r.count ?? 0),
   ]);
 
@@ -119,7 +131,7 @@ export default async function AdminUsersPage({
     { key: "all", label: "Бүгд", count: allCount },
     { key: "pending", label: "Хүлээгдсэн", count: pendingCount },
     { key: "admin", label: "Админ", count: adminCount },
-    { key: "rep", label: "Рөп", count: repCount },
+    { key: "rep", label: "Төлөөлөгч", count: repCount },
     { key: "buyer", label: "Худалдан авагч", count: buyerCount },
   ];
 
@@ -170,25 +182,19 @@ export default async function AdminUsersPage({
           const href =
             t.key === "all" ? "/admin/users" : `/admin/users?role=${t.key}`;
           const isPending = t.key === "pending";
-          let chipClass: string;
-          if (active && isPending) {
-            chipClass =
-              "bg-amber-500 text-white shadow-sm shadow-amber-500/30 dark:bg-amber-600";
-          } else if (active) {
-            chipClass =
-              "bg-primary text-primary-foreground shadow-sm shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)]";
-          } else if (isPending && t.count > 0) {
-            chipClass =
-              "bg-amber-50 text-amber-700 ring-1 ring-amber-300/60 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800/60 dark:hover:bg-amber-950/60";
-          } else {
-            chipClass =
-              "bg-muted text-muted-foreground ring-1 ring-border hover:bg-muted/80 dark:hover:bg-muted/60 hover:text-foreground";
-          }
+          // Waiting-for-approval stays amber so it catches the eye.
+          const chipClass =
+            isPending && t.count > 0 && !active
+              ? "bg-amber-50 text-amber-800 ring-amber-300 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800/60"
+              : isPending && active
+                ? "bg-amber-500 text-white ring-amber-500 hover:bg-amber-500 hover:text-white dark:bg-amber-600"
+                : "";
           return (
             <Link
               key={t.key}
               href={href}
-              className={`h-8 px-3 rounded-full text-[12px] font-semibold transition-all inline-flex items-center gap-1 ${chipClass}`}
+              className={`chip ${chipClass}`}
+              data-active={(active && !isPending) || undefined}
             >
               {isPending && (
                 <Clock className="h-3 w-3" strokeWidth={2.5} />
@@ -259,17 +265,21 @@ export default async function AdminUsersPage({
                           ⚠ Дэлгүүр тогтоогоогүй
                         </span>
                       ))}
-                    {!u.active && (
+                    {isPending(u) ? (
                       <Badge
                         variant="outline"
                         className="h-4 px-1 text-[10px] border-amber-300 text-amber-700 bg-amber-50 dark:border-amber-800/60 dark:text-amber-300 dark:bg-amber-950/40"
                       >
                         Хүлээгдсэн
                       </Badge>
-                    )}
+                    ) : !u.active ? (
+                      <Badge variant="outline" className="h-4 px-1 text-[10px] text-muted-foreground">
+                        Идэвхгүй
+                      </Badge>
+                    ) : null}
                   </div>
                 </Link>
-                {!u.active && (
+                {isPending(u) && (
                   <div className="px-3 pb-3 -mt-1 flex justify-end">
                     <ApproveUserButton
                       userId={u.id}
@@ -341,7 +351,7 @@ export default async function AdminUsersPage({
                       )}
                     </td>
                     <td className="px-3 py-3 text-right">
-                      {!u.active && (
+                      {isPending(u) ? (
                         <div className="flex items-center justify-end gap-2">
                           <Badge
                             variant="outline"
@@ -356,7 +366,11 @@ export default async function AdminUsersPage({
                             }
                           />
                         </div>
-                      )}
+                      ) : !u.active ? (
+                        <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                          Идэвхгүй
+                        </Badge>
+                      ) : null}
                     </td>
                   </tr>
                 ))}

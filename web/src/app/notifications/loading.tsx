@@ -1,5 +1,10 @@
-import { MobileListSkeleton } from "@/components/page-skeletons";
+import { MobileListSkeleton, RepBarSkeleton } from "@/components/page-skeletons";
 
 export default function NotificationsLoading() {
-  return <MobileListSkeleton />;
+  return (
+    <>
+      <RepBarSkeleton />
+      <MobileListSkeleton />
+    </>
+  );
 }

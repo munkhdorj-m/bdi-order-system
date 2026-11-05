@@ -14,7 +14,6 @@ type SearchParams = Promise<{ q?: string; category?: string }>;
 type StoreContext = {
   name: string;
   district: string | null;
-  profiles: { full_name: string | null; phone: string | null } | null;
 };
 
 export default async function RepCatalogPage({
@@ -28,10 +27,9 @@ export default async function RepCatalogPage({
   const { q, category } = await searchParams;
   const supabase = await createClient();
 
-  // Store + its buyer, so the banner names who the rep is ordering for.
   const { data: storeRaw } = await supabase
     .from("supermarkets")
-    .select("name, district, profiles:assigned_rep_id(full_name, phone)")
+    .select("name, district")
     .eq("id", id)
     .single();
 
@@ -43,42 +41,28 @@ export default async function RepCatalogPage({
     );
   }
   const store = storeRaw as unknown as StoreContext;
-  const onBehalfOf =
-    store.profiles?.full_name ?? store.profiles?.phone ?? "Худалдан авагч";
   const basePath = `/rep/stores/${id}/catalog`;
 
   return (
     <div>
       <RepHeader
-        title="Каталог"
-        subtitle={`${store.name} · нэрийн өмнөөс`}
+        title={store.name}
+        subtitle="Каталог · захиалга авч байна"
         backHref={`/rep/stores/${id}`}
         cartHref={`/rep/stores/${id}/cart`}
         cartScope={{ storeId: id }}
       />
 
       <div className="max-w-5xl mx-auto">
-        {/* Which store this order is for — always on screen at the top. */}
-        <div className="px-3 sm:px-4 pt-3">
-          <div className="rounded-2xl ring-2 ring-amber-300 bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/40 dark:to-amber-900/30 dark:ring-amber-700/60 p-3 flex items-center gap-3 shadow-sm">
-            <div className="size-10 rounded-xl bg-white ring-1 ring-amber-300/60 dark:bg-amber-950/60 dark:ring-amber-800/60 flex items-center justify-center text-amber-700 dark:text-amber-300 shrink-0">
-              <ClipboardList className="h-[18px] w-[18px]" strokeWidth={2.2} />
-            </div>
-            <div className="flex-1 min-w-0 leading-tight">
-              <div className="text-[9.5px] uppercase tracking-[0.12em] font-bold text-amber-900/80 dark:text-amber-300/80">
-                Нэрийн өмнөөс захиалж байна
-              </div>
-              <div className="text-[13.5px] font-bold text-amber-950 dark:text-amber-100 truncate">
-                {store.name} · {onBehalfOf}
-              </div>
-              <div className="text-[10.5px] text-amber-900/80 dark:text-amber-300/80">
-                Үнэ нь энэ дэлгүүрийн үнийн жагсаалтаар
-              </div>
-            </div>
-            <Link
-              href="/rep"
-              className="text-[11.5px] font-bold text-amber-900 dark:text-amber-200 underline shrink-0"
-            >
+        {/* Which store this order is for (its name is also in the bar). */}
+        <div className="px-3 pt-3 sm:px-4">
+          <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-[12.5px] ring-1 ring-amber-300/70 dark:bg-amber-950/40 dark:ring-amber-800/60">
+            <ClipboardList className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" strokeWidth={2.2} />
+            <span className="min-w-0 flex-1 truncate text-amber-950 dark:text-amber-100">
+              <b className="font-semibold">{store.name}</b>
+              {store.district ? ` · ${store.district}` : ""} — үнэ нь энэ дэлгүүрийнх
+            </span>
+            <Link href="/rep" className="shrink-0 font-semibold text-amber-900 underline dark:text-amber-200">
               Солих
             </Link>
           </div>
@@ -93,6 +77,7 @@ export default async function RepCatalogPage({
             basePath={basePath}
             productHref={(productId) => `${basePath}/${productId}`}
             cartScope={{ storeId: id }}
+            cartHref={`/rep/stores/${id}/cart`}
           />
         </Suspense>
       </div>

@@ -28,6 +28,7 @@ export default async function CatalogPage({
           initialCategory={category}
           basePath="/catalog"
           productHref={(id) => `/catalog/${id}`}
+          cartHref="/cart"
         />
       </Suspense>
     </div>

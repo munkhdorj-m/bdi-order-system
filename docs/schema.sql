@@ -499,6 +499,11 @@ create policy price_list_items_rep_read on price_list_items
 
 
 -- 6.7 orders
+-- Buyers and reps only READ orders. Placing, editing and cancelling go
+-- through the website's server, which checks who is asking, prices every
+-- line itself and writes with the service role (fix 39,
+-- web/src/lib/orders/write.ts) — so nobody can save their own prices,
+-- discount or status by calling the API directly.
 create policy orders_admin_all on orders
   for all using (current_role_value() = 'admin')
   with check (current_role_value() = 'admin');
@@ -509,43 +514,14 @@ create policy orders_rep_read on orders
     and supermarket_id in (select id from supermarkets where assigned_rep_id = auth.uid())
   );
 
-create policy orders_rep_insert on orders
-  for insert with check (
-    current_role_value() = 'rep'
-    and placed_by = auth.uid()
-    and supermarket_id in (select id from supermarkets where assigned_rep_id = auth.uid())
-  );
-
 create policy orders_buyer_read on orders
   for select using (
     current_role_value() = 'buyer' and supermarket_id = current_supermarket()
   );
 
-create policy orders_buyer_insert on orders
-  for insert with check (
-    current_role_value() = 'buyer'
-    and placed_by = auth.uid()
-    and supermarket_id = current_supermarket()
-  );
-
--- Buyer self-service edit + cancel — only while status is still pending,
--- and they can only flip to 'cancelled' (not 'confirmed' etc).
-create policy orders_buyer_update on orders
-  for update
-  using (
-    current_role_value() = 'buyer'
-    and placed_by = auth.uid()
-    and status = 'pending'
-  )
-  with check (
-    current_role_value() = 'buyer'
-    and placed_by = auth.uid()
-    and supermarket_id = current_supermarket()
-    and status in ('pending', 'cancelled')
-  );
 
 
--- 6.8 order_items (mirror orders)
+-- 6.8 order_items (mirror orders: buyers/reps read only, see 6.7)
 create policy order_items_admin_all on order_items
   for all using (current_role_value() = 'admin')
   with check (current_role_value() = 'admin');
@@ -561,45 +537,6 @@ create policy order_items_read on order_items
           or (current_role_value() = 'buyer'
             and o.supermarket_id = current_supermarket())
         )
-    )
-  );
-
-create policy order_items_insert on order_items
-  for insert with check (
-    exists (
-      select 1 from orders o
-      where o.id = order_items.order_id and o.placed_by = auth.uid()
-    )
-  );
-
--- Buyer self-service item edit + delete — only while the parent order is pending.
-create policy order_items_buyer_modify on order_items
-  for update
-  using (
-    exists (
-      select 1 from orders o
-      where o.id = order_items.order_id
-        and o.placed_by = auth.uid()
-        and o.status = 'pending'
-    )
-  )
-  with check (
-    exists (
-      select 1 from orders o
-      where o.id = order_items.order_id
-        and o.placed_by = auth.uid()
-        and o.status = 'pending'
-    )
-  );
-
-create policy order_items_buyer_delete on order_items
-  for delete
-  using (
-    exists (
-      select 1 from orders o
-      where o.id = order_items.order_id
-        and o.placed_by = auth.uid()
-        and o.status = 'pending'
     )
   );
 

@@ -44,13 +44,13 @@ export function BuyerShell({
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      {/* Blue brand bar with the gold хээ trim. `on-brand` restyles the
+      {/* Blue brand bar. `on-brand` restyles the
           shared header widgets (bell, deals, theme, search) for it. */}
-      <header className="on-brand haee-trim sticky top-0 z-20 h-14 bg-brand-bar text-brand-bar-foreground shadow-[0_6px_18px_-12px_rgb(15_25_60/0.5)] [--badge-ring:var(--brand-bar)]">
+      <header className="on-brand sticky top-0 z-20 h-14 bg-brand-bar text-brand-bar-foreground shadow-[0_6px_18px_-12px_rgb(15_25_60/0.5)] [--badge-ring:var(--brand-bar)]">
         {/* Flex layout: left-cluster takes leftover width (truncates the
             store name), right-cluster is `shrink-0` so icons never get
             squeezed. */}
-        <div className="h-full flex items-center px-2 sm:px-4 gap-2 pb-[3px]">
+        <div className="h-full flex items-center px-2 sm:px-4 gap-2">
           {!isRoot ? (
             <button
               type="button"

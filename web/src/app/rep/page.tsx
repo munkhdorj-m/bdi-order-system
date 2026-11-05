@@ -1,99 +1,82 @@
 import Link from "next/link";
-import {
-  AlertTriangle,
-  Bell,
-  ChevronRight,
-  Clock,
-  LogOut,
-  Phone,
-  Store as StoreIcon,
-} from "lucide-react";
+import { Bell, LogOut, Store as StoreIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth";
+import { addDays, todayUb, ubDayStart } from "@/lib/dispatch";
+import { RepStoreList, type RepStore } from "@/components/rep/rep-store-list";
 
 type StoreRow = {
   id: string;
   name: string;
+  district: string | null;
   address: string | null;
   contact_phone: string | null;
-  active: boolean;
 };
 
-type StoreStatus = "ok" | "warn";
+// How far back "last order" looks. Older than this reads "60+ өдөр".
+const LOOKBACK_DAYS = 60;
 
-function formatRelative(iso: string | null): {
-  label: string;
-  status: StoreStatus;
-} {
-  if (!iso) return { label: "Захиалга байхгүй", status: "warn" };
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const min = Math.floor(diffMs / 60000);
-  if (min < 60)
-    return { label: min < 1 ? "Одоо" : `${min} мин өмнө`, status: "ok" };
+function relative(iso: string | null, now: number): { label: string; warn: boolean } {
+  if (!iso) return { label: `${LOOKBACK_DAYS}+ өдөр захиалаагүй`, warn: true };
+  const min = Math.floor((now - new Date(iso).getTime()) / 60000);
+  if (min < 60) return { label: min < 1 ? "Дөнгөж сая" : `${min} мин өмнө`, warn: false };
   const hr = Math.floor(min / 60);
-  if (hr < 24) return { label: `${hr} цаг өмнө`, status: "ok" };
+  if (hr < 24) return { label: `${hr} цагийн өмнө`, warn: false };
   const day = Math.floor(hr / 24);
-  // > 7 days without an order → flag for the rep's attention
-  return {
-    label: `${day} өдрийн өмнө`,
-    status: day > 7 ? "warn" : "ok",
-  };
-}
-
-function storeInitial(name: string) {
-  return name.trim()[0]?.toUpperCase() ?? "•";
+  // A week without an order → flag it for the rep.
+  return { label: `${day} өдрийн өмнө`, warn: day > 7 };
 }
 
 export default async function MyStoresPage() {
   const session = await requireSession();
   const supabase = await createClient();
 
-  // Per RLS, a rep can only see their assigned supermarkets, so no extra filter needed.
+  // RLS: a rep only sees their own stores.
   const { data: stores, error } = await supabase
     .from("supermarkets")
-    .select("id, name, address, contact_phone, active")
+    .select("id, name, district, address, contact_phone")
+    .eq("active", true)
     .order("name");
-
   const rows = (stores as StoreRow[] | null) ?? [];
 
-  // Latest-order timestamps per store for "x time ago" hint + monthly counts
-  // for the gradient header's stat strip.
-  const orderTimes = new Map<string, string>();
+  // Latest order per store (recent window only — enough for "x ago") and
+  // this UB month's count for the header.
+  const today = todayUb();
+  const lastOrder = new Map<string, string>();
   let monthCount = 0;
   if (rows.length > 0) {
     const ids = rows.map((s) => s.id);
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
-    const [{ data: orderRows }, { count: monthOrders }] = await Promise.all([
+    const [{ data: recent }, { count }] = await Promise.all([
       supabase
         .from("orders")
         .select("supermarket_id, created_at")
         .in("supermarket_id", ids)
-        .order("created_at", { ascending: false }),
+        .neq("status", "cancelled")
+        .gte("created_at", ubDayStart(addDays(today, -LOOKBACK_DAYS)))
+        .order("created_at", { ascending: false })
+        .limit(1000),
       supabase
         .from("orders")
-        .select("*", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true })
         .in("supermarket_id", ids)
-        .gte("created_at", startOfMonth.toISOString()),
+        .neq("status", "cancelled")
+        .gte("created_at", ubDayStart(`${today.slice(0, 7)}-01`)),
     ]);
-
-    (orderRows ?? []).forEach((o) => {
-      if (!orderTimes.has(o.supermarket_id)) {
-        orderTimes.set(o.supermarket_id, o.created_at);
-      }
-    });
-    monthCount = monthOrders ?? 0;
+    for (const o of recent ?? []) {
+      if (!lastOrder.has(o.supermarket_id)) lastOrder.set(o.supermarket_id, o.created_at);
+    }
+    monthCount = count ?? 0;
   }
 
-  const enriched = rows.map((s) => ({
-    ...s,
-    relative: formatRelative(orderTimes.get(s.id) ?? null),
-  }));
-  const warnCount = enriched.filter((s) => s.relative.status === "warn").length;
+  const now = new Date().getTime();
+  const list: RepStore[] = rows.map((s) => {
+    const r = relative(lastOrder.get(s.id) ?? null, now);
+    return { ...s, lastLabel: r.label, warn: r.warn };
+  });
+  const warnCount = list.filter((s) => s.warn).length;
 
-  const repInitials = (session.profile.full_name ?? session.profile.phone ?? "—")
+  const name = session.profile.full_name ?? session.profile.phone ?? "—";
+  const initials = name
     .trim()
     .split(/\s+/)
     .map((part) => part[0]?.toUpperCase())
@@ -102,160 +85,68 @@ export default async function MyStoresPage() {
     .join("");
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      {/* Branded gradient header per Hi-Fi RepStoresList */}
-      <header
-        className="relative text-primary-foreground"
-        style={{
-          background:
-            "linear-gradient(160deg, var(--primary) 0%, color-mix(in oklch, var(--primary) 80%, black) 100%)",
-        }}
-      >
-        <div className="px-4 pt-8 pb-4 max-w-2xl mx-auto">
+    <div className="flex min-h-screen flex-col bg-background">
+      <header className="on-brand bg-brand-bar text-brand-bar-foreground">
+        <div className="mx-auto max-w-2xl px-4 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))]">
           <div className="flex items-center gap-3">
-            <div className="size-10 rounded-full bg-white/15 backdrop-blur ring-1 ring-white/20 flex items-center justify-center font-bold text-[13px]">
-              {repInitials || "Р"}
+            <div className="flex size-10 items-center justify-center rounded-xl bg-gold font-display text-[13px] font-bold text-gold-foreground shadow-sm">
+              {initials || "Т"}
             </div>
-            <div className="flex-1 min-w-0 leading-tight">
-              <div className="text-[10px] uppercase tracking-[0.12em] opacity-80 font-semibold">
-                Төлөөлөгч
-              </div>
-              <div className="text-[14px] font-bold truncate">
-                {session.profile.full_name ?? session.profile.phone ?? "—"}
-              </div>
+            <div className="min-w-0 flex-1 leading-tight">
+              <div className="text-[11px] font-medium text-white/70">Төлөөлөгч</div>
+              <div className="truncate text-[15px] font-semibold text-white">{name}</div>
             </div>
-            {/* Links to the shared notification feed — RLS scopes it to
-                this rep's rows. Was a dead <button> before. */}
             <Link
               href="/notifications"
               aria-label="Мэдэгдэл"
-              className="size-9 rounded-xl bg-white/15 backdrop-blur ring-1 ring-white/20 flex items-center justify-center"
+              className="flex size-10 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15"
             >
-              <Bell className="h-4 w-4" strokeWidth={2.2} />
+              <Bell className="h-[18px] w-[18px]" strokeWidth={2.2} />
             </Link>
             <form action="/auth/signout" method="post">
               <button
                 type="submit"
-                className="size-9 rounded-xl bg-white/15 backdrop-blur ring-1 ring-white/20 flex items-center justify-center"
+                className="flex size-10 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15"
                 aria-label="Гарах"
               >
-                <LogOut className="h-4 w-4" />
+                <LogOut className="h-[18px] w-[18px]" />
               </button>
             </form>
           </div>
 
           <div className="mt-4 grid grid-cols-3 gap-2">
-            <StatTile value={String(rows.length)} label="Хариуцлагатай" />
-            <StatTile value={String(monthCount)} label="Энэ сард" />
-            <StatTile
-              value={String(warnCount)}
-              label="⚠ Анхаарах"
-              warn={warnCount > 0}
-            />
+            <StatTile value={rows.length} label="Дэлгүүр" />
+            <StatTile value={monthCount} label="Энэ сарын захиалга" />
+            <StatTile value={warnCount} label="7+ өдөр захиалаагүй" warn={warnCount > 0} />
           </div>
         </div>
-        <div className="h-4 bg-background rounded-t-3xl" />
       </header>
 
-      <main className="flex-1 px-3 sm:px-4 max-w-2xl mx-auto w-full">
+      <main className="mx-auto w-full max-w-2xl flex-1 px-3 pt-2 sm:px-4">
         {error && (
-          <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/5 text-destructive text-sm p-3">
+          <div className="mb-4 rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
             {error.message}
           </div>
         )}
 
         {rows.length === 0 ? (
           <div className="py-16 text-center text-sm text-muted-foreground">
-            <StoreIcon className="h-10 w-10 mx-auto mb-3 opacity-40" />
-            Танд хариуцагч дэлгүүр алга байна. BDI-н админтай холбогдоно уу.
+            <StoreIcon className="mx-auto mb-3 h-10 w-10 opacity-40" />
+            Танд хариуцсан дэлгүүр алга байна. BDI-н админтай холбогдоно уу.
           </div>
         ) : (
-          <ul className="flex flex-col gap-2">
-            {enriched.map((s) => {
-              const isWarn = s.relative.status === "warn";
-              return (
-                <li key={s.id}>
-                  <Link
-                    href={`/rep/stores/${s.id}`}
-                    className={`block rounded-2xl bg-card p-3.5 flex items-center gap-3 ring-1 transition-all hover:shadow-md ${
-                      isWarn
-                        ? "ring-amber-300/60 hover:shadow-amber-100/40"
-                        : "ring-border"
-                    }`}
-                  >
-                    <div
-                      className={`size-11 rounded-2xl flex items-center justify-center font-bold text-[15px] shrink-0 ${
-                        isWarn
-                          ? "bg-amber-100 text-amber-900 ring-1 ring-amber-300/60 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-800/60"
-                          : "bg-gradient-to-br from-primary to-[oklch(0.42_0.18_263)] text-primary-foreground"
-                      }`}
-                    >
-                      {storeInitial(s.name)}
-                    </div>
-
-                    <div className="flex-1 min-w-0 leading-tight">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[13.5px] font-bold truncate">
-                          {s.name}
-                        </span>
-                        {isWarn && (
-                          <AlertTriangle
-                            className="h-3.5 w-3.5 text-amber-700 dark:text-amber-300 shrink-0"
-                            strokeWidth={2.2}
-                          />
-                        )}
-                      </div>
-                      {s.contact_phone && (
-                        <div className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
-                          <Phone className="h-3 w-3" strokeWidth={2.2} />
-                          <span className="font-mono">{s.contact_phone}</span>
-                        </div>
-                      )}
-                      <div
-                        className={`text-[11px] mt-0.5 flex items-center gap-1 ${
-                          isWarn
-                            ? "text-amber-700 dark:text-amber-300 font-semibold"
-                            : "text-muted-foreground"
-                        }`}
-                      >
-                        <Clock className="h-3 w-3" strokeWidth={2.2} />
-                        <span>{s.relative.label}</span>
-                      </div>
-                    </div>
-
-                    <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+          <RepStoreList stores={list} />
         )}
       </main>
     </div>
   );
 }
 
-function StatTile({
-  value,
-  label,
-  warn = false,
-}: {
-  value: string;
-  label: string;
-  warn?: boolean;
-}) {
+function StatTile({ value, label, warn = false }: { value: number; label: string; warn?: boolean }) {
   return (
-    <div
-      className={`rounded-xl ${
-        warn
-          ? "bg-amber-400/30 ring-1 ring-amber-200/40"
-          : "bg-white/10 ring-1 ring-white/15"
-      } backdrop-blur px-3 py-2`}
-    >
-      <div className="text-[18px] font-bold tabular-nums leading-tight">
-        {value}
-      </div>
-      <div className="text-[10px] opacity-85">{label}</div>
+    <div className={`rounded-xl px-3 py-2 ring-1 ${warn ? "bg-gold/25 ring-gold/40" : "bg-white/10 ring-white/15"}`}>
+      <div className="font-display text-[19px] font-semibold tabular-nums leading-tight text-white">{value}</div>
+      <div className="text-[10.5px] leading-tight text-white/75">{label}</div>
     </div>
   );
 }

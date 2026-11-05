@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Minus, Package, Plus } from "lucide-react";
+import { ChevronRight, Minus, Package, Plus, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
-import { addToCart, type CartItem, type CartScope } from "@/lib/cart";
+import { addToCart, useCart, type CartItem, type CartScope } from "@/lib/cart";
 import { formatMnt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +54,8 @@ export function AddToCartForm({
     setQtyDraft(String(qtyInUnit));
   }
   const router = useRouter();
+  // Already in the cart? Say so, so nobody adds it twice by accident.
+  const inCart = useCart(scope).find((i) => i.product_id === product.product_id)?.qty ?? 0;
 
   const piecesPerUnit = unit === "box" ? piecesPerBox : 1;
   const totalPieces = qtyInUnit * piecesPerUnit;
@@ -109,6 +112,21 @@ export function AddToCartForm({
 
   return (
     <div className="space-y-3">
+      {inCart > 0 && (
+        <Link
+          href={cartHref}
+          className="flex items-center gap-2 rounded-xl bg-gold/15 px-3 py-2 text-[13px] font-medium text-gold-foreground ring-1 ring-gold/40 dark:text-gold"
+        >
+          <ShoppingCart className="h-4 w-4 shrink-0" />
+          <span className="flex-1">
+            Сагсанд <b className="tabular-nums">{inCart}</b> ширхэг байна
+          </span>
+          <span className="flex items-center text-[12.5px] font-semibold">
+            Сагс
+            <ChevronRight className="h-4 w-4" />
+          </span>
+        </Link>
+      )}
       {/* Unit toggle — only when box count > 1. Animated pill matches the
           design's tiny pill switcher. */}
       {hasBox && (
@@ -154,7 +172,7 @@ export function AddToCartForm({
           running total inline. */}
       <div className="flex items-stretch gap-2">
         <div className="flex-shrink-0">
-          <div className="h-12 inline-flex items-stretch rounded-2xl border-2 border-border bg-card overflow-hidden">
+          <div className="h-12 inline-flex items-stretch rounded-xl border-2 border-input bg-card overflow-hidden">
             <button
               type="button"
               onClick={() => setQtyInUnit(Math.max(1, qtyInUnit - 1))}
@@ -205,12 +223,11 @@ export function AddToCartForm({
         <button
           type="button"
           onClick={handleAdd}
-          className="flex-1 h-12 rounded-2xl bg-primary text-primary-foreground font-bold text-[14px] flex items-center justify-center gap-2 shadow-md shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)] active:scale-[0.98] transition-all"
+          className="flex-1 min-w-0 h-12 rounded-xl bg-gold text-gold-foreground font-bold text-[14.5px] flex items-center justify-center gap-2 shadow-md shadow-gold/30 hover:brightness-[1.04] active:scale-[0.98] transition-all"
         >
-          <span>Сагсанд нэмэх</span>
-          <span className="text-primary-foreground/85 tabular-nums">
-            · {formatMnt(totalPrice)}
-          </span>
+          <ShoppingCart className="h-[18px] w-[18px] shrink-0" strokeWidth={2.3} />
+          <span className="truncate">{inCart > 0 ? "Дахин нэмэх" : "Сагсанд нэмэх"}</span>
+          <span className="shrink-0 tabular-nums opacity-80">· {formatMnt(totalPrice)}</span>
         </button>
       </div>
     </div>

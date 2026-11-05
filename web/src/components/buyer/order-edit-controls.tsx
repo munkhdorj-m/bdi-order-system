@@ -138,7 +138,12 @@ export function OrderEditControls({ orderId, orderNumber, items }: Props) {
               </div>
             </div>
 
-            {removingItemId === item.id ? (
+            {item.unit_price === 0 ? (
+              // Gift from a deal — shown, not editable.
+              <span className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-50 px-3 text-[12.5px] font-semibold text-emerald-800 ring-1 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-800/60">
+                🎁 Бэлэг · {item.qty}ш
+              </span>
+            ) : removingItemId === item.id ? (
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"

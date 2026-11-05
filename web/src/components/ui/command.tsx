@@ -16,6 +16,7 @@ import {
   InputGroupAddon,
 } from "@/components/ui/input-group"
 import { SearchIcon, CheckIcon } from "lucide-react"
+import { useVisualViewportVars } from "@/lib/viewport"
 
 function Command({
   className,
@@ -46,6 +47,9 @@ function CommandDialog({
   className?: string
   showCloseButton?: boolean
 }) {
+  // Phones: pin to the top of the visible area so the keyboard can't
+  // cover the results (lists use --vv-h to fit above it).
+  const vvRef = useVisualViewportVars<HTMLDivElement>()
   return (
     <Dialog {...props}>
       <DialogHeader className="sr-only">
@@ -53,8 +57,9 @@ function CommandDialog({
         <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
       <DialogContent
+        ref={vvRef}
         className={cn(
-          "top-1/3 translate-y-0 overflow-hidden rounded-xl! p-0",
+          "top-1/3 translate-y-0 overflow-hidden rounded-xl! p-0 max-sm:top-[calc(var(--vv-top,0px)+0.75rem)]",
           className
         )}
         showCloseButton={showCloseButton}

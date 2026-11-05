@@ -26,8 +26,8 @@ export function RepHeader({
   const router = useRouter();
 
   return (
-    // Same blue brand bar + gold хээ trim as the store app.
-    <header className="on-brand haee-trim sticky top-0 z-10 h-14 bg-brand-bar text-brand-bar-foreground flex items-center gap-1 px-2 sm:px-4 pb-[3px] shadow-[0_6px_18px_-12px_rgb(15_25_60/0.5)] [--badge-ring:var(--brand-bar)]">
+    // Same blue brand bar as the store app.
+    <header className="on-brand sticky top-0 z-10 h-14 bg-brand-bar text-brand-bar-foreground flex items-center gap-1 px-2 sm:px-4 shadow-[0_6px_18px_-12px_rgb(15_25_60/0.5)] [--badge-ring:var(--brand-bar)]">
       {backHref ? (
         <Link
           href={backHref}

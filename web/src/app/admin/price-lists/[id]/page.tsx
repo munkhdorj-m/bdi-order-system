@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ConfirmSubmitButton } from "@/components/ui/confirm";
 import { PriceListMetaForm } from "@/components/admin/price-list-meta-form";
 import { AutoAssignForm } from "@/components/admin/auto-assign-form";
 import { PriceEditor } from "@/components/admin/price-editor";
@@ -127,15 +128,21 @@ export default async function PriceListDetailPage({
             </p>
           </div>
           <form action={handleDelete}>
-            <Button
-              type="submit"
+            <ConfirmSubmitButton
               variant="outline"
               size="sm"
               className="text-destructive hover:text-destructive shrink-0"
+              title={`«${list.name}» жагсаалтыг устгах уу?`}
+              description={
+                assignedStores.length > 0
+                  ? `${assignedStores.length} дэлгүүр үндсэн үнэ рүү шилжинэ. Буцаах боломжгүй.`
+                  : "Буцаах боломжгүй."
+              }
+              confirmLabel="Устгах"
             >
               <Trash2 className="h-4 w-4" />
               <span className="hidden sm:inline">Устгах</span>
-            </Button>
+            </ConfirmSubmitButton>
           </form>
         </div>
       </div>

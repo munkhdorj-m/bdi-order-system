@@ -1,5 +1,5 @@
-import { MobileListSkeleton } from "@/components/page-skeletons";
+import { RepHomeSkeleton } from "@/components/page-skeletons";
 
 export default function RepLoading() {
-  return <MobileListSkeleton />;
+  return <RepHomeSkeleton />;
 }

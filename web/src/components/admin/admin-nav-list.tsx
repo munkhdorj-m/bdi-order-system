@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BdiLogo } from "@/components/brand/bdi-logo";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { isActive, navSections } from "./nav-items";
@@ -57,9 +58,7 @@ export function AdminNavList() {
 export function AdminBrand() {
   return (
     <Link href="/admin" className="flex min-w-0 items-center gap-2.5">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gold font-display text-[13px] font-bold text-gold-foreground shadow-sm">
-        B
-      </span>
+      <BdiLogo tone="gold" label="" />
       <span className="min-w-0 leading-tight">
         <span className="block truncate font-display text-[14px] font-semibold tracking-tight text-sidebar-foreground">
           BDI Admin
