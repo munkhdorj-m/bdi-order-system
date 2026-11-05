@@ -12,9 +12,8 @@ import {
 /**
  * Mobile-only search affordance. Lives in the buyer top nav but hidden on
  * `sm:` and up — desktop uses the inline search field on the catalog page
- * itself. Tap → top-side Sheet with a real text input + submit. Posts to
- * `/catalog?q=<term>` (preserving the buyer's current `category` and
- * `sort` params if they're already filtering).
+ * itself. Tap → top-side Sheet with a real text input + submit. Goes to
+ * `/catalog?q=<term>`, which searches every category.
  */
 export function CatalogSearchTrigger() {
   const [open, setOpen] = useState(false);
@@ -36,14 +35,8 @@ export function CatalogSearchTrigger() {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const q = String(form.get("q") ?? "").trim();
-    const params = new URLSearchParams();
-    const category = search?.get("category");
-    const sort = search?.get("sort");
-    if (q) params.set("q", q);
-    if (category) params.set("category", category);
-    if (sort) params.set("sort", sort);
-    const qs = params.toString();
-    router.push(qs ? `/catalog?${qs}` : "/catalog");
+    // Search covers every category; results come back best match first.
+    router.push(q ? `/catalog?q=${encodeURIComponent(q)}` : "/catalog");
     setOpen(false);
   }
 

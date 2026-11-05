@@ -63,7 +63,7 @@ export function DiscountsChip({
               than a generic sparkle for users scanning the header. */}
           <Gift className="h-[18px] w-[18px]" strokeWidth={2} />
           {count > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-emerald-500 text-white text-[9.5px] font-bold tabular-nums flex items-center justify-center ring-2 ring-background">
+            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-emerald-500 text-white text-[9.5px] font-bold tabular-nums flex items-center justify-center ring-2 ring-[var(--badge-ring,var(--background))]">
               {count > 99 ? "99+" : count}
             </span>
           )}

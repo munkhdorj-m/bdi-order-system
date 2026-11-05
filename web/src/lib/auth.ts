@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
@@ -17,26 +18,33 @@ export type SessionContext = {
   profile: Profile;
 };
 
-export async function getSession(): Promise<SessionContext | null> {
+/**
+ * The signed-in user + their profile, once per request.
+ *
+ * - getClaims() verifies the session JWT locally (the project signs with an
+ *   ES256 key), so no Auth-server round trip — getUser() cost one per call.
+ * - React cache() shares the result between the layout, the page and any
+ *   guards in the same request instead of repeating it each time.
+ */
+export const getSession = cache(async (): Promise<SessionContext | null> => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const { data, error: claimsError } = await supabase.auth.getClaims();
+  const userId = data?.claims?.sub;
+  if (claimsError || !userId) return null;
 
   const { data: profile, error } = await supabase
     .from("profiles")
     .select("id, full_name, phone, role, supermarket_id, active")
-    .eq("id", user.id)
+    .eq("id", userId)
     .single();
 
   if (error || !profile) return null;
 
   return {
-    userId: user.id,
+    userId,
     profile: profile as Profile,
   };
-}
+});
 
 export async function requireSession(): Promise<SessionContext> {
   const session = await getSession();

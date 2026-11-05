@@ -26,6 +26,7 @@ import {
   type CartItem,
 } from "@/lib/cart";
 import { placeOrder } from "@/app/(buyer)/cart/actions";
+import { ProductPlaceholder, categoryVisual } from "@/lib/category-visual";
 import { Button } from "@/components/ui/button";
 import { computeDiscount, type DiscountRule } from "@/lib/discount";
 import type { PaymentMethod } from "@/lib/payment-method";
@@ -209,7 +210,9 @@ export function CartView({
                   unoptimized
                   className="object-cover"
                 />
-              ) : null}
+              ) : (
+                <ProductPlaceholder visual={categoryVisual({ name: "", icon: item.category_icon })} />
+              )}
             </div>
             <div className="flex-1 min-w-0">
               {item.brand && (
@@ -510,7 +513,7 @@ export function CartView({
                     {formatMnt(total)}
                   </span>
                 </div>
-                <span className="text-[24px] font-bold tabular-nums tracking-tight text-emerald-700 dark:text-emerald-300">
+                <span className="font-display text-[22px] font-semibold tabular-nums tracking-tight text-emerald-700 dark:text-emerald-300">
                   {formatMnt(breakdown.net)}
                 </span>
               </div>
@@ -520,7 +523,7 @@ export function CartView({
               <span className="text-[11px] uppercase tracking-[0.1em] font-bold text-muted-foreground">
                 Нийт
               </span>
-              <span className="text-[22px] font-bold tabular-nums tracking-tight">
+              <span className="font-display text-[20px] font-semibold tabular-nums tracking-tight">
                 {formatMnt(total)}
               </span>
             </div>

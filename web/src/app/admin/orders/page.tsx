@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { ClipboardList, Search, X } from "lucide-react";
+import { ClipboardList, FileSpreadsheet, Plus, Search, Truck, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -20,6 +21,7 @@ import {
   type OrderStatus,
 } from "@/lib/order-status";
 import { formatMnt } from "@/lib/format";
+import { addDays, todayUb } from "@/lib/dispatch";
 
 type SearchParams = Promise<{
   status?: string;
@@ -160,6 +162,13 @@ export default async function AdminOrdersPage({
   const from = sp.from?.trim() || undefined;
   const to = sp.to?.trim() || undefined;
 
+  // Excel of what's on screen: the date filter as UB days (today if none).
+  const today = todayUb();
+  const exportFrom =
+    range === "today" ? today : range === "7d" ? addDays(today, -6) : range === "30d" ? addDays(today, -29) : (from ?? to ?? today);
+  const exportTo = range ? today : (to ?? from ?? today);
+  const exportHref = `/admin/export?from=${exportFrom}&to=${exportTo}${status && status in STATUS_LABELS ? `&status=${status}` : ""}`;
+
   // Per-status head counts so the filter chips can show honest tallies
   // regardless of which tab is active. Six head-only queries in parallel.
   const supabase = await createClient();
@@ -236,11 +245,33 @@ export default async function AdminOrdersPage({
 
   return (
     <div className="max-w-6xl">
-      <div className="mb-4">
-        <h1 className="text-[26px] font-bold tracking-tight">Захиалга</h1>
-        <p className="text-[13px] text-muted-foreground">
-          Бүх захиалгуудыг шүүж харах
-        </p>
+      <div className="mb-4 flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-[26px] font-bold tracking-tight">Захиалга</h1>
+          <p className="text-[13px] text-muted-foreground">
+            Бүх захиалгуудыг шүүж харах
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" title={`${exportFrom} → ${exportTo} хооронд захиалсан`}>
+            <a href={exportHref}>
+              <FileSpreadsheet className="h-4 w-4" />
+              Excel
+            </a>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/admin/dispatch">
+              <Truck className="h-4 w-4" />
+              Хүргэлт хуваарлах
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/admin/orders/new">
+              <Plus className="h-4 w-4" />
+              Шинэ захиалга
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Status filter chips — primary fill for active, muted ring for inactive.

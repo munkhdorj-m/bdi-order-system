@@ -16,15 +16,24 @@ import { completeVerification } from "@/app/register/phone/actions";
  *
  * The poll endpoint is the one rate-limit-aware proxy in front of
  * verify.mn — we never call verify.mn directly from the client.
+ *
+ * Shared by registration (the defaults) and password reset, which passes
+ * its own `completeAction` and `restartHref`.
  */
 const POLL_INTERVAL_MS = 3500;
 
 export function VerifyMnPoller({
   sessionId,
   expiresAt,
+  completeAction = completeVerification,
+  restartHref = "/register/phone",
 }: {
   sessionId: string;
   expiresAt: string;
+  /** Server action run once the phone is verified; it redirects. */
+  completeAction?: () => Promise<void>;
+  /** Where to send the user if the session expires. */
+  restartHref?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -46,7 +55,7 @@ export function VerifyMnPoller({
       if (Date.now() > new Date(expiresAt).getTime()) {
         setStatus("expired");
         router.replace(
-          `/register/phone?error=${encodeURIComponent("Сессийн хугацаа дууссан. Дахин эхлүүлнэ үү.")}`,
+          `${restartHref}?error=${encodeURIComponent("Сессийн хугацаа дууссан. Дахин эхлүүлнэ үү.")}`,
         );
         return;
       }
@@ -67,16 +76,16 @@ export function VerifyMnPoller({
           completedRef.current = true;
           setStatus("verified");
           // Server action handles the redirect to /login (or back to
-          // /register/phone with an error if the createUser failed).
+          // the form with an error if it failed).
           startTransition(async () => {
-            await completeVerification();
+            await completeAction();
           });
           return;
         }
         if (data.expired) {
           setStatus("expired");
           router.replace(
-            `/register/phone?error=${encodeURIComponent("Сессийн хугацаа дууссан. Дахин эхлүүлнэ үү.")}`,
+            `${restartHref}?error=${encodeURIComponent("Сессийн хугацаа дууссан. Дахин эхлүүлнэ үү.")}`,
           );
           return;
         }
@@ -107,7 +116,7 @@ export function VerifyMnPoller({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [sessionId, expiresAt, router]);
+  }, [sessionId, expiresAt, router, completeAction, restartHref]);
 
   return (
     <div

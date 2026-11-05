@@ -142,7 +142,7 @@ function SummaryBox({
         {label}
       </div>
       <div
-        className={`mt-1.5 text-[22px] font-bold tabular-nums tracking-tight ${colorClass}`}
+        className={`mt-1.5 font-display text-[20px] font-semibold tabular-nums tracking-tight ${colorClass}`}
       >
         {value}
       </div>

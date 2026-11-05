@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "mercury:sync": "node --env-file=.env.local scripts/mercury-sync.mjs",
+    "mercury:import": "node --env-file=.env.local scripts/mercury-import.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
@@ -36,6 +38,7 @@
     "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "node-html-parser": "^9.0.6",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

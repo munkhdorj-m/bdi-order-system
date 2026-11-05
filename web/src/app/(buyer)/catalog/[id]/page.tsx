@@ -1,8 +1,11 @@
 import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Box, Package, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth";
+import { getCategories } from "@/lib/categories";
+import { CategoryIconTile, categoryVisual } from "@/lib/category-visual";
 import { AddToCartForm } from "@/components/buyer/add-to-cart-form";
 import { formatMnt } from "@/lib/format";
 import {
@@ -52,6 +55,7 @@ export default async function ProductDetailPage({
     { data: extras },
     { data: discountRows },
     { data: storeRow },
+    categories,
   ] = await Promise.all([
     supabase
       .from("supermarket_prices")
@@ -76,6 +80,7 @@ export default async function ProductDetailPage({
       .select("price_list_id")
       .eq("id", supermarketId)
       .single(),
+    getCategories(),
   ]);
 
   if (!priced) notFound();
@@ -97,6 +102,8 @@ export default async function ProductDetailPage({
   const buyPrice = sale ? sale.net : p.effective_price;
   const outOfStock = p.stock <= 0;
   const lowStock = !outOfStock && p.stock < 10;
+  const category = categories.find((c) => c.id === p.category_id) ?? null;
+  const visual = categoryVisual(category);
 
   return (
     <div className="relative">
@@ -121,9 +128,9 @@ export default async function ProductDetailPage({
                 priority
               />
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="size-24 rounded-3xl bg-muted/40 flex items-center justify-center">
-                  <Box className="h-12 w-12 text-muted-foreground/25" />
+              <div className={`absolute inset-0 flex items-center justify-center ${visual.tone.wash}`}>
+                <div className={`size-28 rounded-3xl flex items-center justify-center ${visual.tone.tile}`}>
+                  <visual.Icon className="h-14 w-14" strokeWidth={1.5} />
                 </div>
               </div>
             )}
@@ -132,19 +139,28 @@ export default async function ProductDetailPage({
 
         {/* Title block — brand caps, h1, price, chips */}
         <div className="px-4 pt-5">
+          {category && (
+            <Link
+              href={`/catalog?category=${category.id}`}
+              className={`mb-2 inline-flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2.5 text-[11.5px] font-semibold ring-1 ring-border hover:bg-muted ${visual.tone.text}`}
+            >
+              <CategoryIconTile visual={visual} size="xs" />
+              {category.name}
+            </Link>
+          )}
           {p.brand && (
             <div className="text-[11px] uppercase tracking-[0.1em] font-bold text-primary">
               {p.brand}
             </div>
           )}
-          <h1 className="text-[20px] font-bold leading-tight tracking-tight mt-1">
+          <h1 className="font-sans text-[20px] font-bold leading-tight tracking-tight mt-1">
             {p.name}
           </h1>
 
           <div className="mt-3 flex items-baseline gap-3 flex-wrap">
             {sale ? (
               <>
-                <span className="text-[26px] font-bold tabular-nums tracking-tight text-emerald-700 dark:text-emerald-400">
+                <span className="font-display text-[24px] font-semibold tabular-nums tracking-tight text-emerald-700 dark:text-emerald-400">
                   {formatMnt(sale.net)}
                 </span>
                 <span className="text-[14px] tabular-nums line-through text-muted-foreground/70">
@@ -156,7 +172,7 @@ export default async function ProductDetailPage({
                 </span>
               </>
             ) : (
-              <span className="text-[26px] font-bold tabular-nums tracking-tight">
+              <span className="font-display text-[24px] font-semibold tabular-nums tracking-tight">
                 {formatMnt(p.effective_price)}
               </span>
             )}
@@ -266,6 +282,7 @@ export default async function ProductDetailPage({
                 image_url: p.image_url,
                 unit_price: p.effective_price,
                 category_id: p.category_id,
+                category_icon: visual.key,
               }}
               // CTA total surfaces the actual amount the buyer will pay
               // for this product, so it reads as the sale price even

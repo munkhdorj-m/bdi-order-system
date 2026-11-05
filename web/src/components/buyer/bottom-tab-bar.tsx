@@ -83,20 +83,17 @@ export function BuyerBottomTabBar() {
               >
                 <span
                   className={cn(
-                    "relative flex items-center justify-center h-7 w-12 rounded-full transition-all duration-300 ease-out",
+                    "relative flex items-center justify-center h-7 w-12 rounded-xl transition-all duration-300 ease-out",
                     active
                       ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
-                      : "text-muted-foreground group-hover:bg-muted/70 group-hover:text-foreground",
+                      : "text-muted-foreground group-hover:bg-muted group-hover:text-foreground",
                   )}
                 >
                   <Icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.5 : 2} />
                   {typeof t.badge === "number" && t.badge > 0 && (
                     <span
                       className={cn(
-                        "absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold tabular-nums flex items-center justify-center ring-2 ring-background",
-                        active
-                          ? "bg-foreground text-background"
-                          : "bg-primary text-primary-foreground",
+                        "absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold tabular-nums flex items-center justify-center ring-2 ring-background bg-gold text-gold-foreground",
                         bounce && "animate-cart-bounce",
                       )}
                       aria-label={`Сагсанд ${t.badge} ширхэг`}

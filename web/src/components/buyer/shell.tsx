@@ -44,22 +44,18 @@ export function BuyerShell({
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <header className="sticky top-0 z-20 h-14 bg-background/70 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/55">
-        {/* Subtle brand-tinted hairline at the bottom — replaces the plain
-            border with a gradient that picks up the brand color in the
-            centre. */}
-        <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
-
+      {/* Blue brand bar with the gold хээ trim. `on-brand` restyles the
+          shared header widgets (bell, deals, theme, search) for it. */}
+      <header className="on-brand haee-trim sticky top-0 z-20 h-14 bg-brand-bar text-brand-bar-foreground shadow-[0_6px_18px_-12px_rgb(15_25_60/0.5)] [--badge-ring:var(--brand-bar)]">
         {/* Flex layout: left-cluster takes leftover width (truncates the
             store name), right-cluster is `shrink-0` so icons never get
-            squeezed. On narrow phones the store name truncates earlier
-            now instead of pushing into the icon column. */}
-        <div className="h-full flex items-center px-2 sm:px-4 gap-2">
+            squeezed. */}
+        <div className="h-full flex items-center px-2 sm:px-4 gap-2 pb-[3px]">
           {!isRoot ? (
             <button
               type="button"
               onClick={() => router.back()}
-              className="shrink-0 -ml-1 size-9 rounded-xl flex items-center justify-center bg-muted/60 hover:bg-muted ring-1 ring-border/60 hover:ring-border active:scale-95 transition-all"
+              className="shrink-0 -ml-1 size-10 rounded-xl flex items-center justify-center bg-white/10 ring-1 ring-white/15 active:scale-95 transition-all"
               aria-label="Буцах"
             >
               <ChevronLeft className="h-5 w-5" />
@@ -67,18 +63,17 @@ export function BuyerShell({
           ) : (
             <Link
               href="/catalog"
-              className="flex items-center gap-2 group/store min-w-0 flex-1"
+              className="flex items-center gap-2.5 min-w-0 flex-1 rounded-xl -ml-1 pl-1 pr-2 py-1"
               aria-label={storeName}
             >
-              <div className="shrink-0 relative size-9 rounded-xl bg-gradient-to-br from-primary to-primary/75 text-primary-foreground flex items-center justify-center font-bold text-sm shadow-sm shadow-primary/20 ring-1 ring-primary/30">
+              <div className="shrink-0 size-9 rounded-xl bg-gold text-gold-foreground flex items-center justify-center font-display font-bold text-[15px] shadow-sm ring-1 ring-black/5">
                 {storeInitial(storeName)}
-                <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-transparent to-white/15 pointer-events-none" />
               </div>
               <div className="flex flex-col items-start min-w-0 leading-tight">
-                <span className="text-[9.5px] uppercase tracking-[0.12em] text-muted-foreground font-semibold">
-                  Дэлгүүр
+                <span className="font-display text-[10px] tracking-[0.08em] text-white/70">
+                  BDI Захиалга
                 </span>
-                <span className="text-[13px] font-semibold truncate max-w-full group-hover/store:text-primary transition-colors">
+                <span className="text-[14px] font-semibold truncate max-w-full text-white">
                   {storeName}
                 </span>
               </div>

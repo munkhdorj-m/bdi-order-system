@@ -24,6 +24,14 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "5mb",
     },
+    // Keep pages the user just saw in the browser's router cache, so going
+    // back (catalog ↔ product, orders ↔ order) is instant instead of another
+    // trip to the server. Anything a server action changes is refreshed
+    // regardless (revalidatePath clears this cache).
+    staleTimes: {
+      dynamic: 30,
+      static: 300,
+    },
   },
   async headers() {
     return [

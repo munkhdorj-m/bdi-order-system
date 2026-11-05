@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { adminGuardError, getSession } from "@/lib/auth";
+import { adminGuardError, getSession, mapAuthError } from "@/lib/auth";
 import { notify } from "@/lib/notify";
 import { normalizeMnPhone } from "@/lib/sms/verify-mn";
 
@@ -218,6 +218,48 @@ export async function deleteUser(userId: string): Promise<Result> {
 
   revalidatePath("/admin/users");
   revalidatePath("/admin");
+  return { ok: true };
+}
+
+/**
+ * Set a new password for a user who forgot theirs. Accounts are phone-only
+ * (no email), so there's no recovery link to send: the admin sets a
+ * password here and tells the user. Users can also do it themselves with
+ * an SMS check at /forgot-password. The password is never logged.
+ */
+export async function setUserPassword(
+  userId: string,
+  password: string,
+): Promise<Result> {
+  if (!userId) return { error: "Хэрэглэгчийн ID байхгүй." };
+
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
+  if (typeof password !== "string" || password.length < MIN_PASSWORD) {
+    return {
+      error: `Нууц үг хамгийн багадаа ${MIN_PASSWORD} тэмдэгт байх ёстой.`,
+    };
+  }
+  // Supabase (bcrypt) stops at 72 bytes; Cyrillic letters are 2 bytes each.
+  if (new TextEncoder().encode(password).length > 72) {
+    return { error: "Нууц үг хэт урт байна." };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(userId, { password });
+  if (error) {
+    console.error("[admin/users/password] updateUserById failed:", error.message);
+    return { error: mapAuthError(error) };
+  }
+
+  const session = await getSession();
+  console.info(
+    "[admin/users/password] new password set for",
+    userId,
+    "by admin:",
+    session?.userId,
+  );
   return { ok: true };
 }
 

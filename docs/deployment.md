@@ -27,6 +27,52 @@ this doc is items 3 and 4.
 
 ---
 
+## Speed for Mongolian users (measured 2026-11-05)
+
+Measured from a PC in Ulaanbaatar:
+
+| Step | Round trip |
+|---|---|
+| UB → a server inside Mongolia (Cloudflare's UB location) | 35–48 ms |
+| UB → Vercel (Mongolian traffic enters at Hong Kong, `hkg1`) | 85–90 ms |
+| UB → Supabase database (Singapore, `ap-southeast-1`) | ~230 ms |
+| Query time inside the database | 3–6 ms |
+
+Changes made because of this:
+
+- **Functions run in Singapore** (`web/vercel.json` → `sin1`), next to
+  the database. Before, they ran in Tokyo and every query crossed
+  Tokyo↔Singapore (~70 ms). Users still enter at Hong Kong, which is about
+  as close to Singapore as to Tokyo.
+- **No Auth-server call per request.** `getClaims()` checks the session
+  JWT locally (the project signs with ES256); `getUser()` cost a round
+  trip on every request, in the proxy and again in each page.
+  `getSession()` is memoized per request (React `cache`).
+- **Instant navigation feel.** There's a `loading.tsx` skeleton in every
+  section. The browser keeps visited pages for 30 s
+  (`experimental.staleTimes`). Buyer order edits update before the server
+  answers (`useOptimistic`).
+- **The installed app keeps its own code.** `public/sw.js` caches only the
+  content-hashed `/_next/static/*` files, never pages or data.
+
+**Not done on purpose: caching prices on the server.** After the move a
+catalog query takes a few ms, and the Mercury import script writes
+prices straight to the database, where the cache can't see the change.
+
+**Next for Mongolia:** a custom domain behind Cloudflare (section 3).
+Cloudflare has a UB location, so scripts, styles and images would be
+served from UB.
+
+**Hosting inside Mongolia: not now.** A UB host saves ~45 ms per round
+trip over Hong Kong, but only if the database moves too. From UB, every
+query to Singapore costs ~230 ms, so a UB web server talking to the
+current database would be much slower than today. Moving the database
+means running Postgres, auth, backups and security yourselves.
+A small always-on machine in Mongolia *is* the right place for PosAPI 3.0
+and the e-Barimt agent (`docs/ebarimt-setup.md`).
+
+---
+
 ## 3. Cloudflare in front of Vercel
 
 This is a one-time DNS setup. Once done, Cloudflare caches your

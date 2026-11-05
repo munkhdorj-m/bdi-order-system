@@ -1,17 +1,26 @@
 import type { Metadata, Viewport } from "next";
-import { Manrope } from "next/font/google";
+import { Onest, Unbounded } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { ServiceWorkerRegister } from "@/components/sw-register";
 import "./globals.css";
 
-// Manrope — geometric grotesque with squared terminals and full Cyrillic
-// coverage. Swapping the typeface is the single biggest "this is a new
-// product" lever: every word on every screen renders differently, and at
-// bold weights it gives headings a confident, modern voice that Inter's
-// neutrality never had.
-const manrope = Manrope({
+// Type pairing for the "Тэнгэр ба алт" look:
+//   Onest     — text and UI. Drawn for Cyrillic first, very readable at small
+//               sizes on phones.
+//   Unbounded — display: page titles, section titles, prices. Wide and
+//               geometric; it is what makes the app recognisable at a glance.
+// Both need "cyrillic-ext": Mongolian Ө/ө and Ү/ү live there, not in the
+// plain "cyrillic" subset (without it those letters fall back to another
+// font mid-word).
+const onest = Onest({
   variable: "--font-sans",
-  subsets: ["latin", "cyrillic"],
+  subsets: ["latin", "latin-ext", "cyrillic", "cyrillic-ext"],
+  display: "swap",
+});
+const unbounded = Unbounded({
+  variable: "--font-display",
+  subsets: ["latin", "cyrillic", "cyrillic-ext"],
   display: "swap",
 });
 
@@ -46,8 +55,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   // Keep in sync with --primary / --background in globals.css.
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#4338ca" },
-    { media: "(prefers-color-scheme: dark)", color: "#1e1b4b" },
+    { media: "(prefers-color-scheme: light)", color: "#1f4fcc" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f1630" },
   ],
   viewportFit: "cover",
   width: "device-width",
@@ -69,7 +78,7 @@ export default function RootLayout({
       // Tells Next router transitions to ignore the global `scroll-behavior: smooth`
       // rule so route jumps don't smooth-scroll (which feels janky on Next).
       data-scroll-behavior="smooth"
-      className={`${manrope.variable} h-full antialiased`}
+      className={`${onest.variable} ${unbounded.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider
@@ -81,6 +90,7 @@ export default function RootLayout({
         >
           {children}
           <Toaster position="top-center" richColors closeButton />
+          <ServiceWorkerRegister />
         </ThemeProvider>
       </body>
     </html>

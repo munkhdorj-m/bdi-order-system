@@ -96,7 +96,7 @@ export function NotificationsBell({
         >
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground text-[9.5px] font-bold tabular-nums flex items-center justify-center ring-2 ring-background">
+            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-gold text-gold-foreground text-[9.5px] font-bold tabular-nums flex items-center justify-center ring-2 ring-[var(--badge-ring,var(--background))]">
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}

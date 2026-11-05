@@ -39,6 +39,8 @@ type Props = {
   emptyOptionLabel?: string;
   className?: string;
   disabled?: boolean;
+  /** Called whenever the selection changes ("" when cleared). */
+  onValueChange?: (value: string) => void;
 };
 
 // Romanize (Cyrillic → Latin) + strip accents + collapse whitespace, so
@@ -73,9 +75,14 @@ export function SearchableSelect({
   emptyOptionLabel = "— Сонгоогүй —",
   className,
   disabled = false,
+  onValueChange,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const [value, setValue] = useState<string>(defaultValue ?? "");
+  const [value, setValueState] = useState<string>(defaultValue ?? "");
+  const setValue = (next: string) => {
+    setValueState(next);
+    if (next !== value) onValueChange?.(next);
+  };
   const [query, setQuery] = useState("");
   const selected = options.find((o) => o.value === value);
 
@@ -122,7 +129,7 @@ export function SearchableSelect({
             aria-expanded={open}
             disabled={disabled}
             className={cn(
-              "w-full justify-between font-normal",
+              "w-full justify-between font-normal text-[14px] hover:bg-card data-[state=open]:border-primary data-[state=open]:ring-4 data-[state=open]:ring-ring/15 active:scale-100",
               !selected && "text-muted-foreground",
               className,
             )}
@@ -184,7 +191,7 @@ export function SearchableSelect({
                   >
                     <Check
                       className={cn(
-                        "mr-2 h-4 w-4 shrink-0",
+                        "mr-2 h-4 w-4 shrink-0 text-primary",
                         value === o.value ? "opacity-100" : "opacity-0",
                       )}
                     />

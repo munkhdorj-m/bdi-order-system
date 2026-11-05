@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ActiveSwitch } from "@/components/ui/active-switch";
+import { CategoryIconTile, categoryVisual } from "@/lib/category-visual";
 
 export type ProductFormDefaults = {
   id?: string;
@@ -38,6 +39,7 @@ export type ProductFormDefaults = {
 export type CategoryOption = {
   id: string;
   name: string;
+  icon?: string | null;
 };
 
 type ActionState = { error?: string };
@@ -255,6 +257,7 @@ export function ProductForm({
                     <SelectItem value="__none">— Сонгохгүй —</SelectItem>
                     {categories.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
+                        <CategoryIconTile visual={categoryVisual(c)} size="xs" />
                         {c.name}
                       </SelectItem>
                     ))}

@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import { fetchAllStores } from "@/lib/stores";
 import { UserForm } from "@/components/admin/user-form";
 import { DeleteUserButton } from "@/components/admin/delete-user-button";
+import { ResetPasswordPanel } from "@/components/admin/reset-password-panel";
 import { updateUser } from "../actions";
 
 type Params = Promise<{ id: string }>;
@@ -54,6 +55,20 @@ export default async function EditUserPage({ params }: { params: Params }) {
         action={update}
         isSelf={isSelf}
       />
+
+      <div className="mt-10 pt-6 border-t">
+        <div className="mb-3">
+          <h2 className="text-[13px] uppercase tracking-[0.08em] font-bold text-muted-foreground">
+            Нууц үг
+          </h2>
+          <p className="text-[12px] text-muted-foreground mt-1">
+            {isSelf
+              ? "Өөрийн нууц үгээ солих."
+              : "Нууц үгээ мартсан бол шинийг тохируулаад хэрэглэгчид хэлнэ. Хэрэглэгч өөрөө ч нэвтрэх хуудасны “Нууц үгээ мартсан уу?” холбоосоор SMS-ээр сэргээж болно."}
+          </p>
+        </div>
+        <ResetPasswordPanel userId={user.id} isSelf={isSelf} />
+      </div>
 
       {/* Danger zone — hidden when viewing your own profile because
           the action refuses self-delete anyway, and we don't want to

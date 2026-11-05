@@ -26,15 +26,13 @@ export function RepHeader({
   const router = useRouter();
 
   return (
-    <header className="sticky top-0 z-10 h-14 glass-strong flex items-center gap-1 px-2 sm:px-4">
-      {/* Brand-tinted hairline — matches the buyer/admin chrome. */}
-      <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
-
+    // Same blue brand bar + gold хээ trim as the store app.
+    <header className="on-brand haee-trim sticky top-0 z-10 h-14 bg-brand-bar text-brand-bar-foreground flex items-center gap-1 px-2 sm:px-4 pb-[3px] shadow-[0_6px_18px_-12px_rgb(15_25_60/0.5)] [--badge-ring:var(--brand-bar)]">
       {backHref ? (
         <Link
           href={backHref}
           aria-label="Буцах"
-          className="shrink-0 size-9 rounded-xl flex items-center justify-center bg-muted/60 hover:bg-muted ring-1 ring-border/60 hover:ring-border active:scale-95 transition-all"
+          className="shrink-0 size-10 rounded-xl flex items-center justify-center bg-white/10 ring-1 ring-white/15 active:scale-95 transition-all"
         >
           <ChevronLeft className="h-5 w-5" />
         </Link>
@@ -42,16 +40,16 @@ export function RepHeader({
         <button
           type="button"
           onClick={() => router.back()}
-          className="shrink-0 size-9 rounded-xl flex items-center justify-center bg-muted/60 hover:bg-muted ring-1 ring-border/60 hover:ring-border active:scale-95 transition-all"
+          className="shrink-0 size-10 rounded-xl flex items-center justify-center bg-white/10 ring-1 ring-white/15 active:scale-95 transition-all"
           aria-label="Буцах"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
       )}
       <div className="flex-1 min-w-0 ml-1.5">
-        <div className="text-sm font-bold leading-tight truncate">{title}</div>
+        <div className="text-[14px] font-bold leading-tight truncate text-white">{title}</div>
         {subtitle && (
-          <div className="text-[11px] text-muted-foreground leading-tight truncate">
+          <div className="text-[11.5px] text-white/70 leading-tight truncate">
             {subtitle}
           </div>
         )}
@@ -65,7 +63,7 @@ export function RepHeader({
         >
           <ShoppingCart className="h-5 w-5" />
           {qty > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold tabular-nums flex items-center justify-center ring-2 ring-background">
+            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-gold text-gold-foreground text-[10px] font-bold tabular-nums flex items-center justify-center ring-2 ring-[var(--badge-ring,var(--background))]">
               {qty}
             </span>
           )}

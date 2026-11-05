@@ -1,11 +1,16 @@
 import {
   BarChart3,
+  ClipboardList,
+  Database,
   LayoutDashboard,
+  LayoutGrid,
   Package,
   Percent,
+  Receipt,
   ShoppingCart,
   Store,
   Tags,
+  Truck,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -34,9 +39,18 @@ export const navSections: NavSection[] = [
     ],
   },
   {
+    label: "Хүргэлт",
+    items: [
+      { href: "/admin/dispatch", label: "Хүргэлт хуваарлах", icon: Truck },
+      { href: "/admin/shipments", label: "Ачилтын жагсаалт", icon: ClipboardList },
+      { href: "/admin/ebarimt", label: "Е-баримт", icon: Receipt },
+    ],
+  },
+  {
     label: "Каталог",
     items: [
       { href: "/admin/products", label: "Бараа", icon: Package },
+      { href: "/admin/categories", label: "Ангилал", icon: LayoutGrid },
       { href: "/admin/price-lists", label: "Үнийн жагсаалт", icon: Tags },
       { href: "/admin/discounts", label: "Хямдрал", icon: Percent },
     ],
@@ -47,6 +61,10 @@ export const navSections: NavSection[] = [
       { href: "/admin/supermarkets", label: "Дэлгүүр", icon: Store },
       { href: "/admin/users", label: "Хэрэглэгч", icon: Users },
     ],
+  },
+  {
+    label: "Шилжилт",
+    items: [{ href: "/admin/mercury", label: "Mercury өгөгдөл", icon: Database }],
   },
 ];
 

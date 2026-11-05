@@ -42,3 +42,5 @@ yarn-error.log*
 next-env.d.ts
 
 certificates
+# Mercury mirror: raw pages pulled from app.gps.mn (business data, never commit)
+/scripts/.mercury-data/

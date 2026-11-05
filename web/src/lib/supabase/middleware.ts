@@ -25,6 +25,9 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  await supabase.auth.getUser();
+  // Refreshes an expiring session (writing the new cookies) and verifies the
+  // JWT locally against the project's ES256 key — no Auth-server round trip
+  // per request, unlike getUser(). This runs on every navigation.
+  await supabase.auth.getClaims();
   return response;
 }

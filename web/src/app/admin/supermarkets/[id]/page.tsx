@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, DollarSign } from "lucide-react";
+import { ChevronLeft, DollarSign, Eye } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getSupermarketSuggestions } from "@/lib/supermarket-suggestions";
 import { Button } from "@/components/ui/button";
@@ -62,12 +62,20 @@ export default async function EditSupermarketPage({
         <h1 className="text-2xl font-semibold tracking-tight min-w-0 truncate">
           {supermarket.name}
         </h1>
-        <Button asChild variant="outline" className="shrink-0">
-          <Link href={`/admin/supermarkets/${id}/prices`}>
-            <DollarSign className="h-4 w-4" />
-            <span className="hidden sm:inline">Үнийн override</span>
-          </Link>
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          <Button asChild variant="outline">
+            <Link href={`/admin/supermarkets/${id}/catalog`} title="Энэ дэлгүүрт харагдах каталог">
+              <Eye className="h-4 w-4" />
+              <span className="hidden sm:inline">Каталог харах</span>
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href={`/admin/supermarkets/${id}/prices`}>
+              <DollarSign className="h-4 w-4" />
+              <span className="hidden sm:inline">Үнийн override</span>
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <SupermarketForm

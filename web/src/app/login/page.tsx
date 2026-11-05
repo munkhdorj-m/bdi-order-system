@@ -67,7 +67,7 @@ export default async function LoginPage({
           <div className="size-16 mx-auto rounded-[1.4rem] bg-white/15 backdrop-blur-md ring-1 ring-white/30 shadow-lg shadow-black/10 flex items-center justify-center font-extrabold text-xl tracking-tight">
             BDI
           </div>
-          <h1 className="mt-5 text-[28px] font-extrabold tracking-tight leading-tight">
+          <h1 className="mt-5 text-[26px] font-bold tracking-tight leading-tight">
             Тавтай морил
           </h1>
           <p className="mt-1.5 text-[14px] text-white/80">
@@ -109,13 +109,27 @@ export default async function LoginPage({
                 placeholder="••••••••"
                 className="input-field"
               />
+              <div className="mt-1.5 text-right">
+                <Link
+                  href={
+                    phone
+                      ? `/forgot-password?phone=${encodeURIComponent(phone)}`
+                      : "/forgot-password"
+                  }
+                  className="text-[12.5px] font-semibold text-primary hover:underline underline-offset-4"
+                >
+                  Нууц үгээ мартсан уу?
+                </Link>
+              </div>
             </div>
 
             {success && (
               <p className="text-caption rounded-xl px-3 py-2 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
                 {success === "phone-verified"
                   ? "Утас баталгаажлаа. BDI-н ажилтан таны бүртгэлийг идэвхжүүлмэгц нэвтэрч орох боломжтой."
-                  : success}
+                  : success === "password-reset"
+                    ? "Нууц үг шинэчлэгдлээ. Шинэ нууц үгээрээ нэвтэрнэ үү."
+                    : success}
               </p>
             )}
             {error && (

@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Phone, ReceiptText, User } from "lucide-react";
+import { ChevronLeft, Phone, Printer, ReceiptText, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { OrderStatusPill } from "@/components/admin/order-status-pill";
 import { OrderActions } from "@/components/admin/order-actions";
 import { OrderTimeline } from "@/components/buyer/order-timeline";
+import { Button } from "@/components/ui/button";
 import { type OrderStatus } from "@/lib/order-status";
 import { formatMnt } from "@/lib/format";
+import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/payment-method";
 
 type Params = Promise<{ id: string }>;
 
@@ -16,7 +18,7 @@ type OrderDetail = {
   status: OrderStatus;
   subtotal: number;
   discount_total: number | null;
-  payment_method: "cash" | "credit" | null;
+  payment_method: PaymentMethod | null;
   notes: string | null;
   created_at: string;
   confirmed_at: string | null;
@@ -101,7 +103,13 @@ export default async function AdminOrderDetailPage({
             {formatDateTime(order.created_at)}
           </p>
         </div>
-        <div className="shrink-0">
+        <div className="shrink-0 flex items-center gap-2 flex-wrap">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/print/invoices?orders=${order.id}`} target="_blank">
+              <Printer className="h-4 w-4" />
+              Падаан
+            </Link>
+          </Button>
           <OrderActions orderId={order.id} status={order.status} />
         </div>
       </div>
@@ -232,7 +240,7 @@ export default async function AdminOrderDetailPage({
                             : "bg-muted text-muted-foreground ring-border"
                         }`}
                       >
-                        {order.payment_method === "cash" ? "Бэлэн" : "Зээл"}
+                        {PAYMENT_METHOD_LABELS[order.payment_method] ?? order.payment_method}
                       </span>
                     )}
                   </td>

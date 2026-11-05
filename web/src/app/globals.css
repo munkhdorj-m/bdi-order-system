@@ -9,7 +9,12 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-heading: var(--font-display);
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
+  --color-brand-bar: var(--brand-bar);
+  --color-brand-bar-foreground: var(--brand-bar-foreground);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,84 +54,94 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * "Тэнгэр ба алт" — sky and gold.
+ *   cobalt  (--primary)  the brand: headers, navigation, confirm buttons
+ *   gold    (--gold)     the shopping action: "Нэмэх", cart counts
+ *   cream   (--background) a warm paper canvas; cards sit on it in white
+ * Text tokens clear WCAG AA on the surfaces they're used on. Status colours
+ * (amber/sky/violet/emerald/rose) stay separate from brand chrome.
+ */
 :root {
-  /* Clean near-white canvas with a sub-perceptual cool undertone; cards sit
-     at pure white. High contrast first — every text token clears WCAG AA on
-     the surfaces it's used on. */
-  --background: oklch(0.99 0.002 264);
-  --foreground: oklch(0.18 0.02 264);
+  --background: oklch(0.982 0.008 85);
+  --foreground: oklch(0.22 0.045 268);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0.02 264);
+  --card-foreground: oklch(0.22 0.045 268);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.02 264);
-  /* BDI brand: cobalt-indigo. Confident B2B trust signal, deliberately offset
-     from the status palette (amber/sky/violet/emerald/rose at hues
-     75/225/295/155/15) so brand chrome never collides with status pills. */
-  --primary: oklch(0.5 0.18 263);
+  --popover-foreground: oklch(0.22 0.045 268);
+  --primary: oklch(0.47 0.19 264);
   --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.97 0.004 264);
-  --secondary-foreground: oklch(0.22 0.02 264);
-  --muted: oklch(0.96 0.005 264);
-  --muted-foreground: oklch(0.5 0.02 264);
-  --accent: oklch(0.96 0.03 263);
-  --accent-foreground: oklch(0.32 0.14 263);
-  --destructive: oklch(0.59 0.22 25);
+  --gold: oklch(0.81 0.15 79);
+  --gold-foreground: oklch(0.27 0.06 62);
+  /* The blue top bar of the store and rep apps. */
+  --brand-bar: oklch(0.45 0.185 264);
+  --brand-bar-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.955 0.012 85);
+  --secondary-foreground: oklch(0.25 0.04 268);
+  --muted: oklch(0.953 0.011 85);
+  --muted-foreground: oklch(0.49 0.03 268);
+  --accent: oklch(0.95 0.03 264);
+  --accent-foreground: oklch(0.36 0.15 264);
+  --destructive: oklch(0.58 0.21 27);
   --destructive-foreground: oklch(0.99 0 0);
-  --border: oklch(0.92 0.008 264);
-  --input: oklch(0.92 0.008 264);
-  --ring: oklch(0.5 0.18 263);
-  /* Chart ramp: indigo body + complementary cyan/amber so multi-series stay
-     distinguishable without leaning on hue-rotated brand tones. */
-  --chart-1: oklch(0.5 0.18 263);
-  --chart-2: oklch(0.65 0.16 263);
-  --chart-3: oklch(0.7 0.14 195);
-  --chart-4: oklch(0.72 0.16 85);
-  --chart-5: oklch(0.45 0.02 264);
-  /* Soft, friendly geometry — a notch rounder than shadcn's default. */
-  --radius: 0.75rem;
-  --sidebar: oklch(0.985 0.004 264);
-  --sidebar-foreground: oklch(0.18 0.02 264);
-  --sidebar-primary: oklch(0.5 0.18 263);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.96 0.03 263);
-  --sidebar-accent-foreground: oklch(0.32 0.14 263);
-  --sidebar-border: oklch(0.92 0.008 264);
-  --sidebar-ring: oklch(0.5 0.18 263);
+  --border: oklch(0.905 0.014 85);
+  --input: oklch(0.875 0.017 85);
+  --ring: oklch(0.47 0.19 264);
+  --chart-1: oklch(0.47 0.19 264);
+  --chart-2: oklch(0.78 0.15 79);
+  --chart-3: oklch(0.62 0.11 190);
+  --chart-4: oklch(0.64 0.17 15);
+  --chart-5: oklch(0.55 0.03 268);
+  /* Soft rectangles, not pills: rounded-xl ≈ 14px on a 40px control. */
+  --radius: 0.625rem;
+  /* Admin rail: deep night-sky navy with gold for the current page. */
+  --sidebar: oklch(0.24 0.065 266);
+  --sidebar-foreground: oklch(0.95 0.012 264);
+  --sidebar-primary: oklch(0.81 0.15 79);
+  --sidebar-primary-foreground: oklch(0.27 0.06 62);
+  --sidebar-accent: oklch(0.31 0.07 266);
+  --sidebar-accent-foreground: oklch(0.99 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.81 0.15 79);
 }
 
 .dark {
-  --background: oklch(0.17 0.012 264);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.22 0.012 264);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.22 0.012 264);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.72 0.17 263);
-  --primary-foreground: oklch(0.16 0.04 263);
-  --secondary: oklch(0.28 0.012 264);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.28 0.012 264);
-  --muted-foreground: oklch(0.7 0.02 264);
-  --accent: oklch(0.32 0.08 263);
-  --accent-foreground: oklch(0.86 0.1 263);
-  --destructive: oklch(0.7 0.2 25);
+  --background: oklch(0.165 0.03 266);
+  --foreground: oklch(0.97 0.006 85);
+  --card: oklch(0.21 0.035 266);
+  --card-foreground: oklch(0.97 0.006 85);
+  --popover: oklch(0.23 0.035 266);
+  --popover-foreground: oklch(0.97 0.006 85);
+  --primary: oklch(0.7 0.15 262);
+  --primary-foreground: oklch(0.15 0.04 266);
+  --gold: oklch(0.83 0.14 80);
+  --gold-foreground: oklch(0.24 0.05 62);
+  --brand-bar: oklch(0.25 0.075 266);
+  --brand-bar-foreground: oklch(0.97 0.006 85);
+  --secondary: oklch(0.27 0.035 266);
+  --secondary-foreground: oklch(0.97 0.006 85);
+  --muted: oklch(0.26 0.03 266);
+  --muted-foreground: oklch(0.72 0.025 266);
+  --accent: oklch(0.3 0.07 264);
+  --accent-foreground: oklch(0.88 0.08 264);
+  --destructive: oklch(0.68 0.19 25);
   --destructive-foreground: oklch(0.99 0 0);
   --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.72 0.17 263);
-  --chart-1: oklch(0.72 0.17 263);
-  --chart-2: oklch(0.55 0.16 263);
-  --chart-3: oklch(0.65 0.12 195);
-  --chart-4: oklch(0.7 0.14 85);
-  --chart-5: oklch(0.6 0.02 264);
-  --sidebar: oklch(0.2 0.012 264);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.72 0.17 263);
-  --sidebar-primary-foreground: oklch(0.16 0.04 263);
-  --sidebar-accent: oklch(0.32 0.08 263);
-  --sidebar-accent-foreground: oklch(0.86 0.1 263);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.72 0.17 263);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.7 0.15 262);
+  --chart-1: oklch(0.7 0.15 262);
+  --chart-2: oklch(0.8 0.14 80);
+  --chart-3: oklch(0.66 0.1 190);
+  --chart-4: oklch(0.7 0.15 15);
+  --chart-5: oklch(0.62 0.03 266);
+  --sidebar: oklch(0.13 0.03 266);
+  --sidebar-foreground: oklch(0.95 0.012 264);
+  --sidebar-primary: oklch(0.83 0.14 80);
+  --sidebar-primary-foreground: oklch(0.24 0.05 62);
+  --sidebar-accent: oklch(0.22 0.04 266);
+  --sidebar-accent-foreground: oklch(0.99 0 0);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.83 0.14 80);
 }
 
 @layer base {
@@ -138,6 +153,21 @@
   }
   html {
     @apply font-sans;
+  }
+
+  /* Page titles in the display face. A long product name can opt out with
+     `font-sans`. */
+  h1 {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+  }
+
+  /* Controls: no grey flash on tap, and the pointer where things click. */
+  :where(a, button, [role="button"], [role="tab"], summary, label, select) {
+    -webkit-tap-highlight-color: transparent;
+  }
+  :where(button, [role="button"], [role="tab"], select, summary):not(:disabled) {
+    cursor: pointer;
   }
 
   /* Brand-tinted text selection — tiny detail, big "designed" signal. */
@@ -243,15 +273,36 @@
   /* Full-bleed brand surface behind the auth screens. LITERAL color
      stops on top of a solid fallback — never derived from theme vars,
      identical in light and dark mode — so the white text and floating
-     white card sitting on it are always readable, no matter what. */
+     white card sitting on it are always readable, no matter what. A faint
+     хээ (key pattern) runs over the sky. */
   .bg-brand-gradient {
-    background-color: oklch(0.48 0.18 263);
-    background-image: linear-gradient(
-      160deg,
-      oklch(0.56 0.18 263) 0%,
-      oklch(0.48 0.18 263) 48%,
-      oklch(0.37 0.15 263) 100%
-    );
+    background-color: oklch(0.45 0.18 264);
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='14' viewBox='0 0 28 14'%3E%3Cpath d='M0 13H28M21 13V1H7v8h8V5h-4' fill='none' stroke='%23ffffff' stroke-opacity='.07' stroke-width='1.2'/%3E%3C/svg%3E"),
+      linear-gradient(
+        165deg,
+        oklch(0.53 0.19 264) 0%,
+        oklch(0.45 0.18 264) 50%,
+        oklch(0.33 0.14 266) 100%
+      );
+  }
+
+  /* Gold хээ (Mongolian key pattern) trim along the bottom of the blue
+     headers — the one ornament in the app. */
+  .haee-trim {
+    position: relative;
+  }
+  .haee-trim::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 5px;
+    pointer-events: none;
+    background-repeat: repeat-x;
+    background-size: auto 5px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='5' viewBox='0 0 12 5'%3E%3Cpath d='M0 4.5H12M9 4.5V.5H3v2.5h3V1.8' fill='none' stroke='%23F2B32B' stroke-width='.9'/%3E%3C/svg%3E");
+    opacity: 0.85;
   }
 
   /* Ambient brand wash for empty-canvas pages (auth, verify, empty
@@ -379,4 +430,18 @@
       animation: none;
     }
   }
+}
+/* Header widgets (search, deals, bell, theme, sign-out) sitting on the blue
+   top bar. Unlayered on purpose: it has to outrank the light-surface
+   utilities those same widgets use in the admin header. */
+.on-brand :is(button, a) {
+  color: color-mix(in oklch, var(--brand-bar-foreground) 90%, transparent);
+}
+.on-brand :is(button, a):hover {
+  color: var(--brand-bar-foreground);
+  background-color: rgb(255 255 255 / 0.13);
+}
+.on-brand :is(button, a):focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
 }

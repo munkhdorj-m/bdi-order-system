@@ -216,7 +216,7 @@ export default async function AdminDashboard() {
                       <span className="size-2 rounded-full bg-amber-500 animate-pulse" />
                     )}
                   </div>
-                  <div className="mt-3 text-[28px] font-bold tabular-nums tracking-tight leading-none">
+                  <div className="mt-3 font-display text-[26px] font-semibold tabular-nums tracking-tight leading-none">
                     {typeof s.value === "number"
                       ? s.value.toLocaleString("mn-MN")
                       : s.value}

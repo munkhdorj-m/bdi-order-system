@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -27,10 +27,23 @@ type Props = {
   items: OrderItem[];
 };
 
+type Patch = { id: string; qty: number } | { id: string; remove: true };
+
+/** Apply a quantity change / removal to the visible rows before the server answers. */
+function applyPatch(state: OrderItem[], patch: Patch): OrderItem[] {
+  if ("remove" in patch) return state.filter((i) => i.id !== patch.id);
+  return state.map((i) =>
+    i.id === patch.id ? { ...i, qty: patch.qty, line_total: patch.qty * i.unit_price } : i,
+  );
+}
+
 export function OrderEditControls({ orderId, orderNumber, items }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [busyItemId, setBusyItemId] = useState<string | null>(null);
+  // Rows update the moment +/− is tapped; the server's answer (the action
+  // revalidates this page) replaces them, and a failure snaps them back.
+  const [view, applyOptimistic] = useOptimistic(items, applyPatch);
+  const [cancelling, setCancelling] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
   // Surfaces server-action errors inline (in addition to toast) so the user
@@ -38,13 +51,14 @@ export function OrderEditControls({ orderId, orderNumber, items }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   function withResult<T extends { error?: string }>(
+    patch: Patch | null,
     runner: () => Promise<T>,
     onSuccess?: () => void,
   ) {
     setError(null);
     startTransition(async () => {
+      if (patch) applyOptimistic(patch);
       const r = await runner();
-      setBusyItemId(null);
       if (r.error) {
         setError(r.error);
         toast.error(r.error);
@@ -57,12 +71,13 @@ export function OrderEditControls({ orderId, orderNumber, items }: Props) {
   function changeQty(item: OrderItem, delta: number) {
     const next = Math.max(1, item.qty + delta);
     if (next === item.qty) return;
-    setBusyItemId(item.id);
-    withResult(() => updateOrderItemQty(orderId, item.id, next));
+    // Absolute quantities, and Next runs a client's actions one at a time,
+    // so quick repeated taps settle on the last one.
+    withResult({ id: item.id, qty: next }, () => updateOrderItemQty(orderId, item.id, next));
   }
 
   function confirmRemoveItem(item: OrderItem) {
-    if (items.length <= 1) {
+    if (view.length <= 1) {
       const msg = "Сүүлчийн барааг хасч болохгүй";
       setError(msg);
       toast.error(msg);
@@ -77,8 +92,8 @@ export function OrderEditControls({ orderId, orderNumber, items }: Props) {
 
   function executeRemoveItem(item: OrderItem) {
     setRemovingItemId(null);
-    setBusyItemId(item.id);
     withResult(
+      { id: item.id, remove: true },
       () => removeOrderItem(orderId, item.id),
       () => toast.success("Бараа хасагдлаа"),
     );
@@ -86,8 +101,14 @@ export function OrderEditControls({ orderId, orderNumber, items }: Props) {
 
   function handleCancel() {
     setShowCancelConfirm(false);
+    setCancelling(true);
     withResult(
-      () => cancelOrder(orderId),
+      null,
+      async () => {
+        const r = await cancelOrder(orderId);
+        if (r.error) setCancelling(false);
+        return r;
+      },
       () => {
         toast.success("Захиалга цуцлагдлаа");
         router.refresh();
@@ -100,7 +121,7 @@ export function OrderEditControls({ orderId, orderNumber, items }: Props) {
   return (
     <div>
       <div className="divide-y">
-        {items.map((item) => (
+        {view.map((item) => (
           <div
             key={item.id}
             className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
@@ -122,7 +143,7 @@ export function OrderEditControls({ orderId, orderNumber, items }: Props) {
                 <button
                   type="button"
                   onClick={cancelRemoveItem}
-                  disabled={pending}
+                  disabled={cancelling}
                   className="h-10 px-3 text-xs rounded-lg hover:bg-muted disabled:opacity-40 transition-colors"
                 >
                   Болих
@@ -130,7 +151,7 @@ export function OrderEditControls({ orderId, orderNumber, items }: Props) {
                 <button
                   type="button"
                   onClick={() => executeRemoveItem(item)}
-                  disabled={pending}
+                  disabled={cancelling}
                   className="h-10 px-3 text-xs font-semibold rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-40 transition-colors"
                 >
                   Хасах
@@ -142,7 +163,7 @@ export function OrderEditControls({ orderId, orderNumber, items }: Props) {
                   <button
                     type="button"
                     onClick={() => changeQty(item, -1)}
-                    disabled={pending || item.qty <= 1}
+                    disabled={cancelling || item.qty <= 1}
                     aria-label="Хасах"
                     className="size-10 flex items-center justify-center hover:bg-muted rounded-l-full disabled:opacity-40 active:scale-90 transition-transform"
                   >
@@ -154,7 +175,7 @@ export function OrderEditControls({ orderId, orderNumber, items }: Props) {
                   <button
                     type="button"
                     onClick={() => changeQty(item, +1)}
-                    disabled={pending}
+                    disabled={cancelling}
                     aria-label="Нэмэх"
                     className="size-10 flex items-center justify-center hover:bg-muted rounded-r-full disabled:opacity-40 active:scale-90 transition-transform"
                   >
@@ -164,7 +185,7 @@ export function OrderEditControls({ orderId, orderNumber, items }: Props) {
                 <button
                   type="button"
                   onClick={() => confirmRemoveItem(item)}
-                  disabled={pending || busyItemId === item.id}
+                  disabled={cancelling}
                   aria-label="Барааг хасах"
                   className="size-10 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-destructive disabled:opacity-40 transition-colors"
                   title="Барааг хасах"
@@ -208,7 +229,7 @@ export function OrderEditControls({ orderId, orderNumber, items }: Props) {
                 disabled={pending}
                 className="flex-1"
               >
-                {pending ? "Цуцалж байна..." : "Цуцлах"}
+                {cancelling ? "Цуцалж байна..." : "Цуцлах"}
               </Button>
             </div>
           </div>

@@ -36,7 +36,7 @@ export default async function EditProductPage({ params }: { params: Params }) {
         <ChevronLeft className="h-4 w-4" />
         Бараа жагсаалт руу
       </Link>
-      <h1 className="text-2xl font-semibold tracking-tight mb-1">{product.name}</h1>
+      <h1 className="font-sans text-2xl font-semibold tracking-tight mb-1">{product.name}</h1>
       <p className="text-sm text-muted-foreground font-mono mb-6">{product.sku}</p>
 
       <ProductForm

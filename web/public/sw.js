@@ -1,14 +1,21 @@
 /**
- * BDI service worker — push receiver only.
+ * BDI service worker — push receiver + a cache for the app's own code.
  *
- * Deliberately NOT a caching/offline worker. Adding a fetch handler here
- * would put a cache in front of every Next.js RSC payload and server
- * action, which is a fast way to serve stale prices. If offline support
- * is wanted later it belongs in a proper Workbox setup, not bolted on
- * here.
+ * Caching is deliberately narrow: only /_next/static/* (JS, CSS, fonts).
+ * Those files are content-hashed — every deploy ships new names — so a
+ * cached copy can never be stale, and phones (which evict their HTTP cache
+ * aggressively) open the app without re-downloading it from Hong Kong.
+ * Pages, RSC payloads, server actions, images and API calls are NOT
+ * touched: caching those is how you serve stale prices.
  *
- * Registered by push-toggle.tsx once an admin turns notifications on.
+ * Registered for every visitor in production (sw-register.tsx) and by
+ * push-toggle.tsx when an admin turns notifications on.
  */
+
+const STATIC_CACHE = "bdi-static-v1";
+const MAX_STATIC_ENTRIES = 400;
+// Dev servers rebuild chunks in place; never cache there.
+const DEV_HOST = ["localhost", "127.0.0.1", "[::1]"].includes(self.location.hostname);
 
 /* Take over immediately on install instead of waiting for every old tab
    to close — otherwise an updated worker sits idle for days. */
@@ -17,7 +24,47 @@ self.addEventListener("install", () => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    (async () => {
+      // Drop caches from older versions of this worker.
+      const names = await caches.keys();
+      await Promise.all(
+        names.filter((n) => n.startsWith("bdi-") && n !== STATIC_CACHE).map((n) => caches.delete(n)),
+      );
+      await self.clients.claim();
+    })(),
+  );
+});
+
+/** Oldest entries out once the cache passes the cap (old deploys' chunks). */
+async function trimStatic(cache) {
+  const keys = await cache.keys();
+  for (let i = 0; i < keys.length - MAX_STATIC_ENTRIES; i++) await cache.delete(keys[i]);
+}
+
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  if (DEV_HOST || req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin || !url.pathname.startsWith("/_next/static/")) return;
+
+  event.respondWith(
+    (async () => {
+      try {
+        const cache = await caches.open(STATIC_CACHE);
+        const hit = await cache.match(req);
+        if (hit) return hit;
+        const res = await fetch(req);
+        if (res.ok && res.type === "basic") {
+          event.waitUntil(cache.put(req, res.clone()).then(() => trimStatic(cache)));
+        }
+        return res;
+      } catch {
+        // Cache API trouble must never break the page — go straight to the network.
+        return fetch(req);
+      }
+    })(),
+  );
 });
 
 /**

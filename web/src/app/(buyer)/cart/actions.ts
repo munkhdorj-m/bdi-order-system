@@ -9,7 +9,7 @@ import {
   rulesForPriceList,
   type DiscountRule,
 } from "@/lib/discount";
-import { isPaymentMethod, type PaymentMethod } from "@/lib/payment-method";
+import { isBuyerPaymentMethod, type PaymentMethod } from "@/lib/payment-method";
 import { formatMnt } from "@/lib/format";
 import { listAdminIds, notifyMany } from "@/lib/notify";
 
@@ -118,7 +118,7 @@ export async function placeOrder(
 
   // Normalize payment method server-side — never trust a client-supplied
   // string. Default to credit so existing callers keep working.
-  const paymentMethod: PaymentMethod = isPaymentMethod(input.payment_method)
+  const paymentMethod: PaymentMethod = isBuyerPaymentMethod(input.payment_method)
     ? input.payment_method
     : "credit";
 

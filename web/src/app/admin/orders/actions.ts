@@ -38,6 +38,37 @@ export async function reopenOrder(id: string): Promise<Result> {
   return setOrderStatus(id, "pending");
 }
 
+/**
+ * Permanently remove a cancelled order (its lines and notifications go with
+ * it). Only cancelled orders, and never one with an e-Barimt receipt —
+ * the tax record must stay.
+ */
+export async function deleteCancelledOrder(id: string): Promise<Result> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
+  const supabase = await createClient();
+  const { count: receipts } = await supabase
+    .from("ebarimt_receipts")
+    .select("id", { count: "exact", head: true })
+    .eq("order_id", id);
+  if ((receipts ?? 0) > 0) {
+    return { error: "Энэ захиалгад е-баримт гарсан тул устгах боломжгүй." };
+  }
+  const { data, error } = await supabase
+    .from("orders")
+    .delete()
+    .eq("id", id)
+    .eq("status", "cancelled")
+    .select("id");
+  if (error) return { error: error.message };
+  if (!data?.length) return { error: "Зөвхөн цуцлагдсан захиалгыг устгана." };
+
+  revalidatePath("/admin/orders");
+  revalidatePath("/admin");
+  return {};
+}
+
 // Internal — every public entry point above has already checked admin
 // guard, so this can write the DB without re-checking.
 async function setOrderStatus(

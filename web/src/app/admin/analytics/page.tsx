@@ -117,7 +117,7 @@ function StatCard({
             {formatDelta(delta)}
           </span>
         </div>
-        <div className="mt-3 text-[24px] font-bold tabular-nums tracking-tight leading-none">
+        <div className="mt-3 font-display text-[22px] font-semibold tabular-nums tracking-tight leading-none">
           {value}
         </div>
         <div className="text-[12.5px] text-muted-foreground mt-1.5">

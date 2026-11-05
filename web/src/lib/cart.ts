@@ -13,6 +13,8 @@ export type CartItem = {
   unit_price: number;
   /** Optional — used by the discount engine to match per-category rules. */
   category_id?: string | null;
+  /** Category picture key (lib/category-visual.tsx), shown when there's no photo. */
+  category_icon?: string | null;
   qty: number;
 };
 
@@ -66,6 +68,7 @@ export function addToCart(
     existing.brand = item.brand;
     existing.image_url = item.image_url;
     existing.category_id = item.category_id ?? existing.category_id ?? null;
+    existing.category_icon = item.category_icon ?? existing.category_icon ?? null;
   } else {
     items.push({ ...item, qty });
   }

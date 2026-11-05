@@ -64,7 +64,7 @@ export default async function VerifyOtpPage({
           <div className="size-16 mx-auto rounded-[1.4rem] bg-white/15 backdrop-blur-md ring-1 ring-white/30 shadow-lg shadow-black/10 flex items-center justify-center">
             <ShieldCheck className="h-8 w-8" strokeWidth={1.75} />
           </div>
-          <h1 className="mt-5 text-[28px] font-extrabold tracking-tight leading-tight">
+          <h1 className="mt-5 text-[26px] font-bold tracking-tight leading-tight">
             Утсаа баталгаажуул
           </h1>
           <p className="mt-1.5 text-[14px] text-white/80">

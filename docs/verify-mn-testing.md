@@ -149,6 +149,31 @@ Steps:
 2. Confirm none of these created a row in `verify_mn_sessions` for the
    invalid cases
 
+### T7 — forgot password (same SMS check)
+
+**Goal:** confirm a user can set a new password by texting the code from
+their registered phone. Costs one verify.mn verification (150₮).
+
+Steps:
+
+1. On `/login`, tap **Нууц үгээ мартсан уу?** → `/forgot-password`
+2. Enter a registered phone you hold + a new password twice → **Үргэлжлүүлэх**
+3. On `/forgot-password/verify` check the page names your number, then
+   tap **SMS илгээх** and send the SMS
+4. Within a few seconds you land on `/login` with
+   "Нууц үг шинэчлэгдлээ…" and the phone pre-filled
+5. Log in with the **new** password; the old one must now fail
+
+Also check:
+- An unregistered number → "Энэ дугаараар бүртгэл олдсонгүй…", and no
+  `verify_mn_sessions` row is created
+- Mismatched passwords → "Нууц үг таарахгүй байна."
+- After success the session row's `purpose` is `password_reset_done`
+  (a used session can't set a password again)
+
+Admins can also set a password directly: `/admin/users/<id>` →
+**Нууц үг солих** (random password pre-filled, copy button after saving).
+
 ## Cleanup
 
 After testing, delete test rows:

@@ -18,6 +18,7 @@ import {
 import { placeOrderForStore } from "./actions";
 import { Button } from "@/components/ui/button";
 import { RepHeader } from "@/components/rep/rep-header";
+import { ProductPlaceholder, categoryVisual } from "@/lib/category-visual";
 
 type Params = Promise<{ id: string }>;
 
@@ -104,7 +105,9 @@ export default function RepCartPage({ params }: { params: Params }) {
                     quality={85}
                     className="object-cover"
                   />
-                ) : null}
+                ) : (
+                  <ProductPlaceholder visual={categoryVisual({ name: "", icon: item.category_icon })} />
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 {item.brand && (

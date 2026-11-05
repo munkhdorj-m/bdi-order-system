@@ -9,6 +9,7 @@ import { OrderTimeline } from "@/components/buyer/order-timeline";
 import { ReorderButton } from "@/components/buyer/reorder-button";
 import { formatMnt } from "@/lib/format";
 import { type OrderStatus } from "@/lib/order-status";
+import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/payment-method";
 
 type Params = Promise<{ id: string }>;
 type SearchParams = Promise<{ new?: string }>;
@@ -19,7 +20,7 @@ type OrderDetail = {
   status: OrderStatus;
   subtotal: number;
   discount_total: number | null;
-  payment_method: "cash" | "credit" | null;
+  payment_method: PaymentMethod | null;
   notes: string | null;
   created_at: string;
   confirmed_at: string | null;
@@ -231,7 +232,7 @@ export default async function OrderDetailPage({
                         : "bg-muted text-muted-foreground ring-border"
                     }`}
                   >
-                    {order.payment_method === "cash" ? "Бэлэн" : "Зээл"}
+                    {PAYMENT_METHOD_LABELS[order.payment_method] ?? order.payment_method}
                   </span>
                 )}
               </span>

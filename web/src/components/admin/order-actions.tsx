@@ -1,7 +1,8 @@
 "use client";
 
 import { useTransition } from "react";
-import { ArrowRight, RotateCcw, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, RotateCcw, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   NEXT_STATUS,
@@ -12,6 +13,7 @@ import {
 import {
   advanceOrderStatus,
   cancelOrder,
+  deleteCancelledOrder,
   reopenOrder,
 } from "@/app/admin/orders/actions";
 
@@ -23,6 +25,7 @@ type Props = {
 };
 
 export function OrderActions({ orderId, status }: Props) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const next = NEXT_STATUS[status];
   const nextLabel = NEXT_STATUS_LABEL[status];
@@ -45,14 +48,34 @@ export function OrderActions({ orderId, status }: Props) {
 
   if (status === "cancelled") {
     return (
-      <Button
-        variant="outline"
-        disabled={pending}
-        onClick={() => run(() => reopenOrder(orderId))}
-      >
-        <RotateCcw className="h-4 w-4" />
-        Захиалгыг сэргээх
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          disabled={pending}
+          onClick={() => run(() => reopenOrder(orderId))}
+        >
+          <RotateCcw className="h-4 w-4" />
+          Захиалгыг сэргээх
+        </Button>
+        <Button
+          variant="destructive"
+          disabled={pending}
+          onClick={() => {
+            if (!confirm("Энэ цуцлагдсан захиалгыг бүр мөсөн устгах уу? Буцаах боломжгүй.")) return;
+            startTransition(async () => {
+              const result = await deleteCancelledOrder(orderId);
+              if (result.error) {
+                alert(`Алдаа: ${result.error}`);
+                return;
+              }
+              router.push("/admin/orders");
+            });
+          }}
+        >
+          <Trash2 className="h-4 w-4" />
+          Устгах
+        </Button>
+      </div>
     );
   }
 
