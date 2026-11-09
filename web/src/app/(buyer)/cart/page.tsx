@@ -7,66 +7,84 @@ import {
 } from "@/lib/delivery";
 import { rulesForPriceList, type DiscountRule } from "@/lib/discount";
 import { fetchAll } from "@/lib/supabase/fetch-all";
+import { getCategories } from "@/lib/categories";
+import { categoryIconKey } from "@/lib/category-visual";
+import type { CartProductInfo } from "@/lib/cart";
+
+type CatalogRow = {
+  product_id: string;
+  effective_price: number;
+  category_id: string | null;
+  image_url: string | null;
+  stock: number | null;
+};
 
 /**
  * Buyer cart route. Server component that resolves the delivery weekday
- * for the buyer's store + the currently-active discount rules, then
- * hands everything off to the client CartView (which owns the local
- * cart state + recomputes the breakdown live).
+ * for the buyer's store, the active deals and today's catalog (price,
+ * category, photo, stock per product), then hands everything to the
+ * client CartView, which owns the local cart and re-syncs it on open.
  */
 export default async function CartPage() {
   const session = await requireSession();
-  const supermarketId = session.profile.supermarket_id;
+  // The (buyer) layout only lets a store user with a store through.
+  const supermarketId = session.profile.supermarket_id!;
   const supabase = await createClient();
 
-  let deliveryLabel: string | null = null;
-  let storeName: string | null = null;
-  let priceListId: string | null = null;
-
-  // Store, deals and today's prices in one round trip. RLS already limits
-  // discounts to active ones in their date window; rules not aimed at this
-  // store's price list are dropped below (fix 30).
-  const [{ data: store }, { data: discountRows }, priceRows] = await Promise.all([
-    supermarketId
-      ? supabase
-          .from("supermarkets")
-          .select("name, district, delivery_day, price_list_id")
-          .eq("id", supermarketId)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
+  // Store, deals, today's catalog and the categories in one round trip.
+  // RLS already limits discounts to active ones in their date window;
+  // rules not aimed at this store's price list are dropped below (fix 30).
+  const [{ data: store }, { data: discountRows }, catalogRows, categories] = await Promise.all([
+    supabase
+      .from("supermarkets")
+      .select("name, district, delivery_day, price_list_id")
+      .eq("id", supermarketId)
+      .maybeSingle(),
     supabase
       .from("discounts")
       .select(
         "id, name, kind, pct, step_amount, step_qty, bonus_n, product_id, category_id, ends_at, target_mode, target_price_list_ids",
       ),
-    supermarketId
-      ? fetchAll<{ product_id: string; effective_price: number }>(() =>
-          supabase
-            .from("supermarket_prices")
-            .select("product_id, effective_price")
-            .eq("supermarket_id", supermarketId)
-            .order("product_id"),
-        ).catch(() => null)
-      : Promise.resolve(null),
+    fetchAll<CatalogRow>(() =>
+      supabase
+        .from("supermarket_prices")
+        .select("product_id, effective_price, category_id, image_url, stock")
+        .eq("supermarket_id", supermarketId)
+        .order("product_id"),
+    ).catch(() => null),
+    getCategories(),
   ]);
 
-  if (store) {
-    const day = resolveDeliveryDay({
-      storeDeliveryDay: store.delivery_day,
-      district: store.district,
-    });
-    deliveryLabel = formatNextDeliveryLabel(day);
-    storeName = store.name;
-    priceListId = (store.price_list_id as string | null) ?? null;
-  }
+  const deliveryLabel = store
+    ? formatNextDeliveryLabel(
+        resolveDeliveryDay({ storeDeliveryDay: store.delivery_day, district: store.district }),
+      )
+    : null;
 
   const rules = rulesForPriceList(
     (discountRows as unknown as DiscountRule[] | null) ?? [],
-    priceListId,
+    (store?.price_list_id as string | null) ?? null,
   );
-  // product_id → today's price, so a cart saved days ago gets re-priced.
-  const prices = priceRows
-    ? Object.fromEntries(priceRows.map((r) => [r.product_id, Number(r.effective_price) || 0]))
+
+  // product_id → what the store's catalog says today, so a cart saved
+  // days ago gets re-priced, re-categorised (deals) and stock-checked.
+  const catById = new Map(categories.map((c) => [c.id, c]));
+  const catalog: Record<string, CartProductInfo> | undefined = catalogRows
+    ? Object.fromEntries(
+        catalogRows.map((r) => {
+          const cat = r.category_id ? catById.get(r.category_id) : undefined;
+          return [
+            r.product_id,
+            {
+              price: Number(r.effective_price) || 0,
+              category_id: r.category_id ?? null,
+              image_url: r.image_url ?? null,
+              category_icon: categoryIconKey(cat ?? null),
+              stock: Number(r.stock) || 0,
+            } satisfies CartProductInfo,
+          ];
+        }),
+      )
     : undefined;
 
   // Map product_id → { name, image_url } for bonus-row rendering.
@@ -79,10 +97,7 @@ export default async function CartPage() {
         .map((r) => r.product_id as string),
     ),
   );
-  let productInfoById: Record<
-    string,
-    { name: string; image_url: string | null }
-  > = {};
+  let productInfoById: Record<string, { name: string; image_url: string | null }> = {};
   if (bonusProductIds.length > 0) {
     const { data: prods } = await supabase
       .from("products")
@@ -91,21 +106,19 @@ export default async function CartPage() {
     productInfoById = Object.fromEntries(
       (prods ?? []).map((p) => [
         p.id as string,
-        {
-          name: p.name as string,
-          image_url: (p.image_url as string | null) ?? null,
-        },
+        { name: p.name as string, image_url: (p.image_url as string | null) ?? null },
       ]),
     );
   }
 
   return (
     <CartView
+      storeId={supermarketId}
       deliveryLabel={deliveryLabel}
-      storeName={storeName}
+      storeName={store?.name ?? null}
       rules={rules}
       productInfoById={productInfoById}
-      prices={prices}
+      catalog={catalog}
     />
   );
 }

@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EbarimtTable, type EbarimtRow } from "@/components/admin/ebarimt-table";
@@ -98,33 +100,48 @@ export default async function EbarimtPage({ searchParams }: { searchParams: Sear
   const show: Show = SHOW.includes(sp.show as Show) ? (sp.show as Show) : "all";
   const supabase = await createClient();
 
+  // Every shipped order in the range — a single request stopped at 1,000.
   const [ordersRes, agentRes] = await Promise.all([
-    supabase
-      .from("orders")
-      .select(
-        "id, order_number, shipped_at, payment_method, subtotal, discount_total, store:supermarket_id(name, registry_number, ebarimt_tin, ebarimt_name), shipment:shipment_id(shipment_no, distributor:distributor_id(name))",
-      )
-      .in("status", ["shipped", "delivered"])
-      .gte("shipped_at", ubDayStart(from))
-      .lt("shipped_at", ubDayStart(addDays(to, 1)))
-      .order("shipped_at", { ascending: false })
-      .limit(1000),
+    fetchAll<OrderRow>(() =>
+      supabase
+        .from("orders")
+        .select(
+          "id, order_number, shipped_at, payment_method, subtotal, discount_total, store:supermarket_id(name, registry_number, ebarimt_tin, ebarimt_name), shipment:shipment_id(shipment_no, distributor:distributor_id(name))",
+        )
+        .in("status", ["shipped", "delivered"])
+        .gte("shipped_at", ubDayStart(from))
+        .lt("shipped_at", ubDayStart(addDays(to, 1)))
+        .order("shipped_at", { ascending: false })
+        .order("id"),
+    )
+      .then((data) => ({ data, error: null as { message: string } | null }))
+      .catch((e: Error) => ({ data: [] as OrderRow[], error: { message: e.message } })),
     supabase.from("ebarimt_agent_status").select("last_seen_at, posapi_ok, info, error").eq("id", "main").maybeSingle(),
   ]);
 
-  const setupError = ordersRes.error ?? agentRes.error;
-  const orders = (ordersRes.data ?? []) as unknown as OrderRow[];
+  let setupError: { message: string } | null = ordersRes.error ?? agentRes.error;
+  const orders = ordersRes.data;
 
+  // Receipts for those orders, a few requests side by side. A failed read
+  // must not show sent receipts as "not sent".
   const receipts: ReceiptRow[] = [];
   if (!setupError && orders.length > 0) {
-    for (let i = 0; i < orders.length; i += 200) {
-      const { data } = await supabase
-        .from("ebarimt_receipts")
-        .select("id, order_id, status, receipt_type, bill_id, lottery, error, total_amount, queued_at, sent_at, returned_at")
-        .in("order_id", orders.slice(i, i + 200).map((o) => o.id))
-        .order("queued_at", { ascending: false });
-      receipts.push(...((data ?? []) as ReceiptRow[]));
-    }
+    const chunks: string[][] = [];
+    for (let i = 0; i < orders.length; i += 150) chunks.push(orders.slice(i, i + 150).map((o) => o.id));
+    const parts = await Promise.all(
+      chunks.map((ids) =>
+        supabase
+          .from("ebarimt_receipts")
+          .select("id, order_id, status, receipt_type, bill_id, lottery, error, total_amount, queued_at, sent_at, returned_at")
+          .in("order_id", ids)
+          .order("queued_at", { ascending: false }),
+      ),
+    );
+    const failed = parts.find((p) => p.error);
+    if (failed?.error) setupError = { message: failed.error.message };
+    for (const p of parts) receipts.push(...((p.data ?? []) as ReceiptRow[]));
+    // Newest first across chunks, so "latest per order" below is right.
+    receipts.sort((a, b) => (a.queued_at < b.queued_at ? 1 : a.queued_at > b.queued_at ? -1 : 0));
   }
   // Newest receipt per order decides its state; older ones are history.
   const latest = new Map<string, ReceiptRow>();
@@ -179,6 +196,9 @@ export default async function EbarimtPage({ searchParams }: { searchParams: Sear
     }
   });
   const sentTotal = rows.filter((r) => r.receipt?.status === "sent").reduce((s, r) => s + r.amount, 0);
+  const agent = (agentRes.data as AgentStatus | null) ?? null;
+  // The table only polls while the e-Barimt computer is there to answer.
+  const agentOnline = !!agent?.last_seen_at && minutesSince(agent.last_seen_at) < 2;
 
   const link = (next: Partial<{ from: string; to: string; show: Show }>) => {
     const q = new URLSearchParams({ from: next.from ?? from, to: next.to ?? to, show: next.show ?? show });
@@ -194,17 +214,17 @@ export default async function EbarimtPage({ searchParams }: { searchParams: Sear
         </p>
       </div>
 
-      {!setupError && <AgentBanner agent={(agentRes.data as AgentStatus | null) ?? null} />}
+      {!setupError && <AgentBanner agent={agent} />}
 
       <Card className="mb-4 p-3">
         <form className="flex flex-wrap items-end gap-2" method="get">
           <label className="text-[12px] text-muted-foreground">
             Эхлэх
-            <input type="date" name="from" defaultValue={from} className="input-field mt-1 block h-9 w-40" />
+            <input type="date" name="from" defaultValue={from} className="field mt-1 block h-9 w-40" />
           </label>
           <label className="text-[12px] text-muted-foreground">
             Дуусах
-            <input type="date" name="to" defaultValue={to} className="input-field mt-1 block h-9 w-40" />
+            <input type="date" name="to" defaultValue={to} className="field mt-1 block h-9 w-40" />
           </label>
           <input type="hidden" name="show" value={show} />
           <Button type="submit" size="sm" className="h-9">
@@ -212,15 +232,9 @@ export default async function EbarimtPage({ searchParams }: { searchParams: Sear
           </Button>
           <div className="ml-auto flex flex-wrap gap-1.5">
             {SHOW.map((s) => (
-              <a
-                key={s}
-                href={link({ show: s })}
-                className={`rounded-full px-3 py-1.5 text-[12.5px] ring-1 ${
-                  s === show ? "bg-primary text-primary-foreground ring-primary" : "ring-border hover:bg-muted"
-                }`}
-              >
+              <Link key={s} href={link({ show: s })} className="chip h-9 px-3" data-active={s === show || undefined}>
                 {SHOW_LABELS[s]}
-              </a>
+              </Link>
             ))}
           </div>
         </form>
@@ -228,14 +242,16 @@ export default async function EbarimtPage({ searchParams }: { searchParams: Sear
 
       {setupError ? (
         <Card className="p-6 text-sm">
-          <div className="font-medium mb-1">Е-баримтын хүснэгтүүд бэлэн биш байна.</div>
-          <p className="text-muted-foreground">
-            Supabase SQL Editor дээр <code>docs/fixes/37-dispatch-and-ebarimt.sql</code>-ийг ажиллуулна уу.
-          </p>
+          <div className="font-medium mb-1">Е-баримтын мэдээллийг уншиж чадсангүй.</div>
+          {/relation|does not exist|schema cache/i.test(setupError.message) && (
+            <p className="text-muted-foreground">
+              Supabase SQL Editor дээр <code>docs/fixes/37-dispatch-and-ebarimt.sql</code>-ийг ажиллуулна уу.
+            </p>
+          )}
           <p className="text-muted-foreground mt-2 break-words">Алдаа: {setupError.message}</p>
         </Card>
       ) : (
-        <EbarimtTable rows={filtered} sentTotal={sentTotal} />
+        <EbarimtTable rows={filtered} sentTotal={sentTotal} agentOnline={agentOnline} />
       )}
     </div>
   );

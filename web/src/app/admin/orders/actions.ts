@@ -4,13 +4,9 @@ import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminGuardError } from "@/lib/auth";
-import {
-  NEXT_STATUS,
-  STATUS_LABELS,
-  type OrderStatus,
-} from "@/lib/order-status";
+import { NEXT_STATUS, type OrderStatus } from "@/lib/order-status";
 import { LIVE_STATUSES } from "@/lib/ebarimt";
-import { notify } from "@/lib/notify";
+import { notifyOrderStatus } from "@/lib/orders/status-notify";
 
 type Result = { error?: string };
 
@@ -43,7 +39,18 @@ export async function cancelOrder(id: string): Promise<Result> {
   if (await hasLiveReceipt(id)) {
     return { error: "Энэ захиалгад е-баримт илгээгдсэн байна. Эхлээд Е-баримт хуудсаас буцаана уу." };
   }
-  return setOrderStatus(id, "cancelled", ["pending", "confirmed", "shipped"]);
+  // An order on a run that already left (closed) stays linked to it, so
+  // the run's history shows what went on the truck. Documents and totals
+  // skip cancelled orders anyway.
+  const supabase = await createClient();
+  const { data: current } = await supabase
+    .from("orders")
+    .select("shipment:shipment_id(status)")
+    .eq("id", id)
+    .maybeSingle();
+  const onClosedRun =
+    (current as unknown as { shipment: { status: string } | null } | null)?.shipment?.status === "closed";
+  return setOrderStatus(id, "cancelled", ["pending", "confirmed", "shipped"], { keepShipment: onClosedRun });
 }
 
 export async function reopenOrder(id: string): Promise<Result> {
@@ -101,6 +108,7 @@ async function setOrderStatus(
   id: string,
   status: OrderStatus,
   from: OrderStatus[],
+  opts: { keepShipment?: boolean } = {},
 ): Promise<Result> {
   const supabase = await createClient();
 
@@ -109,50 +117,30 @@ async function setOrderStatus(
   if (status === "confirmed") update.confirmed_at = now;
   if (status === "shipped") update.shipped_at = now;
   if (status === "delivered") update.delivered_at = now;
-  // Cancelled or reopened orders leave their delivery run: they aren't
-  // going out with it, and the run can then be edited or deleted.
-  if (status === "cancelled" || status === "pending") update.shipment_id = null;
+  // Cancelled or reopened orders leave an OPEN delivery run: they aren't
+  // going out with it, and the run can then be edited or deleted. (A
+  // closed run keeps them — see cancelOrder.)
+  if ((status === "cancelled" && !opts.keepShipment) || status === "pending") update.shipment_id = null;
 
   const { data: row, error } = await supabase
     .from("orders")
     .update(update)
     .eq("id", id)
     .in("status", from)
-    .select("id, order_number, placed_by, profiles:placed_by(role)")
+    .select("id")
     .maybeSingle();
   if (error) return { error: error.message };
   if (!row) return { error: "Захиалгын төлөв өөрчлөгдсөн байна. Хуудсаа сэргээнэ үү." };
 
-  // The store hears about it in the background; staff don't need a push
-  // about orders they're handling themselves.
-  const placer = row as unknown as {
-    id: string;
-    order_number: string;
-    placed_by: string | null;
-    profiles: { role: string } | null;
-  };
-  if (placer.placed_by && placer.profiles?.role !== "admin") {
-    const role = placer.profiles?.role;
-    after(() =>
-      notify({
-        user_id: placer.placed_by!,
-        kind: "order_status",
-        title: `${placer.order_number} · ${STATUS_LABELS[status]}`,
-        body:
-          status === "cancelled"
-            ? "Захиалга цуцлагдсан."
-            : status === "delivered"
-              ? "Захиалга хүргэгдсэн."
-              : `Шинэ төлөв: ${STATUS_LABELS[status]}`,
-        href: role === "rep" ? `/rep/orders/${placer.id}` : `/orders/${placer.id}`,
-        order_id: placer.id,
-      }),
-    );
-  }
+  // The store's accounts (and the rep who entered it) hear about it in the
+  // background; staff don't need a push about orders they handle.
+  after(() => notifyOrderStatus([row.id as string], status));
 
   revalidatePath("/admin/orders");
   revalidatePath(`/admin/orders/${id}`);
   revalidatePath("/admin/dispatch");
+  revalidatePath("/admin/shipments");
+  revalidatePath("/admin/ebarimt");
   revalidatePath("/admin");
   return {};
 }

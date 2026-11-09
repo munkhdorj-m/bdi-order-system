@@ -18,39 +18,117 @@ export type CartItem = {
   qty: number;
 };
 
-// Optional scope so reps can keep a separate cart per store.
-// Buyer flow passes no scope → uses the default key.
-export type CartScope = { storeId?: string };
+/**
+ * Whose cart this is. A rep keeps one cart per store (`{ storeId }`); a
+ * store's own app keys its cart by its supermarket
+ * (`{ storeId, owner: "buyer" }`), so two shops signed in one after the
+ * other on the same phone never share a cart.
+ */
+export type CartScope = { storeId?: string; owner?: "rep" | "buyer" };
 
 const BASE_KEY = "bdi-cart-v1";
 const EVENT_NAME = "bdi-cart-change";
+const STORE_PREFIX = `${BASE_KEY}:store:`;
 
-function keyFor(scope?: CartScope): string {
-  return scope?.storeId ? `${BASE_KEY}:store:${scope.storeId}` : BASE_KEY;
+/** localStorage key of a cart. No scope = the old shared store cart. */
+export function cartKey(scope?: CartScope): string {
+  if (!scope?.storeId) return BASE_KEY;
+  return scope.owner === "buyer"
+    ? `${BASE_KEY}:buyer:${scope.storeId}`
+    : `${STORE_PREFIX}${scope.storeId}`;
 }
 
-function safeRead(scope?: CartScope): CartItem[] {
-  if (typeof window === "undefined") return [];
+/** Where a cart's checkout id is kept (lib/checkout-id.ts). */
+export function checkoutKey(scope?: CartScope): string {
+  return `bdi-checkout-v1:${cartKey(scope)}`;
+}
+
+export type CartChangeDetail = { key: string; lines: number; prevLines: number };
+
+// ---- Storage, mirrored in memory -------------------------------------
+//
+// Every card in the catalog reads the cart. Reading localStorage (and
+// parsing it) for each of them on every change was the slow part, so the
+// raw JSON is mirrored in memory and parsed once per change. Writes go
+// through write(); other tabs' writes arrive as "storage" events.
+
+const rawCache = new Map<string, string | null>();
+
+function readRaw(key: string): string | null {
+  if (rawCache.has(key)) return rawCache.get(key) ?? null;
+  let raw: string | null = null;
   try {
-    const raw = localStorage.getItem(keyFor(scope));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as CartItem[];
-    return Array.isArray(parsed) ? parsed : [];
+    raw = localStorage.getItem(key);
+  } catch {
+    raw = null;
+  }
+  rawCache.set(key, raw);
+  return raw;
+}
+
+function parseItems(raw: string | null): CartItem[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as CartItem[]) : [];
   } catch {
     return [];
   }
 }
 
-function safeWrite(items: CartItem[], scope?: CartScope) {
+/** A fresh, mutable copy of a cart. */
+function readItems(key: string): CartItem[] {
+  return parseItems(readRaw(key));
+}
+
+type Snapshot = { raw: string | null; items: CartItem[]; qty: Map<string, number> };
+
+const EMPTY_CART: CartItem[] = [];
+const EMPTY_SNAPSHOT: Snapshot = { raw: null, items: EMPTY_CART, qty: new Map() };
+const snapshots = new Map<string, Snapshot>();
+
+/**
+ * The parsed cart for a key — the SAME object until the cart changes, as
+ * useSyncExternalStore requires (a fresh array each read would loop).
+ */
+function snapshotFor(key: string): Snapshot {
+  const raw = readRaw(key);
+  if (raw === null) return EMPTY_SNAPSHOT;
+  const cached = snapshots.get(key);
+  if (cached && cached.raw === raw) return cached;
+  const items = parseItems(raw);
+  const snap: Snapshot = {
+    raw,
+    items: items.length > 0 ? items : EMPTY_CART,
+    qty: new Map(items.map((i) => [i.product_id, i.qty])),
+  };
+  snapshots.set(key, snap);
+  return snap;
+}
+
+function write(items: CartItem[], scope?: CartScope): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(keyFor(scope), JSON.stringify(items));
+  const key = cartKey(scope);
+  const prevLines = snapshotFor(key).items.length;
+  const raw = JSON.stringify(items);
+  rawCache.set(key, raw);
+  try {
+    localStorage.setItem(key, raw);
+  } catch {
+    // Storage full or blocked: the in-memory copy still works for this visit.
+  }
   window.dispatchEvent(
-    new CustomEvent(EVENT_NAME, { detail: { key: keyFor(scope) } }),
+    new CustomEvent<CartChangeDetail>(EVENT_NAME, {
+      detail: { key, lines: items.length, prevLines },
+    }),
   );
 }
 
+// ---- Changes ---------------------------------------------------------
+
 export function getCart(scope?: CartScope): CartItem[] {
-  return safeRead(scope);
+  if (typeof window === "undefined") return [];
+  return readItems(cartKey(scope));
 }
 
 export function addToCart(
@@ -73,7 +151,7 @@ export function addToCart(
   } else {
     items.push({ ...item, qty });
   }
-  safeWrite(items, scope);
+  write(items, scope);
   return items;
 }
 
@@ -87,7 +165,7 @@ export function updateQty(
     : getCart(scope).map((i) =>
         i.product_id === productId ? { ...i, qty: Math.floor(qty) } : i,
       );
-  safeWrite(next, scope);
+  write(next, scope);
   return next;
 }
 
@@ -95,149 +173,255 @@ export function removeFromCart(
   productId: string,
   scope?: CartScope,
 ): CartItem[] {
-  const next = getCart(scope).filter((i) => i.product_id !== productId);
-  safeWrite(next, scope);
+  return removeManyFromCart([productId], scope);
+}
+
+export function removeManyFromCart(
+  productIds: string[],
+  scope?: CartScope,
+): CartItem[] {
+  const drop = new Set(productIds);
+  const next = getCart(scope).filter((i) => !drop.has(i.product_id));
+  write(next, scope);
   return next;
 }
 
-export function clearCart(scope?: CartScope): void {
-  safeWrite([], scope);
+/** Put a removed line back where it was (the "Буцаах" on the toast). */
+export function restoreCartItem(item: CartItem, index: number, scope?: CartScope): void {
+  const items = getCart(scope).filter((i) => i.product_id !== item.product_id);
+  items.splice(Math.min(Math.max(index, 0), items.length), 0, item);
+  write(items, scope);
 }
 
+/** Empty the cart — after an order is sent — and forget its checkout id. */
+export function clearCart(scope?: CartScope): void {
+  write([], scope);
+  try {
+    localStorage.removeItem(checkoutKey(scope));
+  } catch {
+    // ignore
+  }
+}
+
+/** What the server knows about a product today, to bring a saved cart up to date. */
+export type CartProductInfo = {
+  price: number;
+  category_id: string | null;
+  image_url: string | null;
+  category_icon?: string | null;
+  /** Pieces in stock. ≤ 0 = sold out (a store can't order it). */
+  stock?: number;
+};
+
 /**
- * Bring a saved cart in line with today's prices (product_id → price for
- * this store): re-price lines whose price changed and drop products no
- * longer sold. A cart can sit on a phone for days; without this its total
- * would differ from the order the server actually prices.
+ * Bring a saved cart in line with today's catalog (product_id → info for
+ * this store): price, category (deals match on it) and photo, and drop
+ * products no longer sold. A cart can sit on a phone for days; without
+ * this its total would differ from the order the server actually prices.
  */
-export function syncCartPrices(
-  prices: Record<string, number>,
+export function syncCart(
+  catalog: Record<string, CartProductInfo>,
   scope?: CartScope,
 ): { repriced: number; removed: string[] } {
   const items = getCart(scope);
   let repriced = 0;
+  let changed = false;
   const removed: string[] = [];
   const next: CartItem[] = [];
   for (const it of items) {
-    const price = prices[it.product_id];
-    if (price === undefined) {
+    const info = catalog[it.product_id];
+    if (!info) {
       removed.push(it.name);
-    } else if (Number(price) !== Number(it.unit_price)) {
-      repriced++;
-      next.push({ ...it, unit_price: Number(price) });
-    } else {
-      next.push(it);
+      changed = true;
+      continue;
     }
+    const price = Number(info.price) || 0;
+    const updated: CartItem = {
+      ...it,
+      unit_price: price,
+      category_id: info.category_id ?? null,
+      image_url: info.image_url ?? null,
+      category_icon: info.category_icon ?? it.category_icon ?? null,
+    };
+    if (Number(it.unit_price) !== price) repriced++;
+    if (
+      updated.unit_price !== it.unit_price ||
+      updated.category_id !== (it.category_id ?? null) ||
+      updated.image_url !== (it.image_url ?? null) ||
+      updated.category_icon !== (it.category_icon ?? null)
+    ) {
+      changed = true;
+    }
+    next.push(updated);
   }
-  if (repriced > 0 || removed.length > 0) safeWrite(next, scope);
+  if (changed) write(next, scope);
   return { repriced, removed };
 }
 
-export function totalQty(items?: CartItem[]): number {
-  return (items ?? getCart()).reduce((sum, i) => sum + i.qty, 0);
+/**
+ * Before carts were keyed per shop, a store's cart lived under the bare
+ * key. Move it — once — to this shop's key, so the update empties nobody's
+ * cart. Safe to call repeatedly.
+ */
+export function adoptLegacyCart(scope: CartScope): void {
+  if (typeof window === "undefined" || !scope.storeId) return;
+  const legacy = readRaw(BASE_KEY);
+  if (legacy === null) return;
+  const hadOwn = getCart(scope).length > 0;
+  rawCache.set(BASE_KEY, null);
+  try {
+    localStorage.removeItem(BASE_KEY);
+    localStorage.removeItem(`bdi-checkout-v1:${BASE_KEY}`);
+  } catch {
+    // ignore
+  }
+  const items = parseItems(legacy);
+  if (!hadOwn && items.length > 0) write(items, scope);
 }
 
-export function totalAmount(items?: CartItem[]): number {
-  return (items ?? getCart()).reduce((sum, i) => sum + i.qty * i.unit_price, 0);
+export function totalQty(items: CartItem[]): number {
+  return items.reduce((sum, i) => sum + i.qty, 0);
+}
+
+export function totalAmount(items: CartItem[]): number {
+  return items.reduce((sum, i) => sum + i.qty * i.unit_price, 0);
 }
 
 export { formatMnt } from "./format";
 
-// ---- useCart: useSyncExternalStore plumbing -------------------------
+// ---- Hooks (useSyncExternalStore) ------------------------------------
 //
-// The cart lives in localStorage and broadcasts changes via a custom
-// event — a textbook external store, so useSyncExternalStore is the
-// right hook (the previous useState+useEffect version triggered the
-// react-hooks/set-state-in-effect lint error and an extra render).
-//
-// getSnapshot must return a referentially-stable value when nothing
-// changed, or React loops forever re-rendering. localStorage hands us a
-// fresh string each read, so we cache the parsed array per storage key
-// and only re-parse when the raw JSON actually differs.
+// One pair of window listeners for the whole app; components register
+// per cart key. Hooks return small snapshots (a number where possible), so
+// tapping "+" on one product re-renders that product's card, not all.
 
-const EMPTY_CART: CartItem[] = [];
-const snapshotCache = new Map<string, { raw: string; items: CartItem[] }>();
+const keyListeners = new Map<string, Set<() => void>>();
+const anyListeners = new Set<() => void>();
+let wired = false;
 
-function getCartSnapshot(key: string): CartItem[] {
-  const raw = localStorage.getItem(key);
-  if (raw === null) return EMPTY_CART;
-  const cached = snapshotCache.get(key);
-  if (cached && cached.raw === raw) return cached.items;
-  let items: CartItem[];
-  try {
-    const parsed = JSON.parse(raw) as CartItem[];
-    items = Array.isArray(parsed) ? parsed : EMPTY_CART;
-  } catch {
-    items = EMPTY_CART;
+function notify(key: string | null): void {
+  if (key === null) keyListeners.forEach((set) => set.forEach((fn) => fn()));
+  else keyListeners.get(key)?.forEach((fn) => fn());
+  anyListeners.forEach((fn) => fn());
+}
+
+function wire(): void {
+  if (wired || typeof window === "undefined") return;
+  wired = true;
+  window.addEventListener(EVENT_NAME, (e) => {
+    const detail = (e as CustomEvent<CartChangeDetail>).detail;
+    notify(detail?.key ?? null);
+  });
+  // Another tab changed a cart.
+  window.addEventListener("storage", (e) => {
+    if (e.key === null) {
+      rawCache.clear();
+      notify(null);
+      return;
+    }
+    if (!e.key.startsWith(BASE_KEY)) return;
+    rawCache.set(e.key, e.newValue);
+    notify(e.key);
+  });
+  // Back from the browser's page cache: other tabs may have changed the
+  // cart meanwhile, without us hearing — read storage again.
+  window.addEventListener("pageshow", (e) => {
+    if (!e.persisted) return;
+    rawCache.clear();
+    notify(null);
+  });
+}
+
+function subscribeKey(key: string, onChange: () => void): () => void {
+  wire();
+  let set = keyListeners.get(key);
+  if (!set) {
+    set = new Set();
+    keyListeners.set(key, set);
   }
-  snapshotCache.set(key, { raw, items });
-  return items;
-}
-
-function subscribeToCart(key: string, onChange: () => void): () => void {
-  const refresh = (e?: Event) => {
-    // Same-window writes tag the event with the storage key they
-    // touched — skip changes for other scopes. Cross-tab "storage"
-    // events have no detail; let those through unconditionally.
-    const detail = (e as CustomEvent | undefined)?.detail as
-      | { key?: string }
-      | undefined;
-    if (detail?.key && detail.key !== key) return;
-    onChange();
-  };
-  window.addEventListener(EVENT_NAME, refresh);
-  window.addEventListener("storage", refresh);
+  set.add(onChange);
   return () => {
-    window.removeEventListener(EVENT_NAME, refresh);
-    window.removeEventListener("storage", refresh);
+    set.delete(onChange);
   };
 }
 
+function subscribeAny(onChange: () => void): () => void {
+  wire();
+  anyListeners.add(onChange);
+  return () => {
+    anyListeners.delete(onChange);
+  };
+}
+
+const serverEmptyCart = () => EMPTY_CART;
+const serverZero = () => 0;
+
+/** The whole cart. Re-renders on any change to it. */
 export function useCart(scope?: CartScope): CartItem[] {
-  const key = keyFor(scope);
-  const subscribe = useCallback(
-    (onChange: () => void) => subscribeToCart(key, onChange),
-    [key],
+  const key = cartKey(scope);
+  const subscribe = useCallback((fn: () => void) => subscribeKey(key, fn), [key]);
+  const getSnapshot = useCallback(() => snapshotFor(key).items, [key]);
+  return useSyncExternalStore(subscribe, getSnapshot, serverEmptyCart);
+}
+
+/** How many of one product are in the cart. Re-renders only when that number changes. */
+export function useCartQty(productId: string, scope?: CartScope): number {
+  const key = cartKey(scope);
+  const subscribe = useCallback((fn: () => void) => subscribeKey(key, fn), [key]);
+  const getSnapshot = useCallback(
+    () => snapshotFor(key).qty.get(productId) ?? 0,
+    [key, productId],
   );
-  const getSnapshot = useCallback(() => getCartSnapshot(key), [key]);
-  return useSyncExternalStore(subscribe, getSnapshot, () => EMPTY_CART);
+  return useSyncExternalStore(subscribe, getSnapshot, serverZero);
+}
+
+/** How many different products are in the cart. */
+export function useCartLineCount(scope?: CartScope): number {
+  const key = cartKey(scope);
+  const subscribe = useCallback((fn: () => void) => subscribeKey(key, fn), [key]);
+  const getSnapshot = useCallback(() => snapshotFor(key).items.length, [key]);
+  return useSyncExternalStore(subscribe, getSnapshot, serverZero);
+}
+
+/** Run `onGrow` whenever a new product lands in this cart (not on load). */
+export function subscribeCartGrowth(scope: CartScope | undefined, onGrow: () => void): () => void {
+  const key = cartKey(scope);
+  const handler = (e: Event) => {
+    const d = (e as CustomEvent<CartChangeDetail>).detail;
+    if (d?.key === key && d.lines > d.prevLines) onGrow();
+  };
+  window.addEventListener(EVENT_NAME, handler);
+  return () => window.removeEventListener(EVENT_NAME, handler);
 }
 
 // ---- Every store's cart at once (rep home) ---------------------------
 
-const STORE_PREFIX = `${BASE_KEY}:store:`;
-
 // "id:lines|id:lines" — a string, so the snapshot compares by value.
 function storeCartSizesSnapshot(): string {
   const parts: string[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (!key?.startsWith(STORE_PREFIX)) continue;
-    const lines = getCartSnapshot(key).length;
-    if (lines > 0) parts.push(`${key.slice(STORE_PREFIX.length)}:${lines}`);
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith(STORE_PREFIX)) continue;
+      const lines = snapshotFor(key).items.length;
+      if (lines > 0) parts.push(`${key.slice(STORE_PREFIX.length)}:${lines}`);
+    }
+  } catch {
+    // storage blocked: no carts to show
   }
   return parts.sort().join("|");
 }
 
-function subscribeAllCarts(onChange: () => void): () => void {
-  window.addEventListener(EVENT_NAME, onChange);
-  window.addEventListener("storage", onChange);
-  return () => {
-    window.removeEventListener(EVENT_NAME, onChange);
-    window.removeEventListener("storage", onChange);
-  };
-}
-
 /** How many products sit in each store's cart on this phone (rep flow). */
 export function useStoreCartSizes(): Record<string, number> {
-  const snap = useSyncExternalStore(subscribeAllCarts, storeCartSizesSnapshot, () => "");
+  const snap = useSyncExternalStore(subscribeAny, storeCartSizesSnapshot, () => "");
   return useMemo(
     () =>
       Object.fromEntries(
         snap
           ? snap.split("|").map((part) => {
-              const [id, n] = part.split(":");
-              return [id, Number(n)] as const;
+              const cut = part.lastIndexOf(":");
+              return [part.slice(0, cut), Number(part.slice(cut + 1))] as const;
             })
           : [],
       ),

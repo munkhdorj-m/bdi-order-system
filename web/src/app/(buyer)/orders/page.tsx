@@ -1,15 +1,19 @@
 import Link from "next/link";
-import { Check, ClipboardList, Clock } from "lucide-react";
+import { CalendarDays, Check, ClipboardList, Clock, ShoppingBag } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { Button } from "@/components/ui/button";
+import { OrderStatusPill } from "@/components/admin/order-status-pill";
 import { formatMnt } from "@/lib/format";
+import { formatDeliveryDay } from "@/lib/delivery";
+import { todayUb, ubDayOf } from "@/lib/dispatch";
 import {
   ACTIVE_STATUSES,
-  STATUS_LABELS,
   STATUS_STEPS,
   isFinal,
   statusStepIndex,
   type OrderStatus,
 } from "@/lib/order-status";
+import { formatDayMonthTime } from "@/lib/datetime";
 
 type OrderRow = {
   id: string;
@@ -21,41 +25,38 @@ type OrderRow = {
   confirmed_at: string | null;
   shipped_at: string | null;
   delivered_at: string | null;
+  delivery_date: string | null;
   /** Supabase aggregate join — array with one {count} entry. */
   order_items: Array<{ count: number }>;
 };
 
 type FilterKey = "active" | "delivered" | "all";
 
-type SearchParams = Promise<{ status?: string }>;
+type SearchParams = Promise<{ status?: string; n?: string }>;
+
+/** Orders per page; "Цааш үзэх" shows this many more. */
+const PAGE = 20;
+const MAX_ROWS = 300;
 
 function parseFilter(v: string | undefined): FilterKey {
   return v === "delivered" || v === "all" ? v : "active";
 }
 
+// "11.08 13:05" (mn-MN Intl would print "XI/08").
 function formatShortDateTime(iso: string) {
-  return new Date(iso).toLocaleString("mn-MN", {
-    timeZone: "Asia/Ulaanbaatar",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDayMonthTime(iso);
 }
 
-function formatRelativeDate(iso: string): string {
-  const d = new Date(iso);
-  const diffMs = Date.now() - d.getTime();
-  const day = Math.floor(diffMs / 86_400_000);
-  if (day < 1) return "өнөөдөр";
-  if (day < 2) return "өчигдөр";
-  if (day < 30) return `${day} өдрийн өмнө`;
-  return d.toLocaleDateString("mn-MN", {
-    timeZone: "Asia/Ulaanbaatar",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+/** "өнөөдөр" / "өчигдөр" / "5 өдрийн өмнө" — counted in Ulaanbaatar days. */
+function relativeDay(iso: string): string {
+  const day = ubDayOf(iso);
+  const diff = Math.round(
+    (Date.parse(`${todayUb()}T00:00:00Z`) - Date.parse(`${day}T00:00:00Z`)) / 86_400_000,
+  );
+  if (diff <= 0) return "өнөөдөр";
+  if (diff === 1) return "өчигдөр";
+  if (diff < 30) return `${diff} өдрийн өмнө`;
+  return day;
 }
 
 /**
@@ -67,48 +68,21 @@ function etaLine(o: OrderRow): string {
     case "pending":
       return "BDI баталгаажуулахыг хүлээж байна";
     case "confirmed":
-      return o.confirmed_at
-        ? `${formatRelativeDate(o.confirmed_at)} баталгаажсан`
-        : "Баталгаажсан";
+      return o.confirmed_at ? `${relativeDay(o.confirmed_at)} баталгаажсан` : "Баталгаажсан";
     case "shipped":
-      return o.shipped_at
-        ? `${formatRelativeDate(o.shipped_at)} илгээгдсэн`
-        : "Хүргэлтэнд гарсан";
+      return o.shipped_at ? `${relativeDay(o.shipped_at)} илгээгдсэн` : "Хүргэлтэнд гарсан";
     case "delivered":
-      return o.delivered_at
-        ? `${formatRelativeDate(o.delivered_at)} хүргэгдсэн`
-        : "Хүргэгдсэн";
+      return o.delivered_at ? `${relativeDay(o.delivered_at)} хүргэгдсэн` : "Хүргэгдсэн";
     case "cancelled":
       return "Захиалга цуцлагдсан";
   }
 }
 
-const STATUS_PILL: Record<OrderStatus, string> = {
-  pending:
-    "bg-amber-100 text-amber-900 ring-amber-300/60 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-800/60",
-  confirmed:
-    "bg-[color-mix(in_oklch,var(--primary)_10%,var(--card))] text-primary ring-[color-mix(in_oklch,var(--primary)_30%,transparent)]",
-  shipped:
-    "bg-[color-mix(in_oklch,var(--primary)_10%,var(--card))] text-primary ring-[color-mix(in_oklch,var(--primary)_30%,transparent)]",
-  delivered:
-    "bg-emerald-50 text-emerald-800 ring-emerald-300/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-800/60",
-  cancelled:
-    "bg-rose-50 text-rose-700 ring-rose-300/60 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-800/60",
-};
-
-const STATUS_DOT: Record<OrderStatus, string> = {
-  pending: "bg-amber-500",
-  confirmed: "bg-primary",
-  shipped: "bg-primary",
-  delivered: "bg-emerald-500",
-  cancelled: "bg-rose-500",
-};
-
 function ProgressBar({ status }: { status: OrderStatus }) {
   // For cancelled orders, no step is lit.
   const step = status === "cancelled" ? -1 : statusStepIndex(status);
   return (
-    <div className="flex gap-1 mt-3">
+    <div className="flex gap-1 mt-3" aria-hidden="true">
       {STATUS_STEPS.map((_, i) => (
         <div
           key={i}
@@ -128,6 +102,8 @@ function ProgressBar({ status }: { status: OrderStatus }) {
 function OrderCard({ o }: { o: OrderRow }) {
   const items = o.order_items?.[0]?.count ?? 0;
   const StatusIcon = isFinal(o.status) ? Check : Clock;
+  const net = (Number(o.subtotal) || 0) - (Number(o.discount_total) || 0);
+  const planned = o.delivery_date && ACTIVE_STATUSES.includes(o.status) ? o.delivery_date : null;
 
   return (
     <Link
@@ -137,35 +113,34 @@ function OrderCard({ o }: { o: OrderRow }) {
       <div className="p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-muted-foreground">
-              Захиалга
-            </div>
-            <div className="text-[14px] font-bold tracking-tight font-mono">
-              {o.order_number}
-            </div>
+            <div className="text-[12px] font-bold text-muted-foreground">Захиалга</div>
+            <div className="text-[15px] font-bold tracking-tight font-mono">{o.order_number}</div>
           </div>
-          <div
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ring-1 text-[11px] font-bold ${STATUS_PILL[o.status]}`}
-          >
-            <span className={`size-1.5 rounded-full ${STATUS_DOT[o.status]}`} />
-            {STATUS_LABELS[o.status]}
-          </div>
+          <OrderStatusPill status={o.status} />
         </div>
 
-        <div className="mt-2.5 flex items-center justify-between text-[12px] text-muted-foreground">
+        <div className="mt-2.5 flex items-center justify-between text-[13px] text-muted-foreground">
           <span>
             {formatShortDateTime(o.created_at)} · {items} бараа
           </span>
-          <span className="font-display text-[15px] font-semibold text-foreground tabular-nums">
-            {formatMnt(o.subtotal - (o.discount_total ?? 0))}
+          <span className="font-display text-[16px] font-semibold text-foreground tabular-nums">
+            {formatMnt(net)}
           </span>
         </div>
 
         <ProgressBar status={o.status} />
 
-        <div className="mt-2.5 flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
-          <StatusIcon className="h-3.5 w-3.5" strokeWidth={2.2} />
-          <span>{etaLine(o)}</span>
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <StatusIcon className="h-3.5 w-3.5" strokeWidth={2.2} />
+            {etaLine(o)}
+          </span>
+          {planned && (
+            <span className="inline-flex items-center gap-1.5 font-semibold text-primary">
+              <CalendarDays className="h-3.5 w-3.5" strokeWidth={2.2} />
+              Хүргэх: {formatDeliveryDay(planned)}
+            </span>
+          )}
         </div>
       </div>
     </Link>
@@ -179,14 +154,17 @@ export default async function BuyerOrdersPage({
 }) {
   const sp = await searchParams;
   const filter = parseFilter(sp.status);
+  const limit = Math.min(MAX_ROWS, Math.max(PAGE, Math.floor(Number(sp.n) || PAGE)));
 
   const supabase = await createClient();
   let query = supabase
     .from("orders")
     .select(
-      "id, order_number, status, subtotal, discount_total, created_at, confirmed_at, shipped_at, delivered_at, order_items(count)",
+      "id, order_number, status, subtotal, discount_total, created_at, confirmed_at, shipped_at, delivered_at, delivery_date, order_items(count)",
     )
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    // One extra row tells whether there's more to show.
+    .range(0, limit);
 
   if (filter === "active") {
     query = query.in("status", ACTIVE_STATUSES);
@@ -194,22 +172,18 @@ export default async function BuyerOrdersPage({
     query = query.eq("status", "delivered");
   }
 
-  const { data } = await query;
-  const rows = (data as unknown as OrderRow[]) ?? [];
-
-  // Tab counts — derived from the "all" set so the badge stays honest
-  // regardless of which tab the buyer is on. Extra round-trip is cheap and
-  // gets cached server-side.
-  let activeCount = 0;
-  if (filter !== "all") {
-    const { count } = await supabase
+  // The list and the "Идэвхтэй" badge count in one round trip.
+  const [{ data }, { count }] = await Promise.all([
+    query,
+    supabase
       .from("orders")
-      .select("*", { count: "exact", head: true })
-      .in("status", ACTIVE_STATUSES);
-    activeCount = count ?? 0;
-  } else {
-    activeCount = rows.filter((r) => ACTIVE_STATUSES.includes(r.status)).length;
-  }
+      .select("id", { count: "exact", head: true })
+      .in("status", ACTIVE_STATUSES),
+  ]);
+  const all = (data as unknown as OrderRow[]) ?? [];
+  const hasMore = all.length > limit;
+  const rows = hasMore ? all.slice(0, limit) : all;
+  const activeCount = count ?? 0;
 
   const tabs: { key: FilterKey; label: string; badge?: number }[] = [
     { key: "active", label: "Идэвхтэй", badge: activeCount || undefined },
@@ -217,19 +191,31 @@ export default async function BuyerOrdersPage({
     { key: "all", label: "Бүгд" },
   ];
 
+  const hrefFor = (key: FilterKey, n?: number) => {
+    const params = new URLSearchParams();
+    if (key !== "active") params.set("status", key);
+    if (n) params.set("n", String(n));
+    const qs = params.toString();
+    return qs ? `/orders?${qs}` : "/orders";
+  };
+
   return (
     <div className="px-3 sm:px-4 py-4 max-w-2xl mx-auto">
       <h1 className="text-[22px] font-bold tracking-tight">Захиалгууд</h1>
 
-      {/* Filter tabs — pill style, primary when active. URL-driven so the
-          state survives reloads and back/forward navigation. */}
+      {/* Filter tabs — URL-driven so the state survives reloads and
+          back/forward navigation. */}
       <div className="mt-3 flex flex-wrap gap-2">
         {tabs.map((t) => {
           const active = t.key === filter;
-          const href =
-            t.key === "active" ? "/orders" : `/orders?status=${t.key}`;
           return (
-            <Link key={t.key} href={href} className="chip" data-active={active || undefined}>
+            <Link
+              key={t.key}
+              href={hrefFor(t.key)}
+              className="chip h-10"
+              data-active={active || undefined}
+              aria-current={active ? "page" : undefined}
+            >
               {t.label}
               {t.badge != null && (
                 <span className={`tabular-nums ${active ? "opacity-80" : "text-muted-foreground"}`}>
@@ -244,18 +230,29 @@ export default async function BuyerOrdersPage({
       {rows.length === 0 ? (
         <div className="py-16 text-center">
           <ClipboardList className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-          <p className="text-sm text-muted-foreground">
-            {filter === "active"
-              ? "Идэвхтэй захиалга алга байна."
-              : "Захиалга алга байна."}
+          <p className="text-[14px] text-muted-foreground">
+            {filter === "active" ? "Идэвхтэй захиалга алга байна." : "Захиалга алга байна."}
           </p>
           {/* Dead-ends frustrate — always offer the obvious next step. */}
+          <Button asChild variant="gold" size="lg" className="mt-5">
+            <Link href="/catalog">
+              <ShoppingBag className="size-4" />
+              Захиалга өгөх
+            </Link>
+          </Button>
         </div>
       ) : (
         <div className="mt-4 flex flex-col gap-2.5">
           {rows.map((o) => (
             <OrderCard key={o.id} o={o} />
           ))}
+          {hasMore && (
+            <Button asChild variant="outline" size="lg" className="mt-1">
+              <Link href={hrefFor(filter, limit + PAGE)} scroll={false}>
+                Цааш үзэх
+              </Link>
+            </Button>
+          )}
         </div>
       )}
     </div>

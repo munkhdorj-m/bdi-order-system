@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ApproveUserButton } from "@/components/admin/approve-user-button";
 
 type UserRow = {
   id: string;
@@ -17,12 +16,23 @@ type UserRow = {
 };
 
 /**
- * `active = false` covers two different people: a new sign-up waiting
- * for approval (a buyer with no store yet) and someone an admin switched
- * off. Only the first belongs under "Хүлээгдсэн" with an Approve button.
+ * Waiting for approval = a store user with no store yet (a new sign-up).
+ * Approving means giving them their store on the edit page. A user an
+ * admin switched off is "Идэвхгүй", not pending.
  */
-function isPending(u: Pick<UserRow, "active" | "role" | "supermarket_id">): boolean {
-  return !u.active && u.role === "buyer" && !u.supermarket_id;
+function isPending(u: Pick<UserRow, "role" | "supermarket_id">): boolean {
+  return u.role === "buyer" && !u.supermarket_id;
+}
+
+function AssignStoreLink({ id }: { id: string }) {
+  return (
+    <Link
+      href={`/admin/users/${id}`}
+      className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-[12.5px] font-bold text-primary-foreground shadow-sm hover:brightness-105 active:scale-[0.97]"
+    >
+      Дэлгүүр оноох
+    </Link>
+  );
 }
 
 type FilterKey = "all" | "pending" | "admin" | "rep" | "buyer";
@@ -91,7 +101,7 @@ export default async function AdminUsersPage({
         .order("role")
         .order("created_at", { ascending: false });
       if (filter === "pending") {
-        q = q.eq("active", false).eq("role", "buyer").is("supermarket_id", null);
+        q = q.eq("role", "buyer").is("supermarket_id", null);
       } else if (filter !== "all") {
         q = q.eq("role", filter);
       }
@@ -119,7 +129,6 @@ export default async function AdminUsersPage({
     supabase
       .from("profiles")
       .select("id", { count: "exact", head: true })
-      .eq("active", false)
       .eq("role", "buyer")
       .is("supermarket_id", null)
       .then((r) => r.count ?? 0),
@@ -129,7 +138,7 @@ export default async function AdminUsersPage({
 
   const tabs: { key: FilterKey; label: string; count: number }[] = [
     { key: "all", label: "Бүгд", count: allCount },
-    { key: "pending", label: "Хүлээгдсэн", count: pendingCount },
+    { key: "pending", label: "Хүлээгдэж буй", count: pendingCount },
     { key: "admin", label: "Админ", count: adminCount },
     { key: "rep", label: "Төлөөлөгч", count: repCount },
     { key: "buyer", label: "Худалдан авагч", count: buyerCount },
@@ -235,7 +244,7 @@ export default async function AdminUsersPage({
                   className="block p-3"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="size-9 rounded-full bg-gradient-to-br from-[oklch(0.7_0.13_263)] to-primary text-primary-foreground flex items-center justify-center text-[12px] font-bold shrink-0">
+                    <div className="size-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[12px] font-bold shrink-0">
                       {avatarInitial(u)}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -270,7 +279,7 @@ export default async function AdminUsersPage({
                         variant="outline"
                         className="h-4 px-1 text-[10px] border-amber-300 text-amber-700 bg-amber-50 dark:border-amber-800/60 dark:text-amber-300 dark:bg-amber-950/40"
                       >
-                        Хүлээгдсэн
+                        Хүлээгдэж буй
                       </Badge>
                     ) : !u.active ? (
                       <Badge variant="outline" className="h-4 px-1 text-[10px] text-muted-foreground">
@@ -281,10 +290,7 @@ export default async function AdminUsersPage({
                 </Link>
                 {isPending(u) && (
                   <div className="px-3 pb-3 -mt-1 flex justify-end">
-                    <ApproveUserButton
-                      userId={u.id}
-                      userLabel={u.full_name || u.phone || u.id.slice(0, 8)}
-                    />
+                    <AssignStoreLink id={u.id} />
                   </div>
                 )}
               </div>
@@ -314,7 +320,7 @@ export default async function AdminUsersPage({
                         href={`/admin/users/${u.id}`}
                         className="flex items-center gap-3 group/u"
                       >
-                        <div className="size-9 rounded-full bg-gradient-to-br from-[oklch(0.7_0.13_263)] to-primary text-primary-foreground flex items-center justify-center text-[12px] font-bold shrink-0">
+                        <div className="size-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[12px] font-bold shrink-0">
                           {avatarInitial(u)}
                         </div>
                         <div className="min-w-0">
@@ -357,14 +363,9 @@ export default async function AdminUsersPage({
                             variant="outline"
                             className="text-[10px] border-amber-300 text-amber-700 bg-amber-50 dark:border-amber-800/60 dark:text-amber-300 dark:bg-amber-950/40"
                           >
-                            Хүлээгдсэн
+                            Хүлээгдэж буй
                           </Badge>
-                          <ApproveUserButton
-                            userId={u.id}
-                            userLabel={
-                              u.full_name || u.phone || u.id.slice(0, 8)
-                            }
-                          />
+                          <AssignStoreLink id={u.id} />
                         </div>
                       ) : !u.active ? (
                         <Badge variant="outline" className="text-[10px] text-muted-foreground">

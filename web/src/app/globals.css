@@ -8,7 +8,8 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
+  /* No mono web font is loaded: system monospace, digits stay aligned. */
+  --font-mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, Consolas, monospace;
   --font-display: var(--font-display);
   --font-heading: var(--font-display);
   --color-gold: var(--gold);
@@ -45,6 +46,11 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  /* Elevation: shadow-card (resting cards), shadow-raised (hover, sticky
+     bars), shadow-float (popovers, floating cart bar). */
+  --shadow-card: var(--elev-1);
+  --shadow-raised: var(--elev-2);
+  --shadow-float: var(--elev-3);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -55,7 +61,7 @@
 }
 
 /*
- * "Тэнгэр ба алт" — sky and gold.
+ * "Тэнгэр ба алт 2.0" — sky and gold, refined (2026-11-08).
  *   cobalt  (--primary)  the brand: headers, navigation, confirm buttons
  *   gold    (--gold)     the shopping action: "Нэмэх", cart counts
  *   cool grey (--background) a crisp, neutral canvas; cards sit on it in
@@ -64,7 +70,7 @@
  * (amber/sky/violet/emerald/rose) stay separate from brand chrome.
  */
 :root {
-  --background: oklch(0.968 0.007 255);
+  --background: oklch(0.972 0.006 256);
   --foreground: oklch(0.22 0.045 268);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.22 0.045 268);
@@ -105,6 +111,10 @@
   --sidebar-accent-foreground: oklch(0.99 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.81 0.15 79);
+  /* Navy-tinted shadows: softer and "lit" compared with grey ones. */
+  --elev-1: 0 1px 2px rgb(16 28 72 / 0.05), 0 4px 14px -6px rgb(16 28 72 / 0.1);
+  --elev-2: 0 2px 4px rgb(16 28 72 / 0.06), 0 12px 28px -10px rgb(16 28 72 / 0.18);
+  --elev-3: 0 4px 10px rgb(16 28 72 / 0.08), 0 22px 48px -14px rgb(16 28 72 / 0.3);
 }
 
 .dark {
@@ -144,6 +154,9 @@
   --sidebar-accent-foreground: oklch(0.99 0 0);
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.83 0.14 80);
+  --elev-1: 0 1px 2px rgb(0 0 0 / 0.3);
+  --elev-2: 0 2px 6px rgb(0 0 0 / 0.35), 0 12px 28px -12px rgb(0 0 0 / 0.5);
+  --elev-3: 0 6px 16px rgb(0 0 0 / 0.4), 0 24px 52px -16px rgb(0 0 0 / 0.6);
 }
 
 @layer base {
@@ -200,18 +213,7 @@
 }
 
 @layer components {
-  /* Auth-page typography ramp (iOS-style "large title / body / caption" scale).
-     Tied to semantic foreground tokens so it works in dark mode. */
-  .text-large-title {
-    font-size: 1.75rem;
-    line-height: 1.15;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-  }
-  .text-body {
-    font-size: 0.9375rem;
-    line-height: 1.5;
-  }
+  /* Small text steps used on the sign-in screens. */
   .text-caption {
     font-size: 0.8125rem;
     line-height: 1.4;
@@ -245,46 +247,24 @@
     @apply bg-primary text-primary-foreground shadow-sm shadow-primary/25 ring-primary hover:bg-primary hover:text-primary-foreground;
   }
 
-  /* Primary CTA. Solid bg-primary is the base (so the button can never
-     render transparent even if the decorative overlay fails); a white-alpha
-     gradient on top gives it a lit, tactile top edge. */
+  /* The sign-in screens' main button (plain <button> in server forms):
+     the same soft rectangle and lit, tactile look as <Button>. */
   .btn-primary {
-    @apply h-11 px-5 rounded-full bg-primary text-primary-foreground text-sm font-bold inline-flex items-center justify-center gap-1.5 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all shadow-md shadow-primary/30;
-    background-image: linear-gradient(
-      180deg,
-      rgb(255 255 255 / 0.14),
-      rgb(255 255 255 / 0) 45%
-    );
+    @apply h-12 px-5 rounded-xl bg-primary text-primary-foreground text-[15px] font-bold inline-flex items-center justify-center gap-1.5 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-[filter,transform,box-shadow] duration-150;
+    background-image: linear-gradient(180deg, rgb(255 255 255 / 0.13), rgb(255 255 255 / 0) 55%);
+    box-shadow:
+      inset 0 -2px 0 rgb(0 0 0 / 0.16),
+      0 1px 2px rgb(16 28 72 / 0.2),
+      0 6px 14px -8px var(--primary);
   }
   .btn-primary:hover {
-    filter: brightness(1.07);
+    filter: brightness(1.06);
   }
 
-  /* Frosted-glass surface used by floating action bars (cart submit dock,
-     sticky footers). `-strong` ramps up the blur + opacity for surfaces that
-     need to clearly stand out from scrolling content underneath. */
-  .glass {
-    @apply bg-background/75 backdrop-blur-md supports-[backdrop-filter]:bg-background/60;
-  }
+  /* Frosted-glass surface for floating bars (cart dock, sticky footers,
+     tab bar): clearly separate from the content scrolling underneath. */
   .glass-strong {
     @apply bg-background/90 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/75;
-  }
-
-  /* Subtle brand-tinted gradient surface for hero buttons / featured CTAs. */
-  .gradient-primary {
-    background-image: linear-gradient(
-      135deg,
-      var(--primary),
-      color-mix(in oklch, var(--primary) 85%, white)
-    );
-    color: var(--primary-foreground);
-  }
-  .dark .gradient-primary {
-    background-image: linear-gradient(
-      135deg,
-      var(--primary),
-      color-mix(in oklch, var(--primary) 80%, black)
-    );
   }
 
   /* Full-bleed brand surface behind the auth screens. LITERAL color
@@ -301,8 +281,8 @@
     );
   }
 
-  /* Ambient brand wash for empty-canvas pages (auth, verify, empty
-     states): two soft radial blobs in opposite corners. Built from
+  /* Ambient brand wash for the /pending and /inactive pages: two soft
+     radial blobs in opposite corners. Built from
      var(--primary) so it adapts to dark mode automatically. */
   .bg-aurora {
     background-image:
@@ -318,13 +298,6 @@
       );
   }
 
-  /* Layered ambient+key shadow for floating surfaces (docks, popcards).
-     Reads softer than Tailwind's shadow-lg at similar visual weight. */
-  .shadow-soft {
-    box-shadow:
-      0 1px 2px rgb(0 0 0 / 0.05),
-      0 12px 32px -12px rgb(0 0 0 / 0.18);
-  }
 }
 
 @layer utilities {
@@ -385,16 +358,9 @@
 
   /* Fade variants used by modal/dialog/success-card surfaces that aren't
      covered by tw-animate-css's data-state lifecycle hooks. */
-  @keyframes fade-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
   @keyframes fade-in-scale {
     from { opacity: 0; transform: scale(0.94); }
     to { opacity: 1; transform: scale(1); }
-  }
-  .animate-fade-in {
-    animation: fade-in 0.18s ease-out;
   }
   .animate-fade-in-scale {
     animation: fade-in-scale 0.22s cubic-bezier(0.16, 1, 0.3, 1);
@@ -420,7 +386,6 @@
     .catalog-card-enter,
     .shimmer,
     .animate-cart-bounce,
-    .animate-fade-in,
     .animate-fade-in-scale,
     .page-enter {
       animation: none;
@@ -430,6 +395,21 @@
 /* Header widgets (search, deals, bell, theme, sign-out) sitting on the blue
    top bar. Unlayered on purpose: it has to outrank the light-surface
    utilities those same widgets use in the admin header. */
+.on-brand {
+  /* A touch of light from above and a hairline at the bottom, so the bar
+     reads as a polished surface rather than a flat block of blue. */
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--brand-bar) 86%, white) 0%,
+    var(--brand-bar) 100%
+  );
+  box-shadow:
+    inset 0 -1px 0 rgb(255 255 255 / 0.08),
+    0 10px 24px -18px rgb(10 20 60 / 0.7);
+}
+.dark .on-brand {
+  background-image: none;
+}
 .on-brand :is(button, a) {
   color: color-mix(in oklch, var(--brand-bar-foreground) 90%, transparent);
 }

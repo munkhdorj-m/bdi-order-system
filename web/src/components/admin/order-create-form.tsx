@@ -126,7 +126,12 @@ export function OrderCreateForm({
     [stores],
   );
 
+  // The store whose catalog we're waiting for. Switching stores quickly
+  // used to let an older, slower answer overwrite the newer store's prices.
+  const wantedStore = useRef(initialStore?.id ?? "");
+
   function pickStore(id: string) {
+    wantedStore.current = id;
     setStoreId(id);
     setQty({});
     setRows([]);
@@ -134,6 +139,7 @@ export function OrderCreateForm({
     if (!id) return;
     startLoading(async () => {
       const r = await loadStoreCatalog(id);
+      if (wantedStore.current !== id) return; // another store was picked meanwhile
       if (r.error) {
         toast.error(r.error);
         return;
@@ -273,6 +279,7 @@ export function OrderCreateForm({
           description: store?.name,
           action: { label: "Нээх", onClick: () => router.push(`/admin/orders/${r.orderId}`) },
         });
+        wantedStore.current = "";
         setStoreId("");
         setStore(null);
         setRows([]);
@@ -603,7 +610,7 @@ function OrderLine({
     >
       <div className="relative size-11 shrink-0 overflow-hidden rounded-lg bg-muted ring-1 ring-border">
         {r.image_url ? (
-          <Image src={r.image_url} alt="" fill sizes="44px" unoptimized className="object-cover" />
+          <Image src={r.image_url} alt="" fill sizes="44px" quality={85} className="object-cover" />
         ) : (
           <ProductPlaceholder visual={visual} size="sm" />
         )}

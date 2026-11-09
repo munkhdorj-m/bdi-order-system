@@ -8,6 +8,8 @@ import { RepHeader } from "@/components/rep/rep-header";
 import { formatMnt } from "@/lib/format";
 import { todayUb, ubDayStart } from "@/lib/dispatch";
 import { RepStoreCta } from "@/components/rep/rep-store-cta";
+import { formatDeliveryDay } from "@/lib/delivery";
+import { formatDayMonth } from "@/lib/datetime";
 
 type Params = Promise<{ id: string }>;
 
@@ -26,14 +28,13 @@ type OrderRow = {
   subtotal: number;
   discount_total: number | null;
   created_at: string;
+  /** Planned delivery day ("YYYY-MM-DD"), once the office schedules it. */
+  delivery_date: string | null;
 };
 
+// "11.08" (mn-MN Intl would print "XI/08").
 function formatShortDate(iso: string) {
-  return new Date(iso).toLocaleDateString("mn-MN", {
-    timeZone: "Asia/Ulaanbaatar",
-    month: "2-digit",
-    day: "2-digit",
-  });
+  return formatDayMonth(iso);
 }
 
 function storeInitial(name: string) {
@@ -57,10 +58,10 @@ export default async function RepStoreDetailPage({
         .from("supermarkets")
         .select("id, name, address, contact_phone, district")
         .eq("id", id)
-        .single(),
+        .maybeSingle(),
       supabase
         .from("orders")
-        .select("id, order_number, status, subtotal, discount_total, created_at")
+        .select("id, order_number, status, subtotal, discount_total, created_at, delivery_date")
         .eq("supermarket_id", id)
         .order("created_at", { ascending: false })
         .limit(10),
@@ -166,9 +167,12 @@ export default async function RepStoreDetailPage({
         {/* Recent orders list */}
         <div className="mt-5">
           <div className="flex items-center justify-between px-1 mb-2">
-            <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-muted-foreground">
+            <div className="text-[12px] font-bold text-muted-foreground">
               Сүүлийн захиалга
             </div>
+            <Link href="/rep/orders" className="-my-2 inline-flex h-10 items-center rounded-lg px-2 text-[13px] font-semibold text-primary">
+              Бүх захиалга
+            </Link>
           </div>
           {rows.length === 0 ? (
             <div className="rounded-2xl bg-card ring-1 ring-border px-4 py-8 text-center text-[13px] text-muted-foreground">
@@ -182,27 +186,23 @@ export default async function RepStoreDetailPage({
                   href={`/rep/orders/${o.id}`}
                   className="rounded-2xl bg-card ring-1 ring-border p-3 flex items-center gap-3 hover:shadow-sm transition-shadow"
                 >
-                  <span
-                    className={`size-2 rounded-full ${
-                      o.status === "delivered"
-                        ? "bg-emerald-500"
-                        : o.status === "cancelled"
-                          ? "bg-rose-500"
-                          : "bg-amber-500"
-                    }`}
-                  />
                   <div className="flex-1 min-w-0 leading-tight">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[12.5px] font-semibold font-mono">
+                      <span className="text-[13px] font-semibold font-mono">
                         {o.order_number}
                       </span>
                       <OrderStatusPill status={o.status} />
                     </div>
-                    <div className="text-[10.5px] text-muted-foreground mt-0.5">
+                    <div className="text-[12px] text-muted-foreground mt-1">
                       {formatShortDate(o.created_at)}
+                      {o.delivery_date && ACTIVE_STATUSES.includes(o.status) && (
+                        <span className="font-semibold text-primary">
+                          {" "}· Хүргэх: {formatDeliveryDay(o.delivery_date)}
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <div className="text-[13px] font-bold tabular-nums">
+                  <div className="text-[14px] font-bold tabular-nums">
                     {formatMnt(net(o))}
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -230,11 +230,11 @@ function StatTile({
       <div className="text-[16px] font-bold tabular-nums tracking-tight">
         {value}
       </div>
-      <div className="text-[10px] uppercase tracking-[0.08em] font-bold text-muted-foreground mt-0.5">
+      <div className="text-[12px] font-bold text-muted-foreground mt-0.5">
         {label}
       </div>
       {sub && (
-        <div className="text-[10px] text-muted-foreground">{sub}</div>
+        <div className="text-[12px] text-muted-foreground">{sub}</div>
       )}
     </div>
   );

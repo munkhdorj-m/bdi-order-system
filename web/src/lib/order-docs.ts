@@ -73,38 +73,67 @@ export type DocFilter =
   | { shipmentId: string }
   /** Every non-cancelled order planned for or shipped on a delivery day. */
   | { deliveryDate: string }
-  /** Orders placed between two UB days (inclusive); cancelled only if asked for. */
-  | { createdFrom: string; createdTo: string; status?: OrderStatus | null };
+  /**
+   * Orders placed between two UB days (inclusive); cancelled only if asked
+   * for. Optionally one status or several, and one store.
+   */
+  | {
+      createdFrom: string;
+      createdTo: string;
+      status?: OrderStatus | null;
+      statuses?: OrderStatus[] | null;
+      storeId?: string | null;
+    };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Order ids per request — keeps the `id=in.(…)` URL short. */
+const ID_CHUNK = 100;
 
 /** Load orders for documents, oldest order number first (pages past the 1,000-row cap). */
 export async function loadDocOrders(
   supabase: SupabaseClient,
   filter: DocFilter,
 ): Promise<DocOrder[]> {
-  if ("orderIds" in filter && filter.orderIds.length === 0) return [];
-  const build = () => {
-    let q = supabase.from("orders").select(SELECT);
-    if ("orderIds" in filter) {
-      q = q.in("id", filter.orderIds);
-    } else if ("shipmentId" in filter) {
-      q = q.eq("shipment_id", filter.shipmentId).neq("status", "cancelled");
-    } else if ("deliveryDate" in filter) {
-      q = q.eq("delivery_date", filter.deliveryDate).neq("status", "cancelled");
-    } else {
-      q = q
-        .gte("created_at", ubDayStart(filter.createdFrom))
-        .lt("created_at", ubDayStart(addDays(filter.createdTo, 1)));
-      q = filter.status ? q.eq("status", filter.status) : q.neq("status", "cancelled");
+  let rows: DocOrder[];
+  if ("orderIds" in filter) {
+    // Chosen orders: valid ids only, a few requests side by side.
+    const ids = [...new Set(filter.orderIds.map((s) => s.trim().toLowerCase()))].filter((s) => UUID_RE.test(s));
+    if (ids.length === 0) return [];
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += ID_CHUNK) chunks.push(ids.slice(i, i + ID_CHUNK));
+    const parts = await Promise.all(
+      chunks.map(async (chunk) => {
+        const { data, error } = await supabase.from("orders").select(SELECT).in("id", chunk);
+        if (error) throw new Error(error.message);
+        return (data ?? []) as unknown as DocOrder[];
+      }),
+    );
+    rows = parts.flat().sort((a, b) => a.order_number.localeCompare(b.order_number));
+  } else {
+    const build = () => {
+      let q = supabase.from("orders").select(SELECT);
+      if ("shipmentId" in filter) {
+        q = q.eq("shipment_id", filter.shipmentId).neq("status", "cancelled");
+      } else if ("deliveryDate" in filter) {
+        q = q.eq("delivery_date", filter.deliveryDate).neq("status", "cancelled");
+      } else {
+        q = q
+          .gte("created_at", ubDayStart(filter.createdFrom))
+          .lt("created_at", ubDayStart(addDays(filter.createdTo, 1)));
+        if (filter.storeId) q = q.eq("supermarket_id", filter.storeId);
+        if (filter.statuses?.length) q = q.in("status", filter.statuses);
+        else q = filter.status ? q.eq("status", filter.status) : q.neq("status", "cancelled");
+      }
+      return q.order("order_number", { ascending: true }).order("id");
+    };
+    rows = [];
+    for (let page = 0; page < 20; page++) {
+      const { data, error } = await build().range(page * 1000, page * 1000 + 999);
+      if (error) throw new Error(error.message);
+      rows.push(...((data ?? []) as unknown as DocOrder[]));
+      if (!data || data.length < 1000) break;
     }
-    return q.order("order_number", { ascending: true });
-  };
-
-  const rows: DocOrder[] = [];
-  for (let page = 0; page < 20; page++) {
-    const { data, error } = await build().range(page * 1000, page * 1000 + 999);
-    if (error) throw new Error(error.message);
-    rows.push(...((data ?? []) as unknown as DocOrder[]));
-    if (!data || data.length < 1000) break;
   }
   return rows.map((o) => ({
     ...o,

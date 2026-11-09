@@ -32,10 +32,13 @@ type OrderDetail = {
     contact_phone: string | null;
     profiles: { full_name: string | null; phone: string | null } | null;
   } | null;
+  /** Whoever placed the order — the store itself, a rep or an admin. */
   buyer: {
     full_name: string | null;
     phone: string | null;
+    role: "admin" | "rep" | "buyer" | null;
   } | null;
+  shipment: { id: string; shipment_no: number; delivery_date: string; status: string } | null;
   order_items: {
     id: string;
     product_name_snapshot: string;
@@ -73,7 +76,8 @@ export default async function AdminOrderDetailPage({
     .select(
       `id, order_number, status, subtotal, discount_total, payment_method, notes, created_at, confirmed_at, shipped_at, delivered_at, delivery_date, supermarket_id,
        supermarkets:supermarket_id(name, address, contact_phone, profiles:assigned_rep_id(full_name, phone)),
-       buyer:placed_by(full_name, phone),
+       buyer:placed_by(full_name, phone, role),
+       shipment:shipment_id(id, shipment_no, delivery_date, status),
        order_items(id, product_name_snapshot, qty, unit_price, line_total)`,
     )
     .eq("id", id)
@@ -81,6 +85,12 @@ export default async function AdminOrderDetailPage({
 
   if (error || !data) notFound();
   const order = data as unknown as OrderDetail;
+  // The store card shows the STORE's phone; for orders entered by staff the
+  // placer is the admin/rep, whose number used to show up there instead.
+  const storePhone = order.supermarkets?.contact_phone ?? null;
+  const placedByStore = order.buyer?.role === "buyer";
+  const placerRole =
+    order.buyer?.role === "admin" ? "админ" : order.buyer?.role === "rep" ? "төлөөлөгч" : "дэлгүүр";
 
   return (
     <div className="max-w-6xl">
@@ -148,7 +158,7 @@ export default async function AdminOrderDetailPage({
               )}
             </div>
             <div className="flex flex-col gap-1 text-[12.5px] min-w-0">
-              {order.buyer?.full_name && (
+              {placedByStore && order.buyer?.full_name && (
                 <div className="flex items-center gap-1.5">
                   <User
                     className="h-3.5 w-3.5 text-muted-foreground shrink-0"
@@ -157,17 +167,17 @@ export default async function AdminOrderDetailPage({
                   <span className="truncate">{order.buyer.full_name}</span>
                 </div>
               )}
-              {(order.buyer?.phone ?? order.supermarkets?.contact_phone) && (
+              {storePhone && (
                 <div className="flex items-center gap-1.5">
                   <Phone
                     className="h-3.5 w-3.5 text-muted-foreground shrink-0"
                     strokeWidth={2.2}
                   />
                   <a
-                    href={`tel:${(order.buyer?.phone ?? order.supermarkets?.contact_phone ?? "").replace(/\s/g, "")}`}
-                    className="font-mono text-[12px] hover:text-primary"
+                    href={`tel:${storePhone.replace(/\s/g, "")}`}
+                    className="inline-flex min-h-10 items-center font-mono text-[12px] hover:text-primary"
                   >
-                    {order.buyer?.phone ?? order.supermarkets?.contact_phone}
+                    {storePhone}
                   </a>
                 </div>
               )}
@@ -298,14 +308,22 @@ export default async function AdminOrderDetailPage({
           <div className="mt-5 pt-5 border-t border-border space-y-2 text-[12px]">
             <FactRow
               label="Захиалсан"
-              value={
-                order.buyer?.full_name ??
-                order.buyer?.phone ??
-                "—"
-              }
+              value={`${order.buyer?.full_name ?? order.buyer?.phone ?? "—"}${order.buyer ? ` (${placerRole})` : ""}`}
             />
             {order.buyer?.full_name && order.buyer.phone && (
-              <FactRow label="Утас" value={order.buyer.phone} mono />
+              <FactRow label="Захиалсан хүний утас" value={order.buyer.phone} mono />
+            )}
+            {order.shipment && (
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Ачилт</span>
+                <Link
+                  href={`/admin/dispatch?date=${order.shipment.delivery_date}&shipment=${order.shipment.id}`}
+                  className="font-semibold text-right hover:text-primary hover:underline"
+                >
+                  №{order.shipment.shipment_no} · {order.shipment.delivery_date}
+                  {order.shipment.status === "closed" ? " (хаасан)" : ""}
+                </Link>
+              </div>
             )}
             {order.supermarkets?.profiles?.full_name && (
               <FactRow

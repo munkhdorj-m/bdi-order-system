@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { countPerPriceList } from "./counts";
 
 type Row = {
   id: string;
@@ -22,29 +23,19 @@ type Row = {
 
 export default async function PriceListsPage() {
   const supabase = await createClient();
-  const [{ data: lists }, { data: itemCounts }, { data: storeCounts }] =
-    await Promise.all([
-      supabase
-        .from("price_lists")
-        .select("id, name, description, active")
-        .order("name"),
-      supabase.from("price_list_items").select("price_list_id"),
-      supabase
-        .from("supermarkets")
-        .select("price_list_id")
-        .not("price_list_id", "is", null),
-    ]);
+  const { data: lists, error } = await supabase
+    .from("price_lists")
+    .select("id, name, description, active")
+    .order("name");
+  if (error) throw new Error(error.message);
 
   const rows = (lists as Row[] | null) ?? [];
-
-  const itemsPer = new Map<string, number>();
-  ((itemCounts as { price_list_id: string }[] | null) ?? []).forEach((r) =>
-    itemsPer.set(r.price_list_id, (itemsPer.get(r.price_list_id) ?? 0) + 1),
-  );
-  const storesPer = new Map<string, number>();
-  ((storeCounts as { price_list_id: string }[] | null) ?? []).forEach((r) =>
-    storesPer.set(r.price_list_id, (storesPer.get(r.price_list_id) ?? 0) + 1),
-  );
+  const ids = rows.map((r) => r.id);
+  // Counted in the database: reading the rows to count them stopped at 1,000.
+  const [itemsPer, storesPer] = await Promise.all([
+    countPerPriceList(supabase, "price_list_items", ids),
+    countPerPriceList(supabase, "supermarkets", ids),
+  ]);
 
   return (
     <div className="max-w-5xl">

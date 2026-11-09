@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FileSpreadsheet, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -49,32 +50,50 @@ type OrderAgg = {
 export default async function ShipmentsPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
   const today = todayUb();
-  const to = isIsoDay(sp.to) ? sp.to : addDays(today, 1);
-  const from = isIsoDay(sp.from) ? sp.from : addDays(today, -7);
+  let to = isIsoDay(sp.to) ? sp.to : addDays(today, 1);
+  let from = isIsoDay(sp.from) ? sp.from : addDays(today, -7);
+  if (from > to) [from, to] = [to, from];
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("shipments")
-    .select(
-      "id, shipment_no, delivery_date, status, created_at, closed_at, distributor:distributor_id(name, phone), closedBy:closed_by(full_name)",
-    )
-    .gte("delivery_date", from)
-    .lte("delivery_date", to)
-    .order("delivery_date", { ascending: false })
-    .order("shipment_no", { ascending: false });
-
-  const shipments = (data ?? []) as unknown as ShipmentRow[];
-  const ids = shipments.map((s) => s.id);
-  const { data: orderData } = ids.length
-    ? await supabase
-        .from("orders")
-        .select("shipment_id, subtotal, discount_total, items:order_items(qty, product:product_id(box_count))")
-        .in("shipment_id", ids)
-        .neq("status", "cancelled")
-    : { data: [] };
+  // Runs and their orders side by side. Orders are found through their
+  // run's delivery day (no id list in the URL) and paged past 1,000 rows,
+  // so long ranges total correctly.
+  const settle = <T,>(p: Promise<T[]>) =>
+    p.then((data) => ({ data, error: null as { message: string } | null })).catch((e: Error) => ({
+      data: [] as T[],
+      error: { message: e.message },
+    }));
+  const [{ data: shipments, error }, { data: orderData, error: ordersError }] = await Promise.all([
+    settle(
+      fetchAll<ShipmentRow>(() =>
+        supabase
+          .from("shipments")
+          .select(
+            "id, shipment_no, delivery_date, status, created_at, closed_at, distributor:distributor_id(name, phone), closedBy:closed_by(full_name)",
+          )
+          .gte("delivery_date", from)
+          .lte("delivery_date", to)
+          .order("delivery_date", { ascending: false })
+          .order("shipment_no", { ascending: false }),
+      ),
+    ),
+    settle(
+      fetchAll<OrderAgg>(() =>
+        supabase
+          .from("orders")
+          .select(
+            "id, shipment_id, subtotal, discount_total, items:order_items(qty, product:product_id(box_count)), run:shipment_id!inner(delivery_date)",
+          )
+          .gte("run.delivery_date", from)
+          .lte("run.delivery_date", to)
+          .neq("status", "cancelled")
+          .order("id"),
+      ),
+    ),
+  ]);
 
   const agg = new Map<string, { orders: number; amount: number; pieces: number; boxes: number }>();
-  for (const o of (orderData ?? []) as unknown as OrderAgg[]) {
+  for (const o of orderData) {
     const a = agg.get(o.shipment_id) ?? { orders: 0, amount: 0, pieces: 0, boxes: 0 };
     a.orders += 1;
     a.amount += Math.max(0, Number(o.subtotal) - Number(o.discount_total ?? 0));
@@ -105,11 +124,11 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Se
         <form className="flex flex-wrap items-end gap-2" method="get">
           <label className="text-[12px] text-muted-foreground">
             Эхлэх
-            <input type="date" name="from" defaultValue={from} className="input-field mt-1 h-9 w-40 block" />
+            <input type="date" name="from" defaultValue={from} className="field mt-1 h-9 w-40 block" />
           </label>
           <label className="text-[12px] text-muted-foreground">
             Дуусах
-            <input type="date" name="to" defaultValue={to} className="input-field mt-1 h-9 w-40 block" />
+            <input type="date" name="to" defaultValue={to} className="field mt-1 h-9 w-40 block" />
           </label>
           <Button type="submit" size="sm" className="h-9">
             Харах
@@ -117,13 +136,15 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Se
         </form>
       </Card>
 
-      {error ? (
+      {error || ordersError ? (
         <Card className="p-6 text-sm">
-          <div className="font-medium mb-1">Ачилтын хүснэгт бэлэн биш байна.</div>
-          <p className="text-muted-foreground">
-            Supabase SQL Editor дээр <code>docs/fixes/37-dispatch-and-ebarimt.sql</code>-ийг ажиллуулна уу.
-          </p>
-          <p className="text-muted-foreground mt-2 break-words">Алдаа: {error.message}</p>
+          <div className="font-medium mb-1">Ачилтын мэдээллийг уншиж чадсангүй.</div>
+          {/relation|does not exist|schema cache/i.test((error ?? ordersError)!.message) && (
+            <p className="text-muted-foreground">
+              Supabase SQL Editor дээр <code>docs/fixes/37-dispatch-and-ebarimt.sql</code>-ийг ажиллуулна уу.
+            </p>
+          )}
+          <p className="text-muted-foreground mt-2 break-words">Алдаа: {(error ?? ordersError)!.message}</p>
         </Card>
       ) : shipments.length === 0 ? (
         <Card className="p-10 text-center text-sm text-muted-foreground">Энэ хугацаанд ачилт алга.</Card>

@@ -104,13 +104,13 @@ async function uploadImageIfPresent(formData: FormData): Promise<string | null> 
   return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
-function buildPayload(formData: FormData, imageUrl: string | null) {
+function buildPayload(formData: FormData) {
   const name = parseString(formData.get("name"));
   const sku = parseString(formData.get("sku"));
   const basePrice = parseNumber(formData.get("base_price"));
   if (!name) return { error: "Барааны нэр оруулна уу." };
   if (!sku) return { error: "SKU (бар код) оруулна уу." };
-  if (basePrice === null) return { error: "Бөөний үнэ оруулна уу." };
+  if (basePrice === null || basePrice < 0) return { error: "Бөөний үнэ оруулна уу." };
 
   return {
     payload: {
@@ -126,9 +126,27 @@ function buildPayload(formData: FormData, imageUrl: string | null) {
       cash_price: parseNumber(formData.get("cash_price")),
       stock: parseInteger(formData.get("stock")) ?? 0,
       active: formData.get("active") === "on",
-      ...(imageUrl ? { image_url: imageUrl } : {}),
-    },
+      // e-Barimt: what goes on the tax receipt for this product.
+      internal_code: parseString(formData.get("internal_code")),
+      vat_payable: formData.get("vat_free") !== "on",
+      city_tax: formData.get("city_tax") === "on",
+      ebarimt_class_code: parseString(formData.get("ebarimt_class_code")),
+      ebarimt_tax_code: parseString(formData.get("ebarimt_tax_code")),
+    } as Record<string, unknown>,
   };
+}
+
+/** Check the fields first, upload after — a rejected form leaves no stray image. */
+async function payloadWithImage(formData: FormData): Promise<{ payload?: Record<string, unknown>; error?: string }> {
+  const built = buildPayload(formData);
+  if ("error" in built) return { error: built.error };
+  try {
+    const imageUrl = await uploadImageIfPresent(formData);
+    if (imageUrl) built.payload.image_url = imageUrl;
+  } catch (err) {
+    return { error: (err as Error).message };
+  }
+  return { payload: built.payload };
 }
 
 export async function createProduct(
@@ -138,15 +156,8 @@ export async function createProduct(
   const guardErr = await adminGuardError();
   if (guardErr) return { error: guardErr };
 
-  let imageUrl: string | null = null;
-  try {
-    imageUrl = await uploadImageIfPresent(formData);
-  } catch (err) {
-    return { error: (err as Error).message };
-  }
-
-  const built = buildPayload(formData, imageUrl);
-  if ("error" in built) return { error: built.error };
+  const built = await payloadWithImage(formData);
+  if (!built.payload) return { error: built.error };
 
   const supabase = await createClient();
   const { error } = await supabase.from("products").insert(built.payload);
@@ -164,15 +175,8 @@ export async function updateProduct(
   const guardErr = await adminGuardError();
   if (guardErr) return { error: guardErr };
 
-  let imageUrl: string | null = null;
-  try {
-    imageUrl = await uploadImageIfPresent(formData);
-  } catch (err) {
-    return { error: (err as Error).message };
-  }
-
-  const built = buildPayload(formData, imageUrl);
-  if ("error" in built) return { error: built.error };
+  const built = await payloadWithImage(formData);
+  if (!built.payload) return { error: built.error };
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -184,18 +188,4 @@ export async function updateProduct(
   revalidatePath("/admin/products");
   revalidatePath(`/admin/products/${id}`);
   redirect("/admin/products");
-}
-
-export async function toggleProductActive(id: string, active: boolean) {
-  const guardErr = await adminGuardError();
-  if (guardErr) throw new Error(guardErr);
-
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("products")
-    .update({ active })
-    .eq("id", id);
-  if (error) throw new Error(error.message);
-  revalidatePath("/admin/products");
-  revalidatePath(`/admin/products/${id}`);
 }

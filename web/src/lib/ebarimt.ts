@@ -53,6 +53,9 @@ export const EBARIMT_STATUS_COLOR: Record<EbarimtStatus, string> = {
 /** A receipt still counts for the order (blocks sending another one). */
 export const LIVE_STATUSES: EbarimtStatus[] = ["queued", "sending", "sent", "return_queued", "returning"];
 
+/** Orders per queueReceipts call; the e-Barimt page sends more in batches. */
+export const EBARIMT_QUEUE_BATCH = 200;
+
 /**
  * The buyer's registry number if it looks real: 7 digits (company),
  * 2 Cyrillic letters + 8 digits (citizen), or an 11–12 digit ТТД.

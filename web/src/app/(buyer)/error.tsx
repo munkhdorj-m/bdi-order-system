@@ -8,8 +8,16 @@ import { Button } from "@/components/ui/button";
  * Something failed while loading a store page (often a weak connection).
  * Instead of a blank "Application error", offer to try again or go back
  * to the catalog — the cart is kept in the phone either way.
+ *
+ * `unstable_retry` fetches the page again (Next 16); `reset` would only
+ * re-render what already failed.
  */
-export default function BuyerError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
+export default function BuyerError({
+  unstable_retry,
+}: {
+  error: Error & { digest?: string };
+  unstable_retry: () => void;
+}) {
   return (
     <div className="mx-auto flex max-w-sm flex-col items-center px-6 py-16 text-center">
       <div className="mb-4 flex size-16 items-center justify-center rounded-2xl bg-muted ring-1 ring-border">
@@ -20,7 +28,7 @@ export default function BuyerError({ reset }: { error: Error & { digest?: string
         Интернэт холболтоо шалгаад дахин оролдоно уу. Сагсанд байгаа бараа хадгалагдсан.
       </p>
       <div className="mt-6 flex w-full flex-col gap-2">
-        <Button size="lg" onClick={reset}>
+        <Button size="lg" onClick={() => unstable_retry()}>
           <RotateCcw className="size-4" />
           Дахин оролдох
         </Button>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Trash2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import {
   Card,
   CardContent,
@@ -15,7 +16,6 @@ import { PriceListMetaForm } from "@/components/admin/price-list-meta-form";
 import { AutoAssignForm } from "@/components/admin/auto-assign-form";
 import { PriceEditor } from "@/components/admin/price-editor";
 import {
-  autoAssignByKeyword,
   deletePriceList,
   savePriceListItems,
   unassignStore,
@@ -50,50 +50,51 @@ export default async function PriceListDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: list }, { data: products }, { data: items }, { data: stores }] =
-    await Promise.all([
-      supabase
-        .from("price_lists")
-        .select("id, name, description, active")
-        .eq("id", id)
-        .single(),
+  // Every row: a list can hold more than 1,000 stores, and a product list
+  // grows past one page too.
+  const [{ data: list }, products, items, assignedStores] = await Promise.all([
+    supabase
+      .from("price_lists")
+      .select("id, name, description, active")
+      .eq("id", id)
+      .single(),
+    fetchAll<ProductFromDb>(() =>
       supabase
         .from("products")
         .select("id, sku, name, brand, base_price, categories(name)")
         .eq("active", true)
-        .order("name"),
-      supabase
-        .from("price_list_items")
-        .select("product_id, price")
-        .eq("price_list_id", id),
+        .order("name")
+        .order("id"),
+    ),
+    fetchAll<PriceListItem>(() =>
+      supabase.from("price_list_items").select("product_id, price").eq("price_list_id", id).order("product_id"),
+    ),
+    fetchAll<AssignedStore>(() =>
       supabase
         .from("supermarkets")
         .select("id, name, district, active")
         .eq("price_list_id", id)
-        .order("name"),
-    ]);
+        .order("name")
+        .order("id"),
+    ),
+  ]);
 
   if (!list) notFound();
 
   const priceMap = new Map<string, number>();
-  ((items as PriceListItem[] | null) ?? []).forEach((it) =>
-    priceMap.set(it.product_id, it.price),
-  );
+  items.forEach((it) => priceMap.set(it.product_id, it.price));
 
-  const rows = ((products as unknown as ProductFromDb[]) ?? []).map((p) => ({
+  const rows = products.map((p) => ({
     id: p.id,
     sku: p.sku,
     name: p.name,
     brand: p.brand,
-    base_price: p.base_price,
+    ref_price: Number(p.base_price) || 0,
     category_name: p.categories?.name ?? null,
     custom_price: priceMap.get(p.id) ?? null,
   }));
 
-  const assignedStores = (stores as AssignedStore[] | null) ?? [];
-
   const updateMeta = updatePriceList.bind(null, id);
-  const autoAssign = autoAssignByKeyword.bind(null, id);
   const saveItems = savePriceListItems.bind(null, id);
 
   async function handleDelete() {
@@ -105,7 +106,7 @@ export default async function PriceListDetailPage({
     "use server";
     const storeId = String(formData.get("store_id") ?? "");
     if (!storeId) return;
-    await unassignStore(storeId, `/admin/price-lists/${id}`);
+    await unassignStore(storeId, id);
   }
 
   return (
@@ -165,11 +166,11 @@ export default async function PriceListDetailPage({
           <CardHeader>
             <CardTitle className="text-base">Бөөнөөр оноох</CardTitle>
             <CardDescription>
-              Тохирох нэр/хаягтай бүх дэлгүүрт энэ жагсаалтыг нэг товчоор оноох.
+              Нэрээр нь дэлгүүрүүдийг хайж, жагсаалтаа шалгаад энэ үнийн жагсаалтыг оноо.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <AutoAssignForm action={autoAssign} />
+            <AutoAssignForm priceListId={id} listName={list.name} />
           </CardContent>
         </Card>
       </div>
@@ -215,8 +216,9 @@ export default async function PriceListDetailPage({
                       type="submit"
                       variant="ghost"
                       size="icon"
-                      className="text-muted-foreground hover:text-destructive"
-                      title="Энэ дэлгүүрээс хасах"
+                      className="size-10 text-muted-foreground hover:text-destructive"
+                      title="Энэ жагсаалтаас хасах"
+                      aria-label={`${s.name} — жагсаалтаас хасах`}
                     >
                       <X className="h-4 w-4" />
                     </Button>
@@ -232,12 +234,18 @@ export default async function PriceListDetailPage({
         <CardHeader>
           <CardTitle className="text-base">Үнэ</CardTitle>
           <CardDescription>
-            Хоосон үлдээвэл жишиг (бөөний) үнэ ашиглагдана. Энэ дэлгүүр-онцлогт
-            тохирох override <em>customer_prices</em> хүснэгтэд хадгалагдсан хэвээр.
+            Хоосон үлдээвэл жишиг (бөөний) үнэ ашиглагдана. Дэлгүүрийн хуудсанд
+            оруулсан тусгай үнэ энэ жагсаалтаас давуу эрхтэй хэвээр.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <PriceEditor products={rows} action={saveItems} />
+          <PriceEditor
+            products={rows}
+            action={saveItems}
+            priceLabel="Жагсаалтын үнэ"
+            note="Хоосон үлдээвэл жишиг (бөөний) үнэ ашиглагдана. Энэ үнэ жагсаалтад оноогдсон бүх дэлгүүрт хүчинтэй."
+            savedLabel="✓ Үнийн жагсаалт хадгалагдлаа."
+          />
         </CardContent>
       </Card>
     </div>

@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { ClipboardList, FileSpreadsheet, Plus, Search, Truck, X } from "lucide-react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,12 +17,18 @@ import {
 import { OrderStatusPill } from "@/components/admin/order-status-pill";
 import { QuickAdvanceButton } from "@/components/admin/quick-advance-button";
 import {
+  OrderSelectionProvider,
+  SelectManyCheckbox,
+  SelectOrderCheckbox,
+} from "@/components/admin/order-selection";
+import {
   ACTIVE_STATUSES,
   STATUS_LABELS,
   type OrderStatus,
 } from "@/lib/order-status";
 import { formatMnt } from "@/lib/format";
 import { addDays, isIsoDay, todayUb, ubDayStart } from "@/lib/dispatch";
+import { formatDayMonthTime } from "@/lib/datetime";
 
 type SearchParams = Promise<{
   status?: string;
@@ -38,11 +45,17 @@ type OrderRow = {
   order_number: string;
   status: OrderStatus;
   subtotal: number;
+  discount_total: number | null;
   created_at: string;
   delivery_date: string | null;
   supermarket_id: string;
   supermarkets: { name: string } | null;
 };
+
+/** What the store pays: lines minus the order-level discount. */
+function amountOf(o: Pick<OrderRow, "subtotal" | "discount_total">): number {
+  return Math.max(0, Number(o.subtotal ?? 0) - Number(o.discount_total ?? 0));
+}
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString("mn-MN", {
@@ -55,14 +68,9 @@ function formatDateTime(iso: string) {
   });
 }
 
+// "11.08 13:05" (mn-MN Intl would print "XI/08").
 function formatShortDate(iso: string) {
-  return new Date(iso).toLocaleDateString("mn-MN", {
-    timeZone: "Asia/Ulaanbaatar",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDayMonthTime(iso);
 }
 
 /**
@@ -126,7 +134,8 @@ function resolveDateBounds(
 
 /**
  * Compose a URL preserving existing filters while flipping one. Used by
- * tab + chip clicks so changing status doesn't blow away the search/date.
+ * tab + chip clicks so changing status doesn't blow away the search/date
+ * (or the store the list is narrowed to).
  */
 function buildHref(params: {
   status?: string | null;
@@ -147,6 +156,48 @@ function buildHref(params: {
   return qs ? `/admin/orders?${qs}` : "/admin/orders";
 }
 
+/** Every filter except status — counts and the list share it. */
+type Scope = {
+  store?: string;
+  fromIso: string | null;
+  toIso: string | null;
+  /** Search words without PostgREST/LIKE specials; "" = no search. */
+  term: string;
+};
+
+type StatusFilter = OrderStatus | "active" | null;
+
+const LIST_SELECT =
+  "id, order_number, status, subtotal, discount_total, created_at, delivery_date, supermarket_id, supermarkets:supermarket_id(name)";
+
+/**
+ * The orders query, once per search "part". With a search, orders are
+ * found two ways that never overlap — order number matches (whose store
+ * name doesn't), and store name matches — so counts add up exactly. This
+ * replaced a store-id list that stopped at the first 200 matching stores.
+ */
+function scopedQueries(
+  supabase: SupabaseClient,
+  select: string,
+  scope: Scope,
+  opts: { head: boolean; status: StatusFilter },
+) {
+  const parts = scope.term ? (["number", "store"] as const) : (["all"] as const);
+  const like = `%${scope.term}%`;
+  return parts.map((part) => {
+    const sel = part === "all" ? select : `${select}, sm:supermarket_id!inner(name)`;
+    let q = supabase.from("orders").select(sel, opts.head ? { count: "exact", head: true } : undefined);
+    if (scope.store) q = q.eq("supermarket_id", scope.store);
+    if (scope.fromIso) q = q.gte("created_at", scope.fromIso);
+    if (scope.toIso) q = q.lt("created_at", scope.toIso);
+    if (opts.status === "active") q = q.in("status", ACTIVE_STATUSES);
+    else if (opts.status) q = q.eq("status", opts.status);
+    if (part === "number") q = q.ilike("order_number", like).not("sm.name", "ilike", like);
+    if (part === "store") q = q.ilike("sm.name", like);
+    return q;
+  });
+}
+
 export default async function AdminOrdersPage({
   searchParams,
 }: {
@@ -159,72 +210,47 @@ export default async function AdminOrdersPage({
   const from = sp.from?.trim() || undefined;
   const to = sp.to?.trim() || undefined;
   const store = sp.store && /^[0-9a-f-]{36}$/i.test(sp.store) ? sp.store : undefined;
+  const statusFilter: StatusFilter =
+    status === "active" ? "active" : status && (STATUS_KEYS as readonly string[]).includes(status) ? (status as OrderStatus) : null;
 
-  // Excel of what's on screen: the date filter as UB days (today if none).
+  // Characters with meaning in PostgREST filters or LIKE can't be searched for.
+  const term = q.replace(/[%_,()"\\*]/g, " ").replace(/\s+/g, " ").trim();
+  const scope: Scope = { store, term, ...resolveDateBounds(range, from, to) };
+
+  // Excel of what's on screen: the date filter as UB days (today if none),
+  // the status tab and the store.
   const today = todayUb();
   const exportFrom =
     range === "today" ? today : range === "7d" ? addDays(today, -6) : range === "30d" ? addDays(today, -29) : (from ?? to ?? today);
   const exportTo = range ? today : (to ?? from ?? today);
-  const exportHref = `/admin/export?from=${exportFrom}&to=${exportTo}${status && status in STATUS_LABELS ? `&status=${status}` : ""}`;
+  const exportParams = new URLSearchParams({ from: exportFrom, to: exportTo });
+  if (statusFilter) exportParams.set("status", statusFilter);
+  if (store) exportParams.set("store", store);
+  const exportHref = `/admin/export?${exportParams}`;
 
-  // Per-status head counts so the filter chips can show honest tallies
-  // regardless of which tab is active. Six head-only queries in parallel.
+  // Per-status counts under the SAME store/date/search filters as the
+  // list, so the chips add up to what's shown.
   const supabase = await createClient();
-  const [
-    { count: totalCount },
-    { count: pendingCount },
-    { count: confirmedCount },
-    { count: shippedCount },
-    { count: deliveredCount },
-    { count: cancelledCount },
-  ] = await Promise.all([
-    supabase.from("orders").select("*", { count: "exact", head: true }),
-    supabase
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "pending"),
-    supabase
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "confirmed"),
-    supabase
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "shipped"),
-    supabase
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "delivered"),
-    supabase
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "cancelled"),
-  ]);
-
-  const activeCount =
-    (pendingCount ?? 0) + (confirmedCount ?? 0) + (shippedCount ?? 0);
+  const countKeys: (OrderStatus | null)[] = [null, ...STATUS_KEYS];
+  const counts = await Promise.all(
+    countKeys.map(async (s) => {
+      const res = await Promise.all(scopedQueries(supabase, "id", scope, { head: true, status: s }));
+      return res.reduce((n, r) => n + (r.count ?? 0), 0);
+    }),
+  );
+  const [totalCount, pendingCount, confirmedCount, shippedCount, deliveredCount, cancelledCount] = counts;
+  const activeCount = pendingCount + confirmedCount + shippedCount;
 
   const tabs: { key: string | null; label: string; count: number }[] = [
-    { key: null, label: "Бүгд", count: totalCount ?? 0 },
+    { key: null, label: "Бүгд", count: totalCount },
     { key: "active", label: "Идэвхтэй", count: activeCount },
-    { key: "pending", label: STATUS_LABELS.pending, count: pendingCount ?? 0 },
-    {
-      key: "confirmed",
-      label: STATUS_LABELS.confirmed,
-      count: confirmedCount ?? 0,
-    },
-    { key: "shipped", label: STATUS_LABELS.shipped, count: shippedCount ?? 0 },
-    {
-      key: "delivered",
-      label: STATUS_LABELS.delivered,
-      count: deliveredCount ?? 0,
-    },
-    {
-      key: "cancelled",
-      label: STATUS_LABELS.cancelled,
-      count: cancelledCount ?? 0,
-    },
+    { key: "pending", label: STATUS_LABELS.pending, count: pendingCount },
+    { key: "confirmed", label: STATUS_LABELS.confirmed, count: confirmedCount },
+    { key: "shipped", label: STATUS_LABELS.shipped, count: shippedCount },
+    { key: "delivered", label: STATUS_LABELS.delivered, count: deliveredCount },
+    { key: "cancelled", label: STATUS_LABELS.cancelled, count: cancelledCount },
   ];
+  const shownCount = tabs.find((t) => t.key === (statusFilter ?? null))?.count ?? totalCount;
 
   const datePresets: { key: RangePreset | null; label: string }[] = [
     { key: null, label: "Бүгд" },
@@ -236,18 +262,18 @@ export default async function AdminOrdersPage({
   const hasAnyFilter = Boolean(q || range || from || to);
 
   // Re-key Suspense so any filter change re-shows the skeleton instead of
-  // holding stale rows during the re-fetch.
+  // holding stale rows during the re-fetch (and drops the ticked orders).
   const streamKey = [status ?? "all", q, range ?? "", from ?? "", to ?? "", store ?? ""].join(
     "|",
   );
 
   return (
-    <div className="max-w-6xl">
+    <div className="max-w-6xl pb-20">
       <div className="mb-4 flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-[26px] font-bold tracking-tight">Захиалга</h1>
           <p className="text-[13px] text-muted-foreground">
-            Бүх захиалгуудыг шүүж харах
+            Бүх захиалгуудыг шүүж харах · сонгоод падаан хэвлэх, Excel татах
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -264,7 +290,7 @@ export default async function AdminOrdersPage({
             </Link>
           </Button>
           <Button asChild>
-            <Link href="/admin/orders/new">
+            <Link href={store ? `/admin/orders/new?store=${store}` : "/admin/orders/new"}>
               <Plus className="h-4 w-4" />
               Шинэ захиалга
             </Link>
@@ -272,12 +298,11 @@ export default async function AdminOrdersPage({
         </div>
       </div>
 
-      {/* Status filter chips — primary fill for active, muted ring for inactive.
-          Hrefs preserve search + date filters so flipping status doesn't blow
-          them away. */}
+      {/* Status filter chips — counts follow the store/date/search filters.
+          Hrefs keep search, date and store so flipping status keeps them. */}
       <div className="mb-4 flex flex-wrap gap-2">
         {tabs.map((t) => {
-          const active = (t.key === null && !status) || t.key === status;
+          const active = (t.key === null && !statusFilter) || t.key === statusFilter;
           const href = buildHref({
             status: t.key,
             q,
@@ -300,7 +325,7 @@ export default async function AdminOrdersPage({
           set the `range` param without touching `q`. */}
       <Card className="p-3 sm:p-4 mb-4">
         <form method="get" className="flex flex-col sm:flex-row gap-2 sm:gap-3 min-w-0">
-          {/* Preserve current status + range/date when submitting the search */}
+          {/* Preserve current status + range/date + store when searching */}
           {store && <input type="hidden" name="store" defaultValue={store} />}
           {status && (
             <input type="hidden" name="status" defaultValue={status} />
@@ -316,13 +341,13 @@ export default async function AdminOrdersPage({
               name="q"
               defaultValue={q}
               placeholder="Захиалгын дугаар эсвэл дэлгүүрийн нэрээр хайх..."
-              className="field pl-9 pr-9"
+              className="field pl-9 pr-11"
             />
             {q && (
               <Link
-                href={buildHref({ status, range, from, to })}
+                href={buildHref({ status, range, from, to, store })}
                 aria-label="Хайлт цэвэрлэх"
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 size-7 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                className="absolute right-0.5 top-1/2 -translate-y-1/2 size-10 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
               >
                 <X className="h-4 w-4" />
               </Link>
@@ -354,19 +379,19 @@ export default async function AdminOrdersPage({
               store,
             });
             return (
-              <Link key={p.label} href={href} className="chip h-8 px-3" data-active={active || undefined}>
+              <Link key={p.label} href={href} className="chip h-9 px-3" data-active={active || undefined}>
                 {p.label}
               </Link>
             );
           })}
 
-          {/* Custom range — only render the inputs and submit form when the
-              admin actually fills them. They live in a separate form so they
-              don't clobber the q + preset state. */}
+          {/* Custom range — its own form so it doesn't clobber the search;
+              it keeps the status, search and store. */}
           <form
             method="get"
             className="ml-auto flex items-center gap-1.5 text-[12px]"
           >
+            {store && <input type="hidden" name="store" defaultValue={store} />}
             {status && (
               <input type="hidden" name="status" defaultValue={status} />
             )}
@@ -391,7 +416,7 @@ export default async function AdminOrdersPage({
             </Button>
             {(from || to) && (
               <Button asChild variant="ghost" size="sm">
-                <Link href={buildHref({ status, q, range })}>Цэвэрлэх</Link>
+                <Link href={buildHref({ status, q, store })}>Цэвэрлэх</Link>
               </Button>
             )}
           </form>
@@ -400,8 +425,8 @@ export default async function AdminOrdersPage({
         {hasAnyFilter && (
           <p className="mt-3 text-[11.5px] text-muted-foreground">
             <Link
-              href={buildHref({ status })}
-              className="hover:text-foreground hover:underline"
+              href={buildHref({ status, store })}
+              className="inline-flex min-h-10 items-center hover:text-foreground hover:underline"
             >
               Бүх шүүлтүүр цэвэрлэх
             </Link>
@@ -410,7 +435,17 @@ export default async function AdminOrdersPage({
       </Card>
 
       <Suspense key={streamKey} fallback={<OrderListSkeleton />}>
-        <OrderList status={status} q={q} range={range} from={from} to={to} store={store} />
+        <OrderList
+          status={status}
+          statusFilter={statusFilter}
+          q={q}
+          range={range}
+          from={from}
+          to={to}
+          store={store}
+          scope={scope}
+          shownCount={shownCount}
+        />
       </Suspense>
     </div>
   );
@@ -420,79 +455,46 @@ const LIST_LIMIT = 500;
 
 async function OrderList({
   status,
+  statusFilter,
   q,
   range,
   from,
   to,
   store,
+  scope,
+  shownCount,
 }: {
   status?: string;
+  statusFilter: StatusFilter;
   q?: string;
   range: RangePreset | null;
   from?: string;
   to?: string;
   store?: string;
+  scope: Scope;
+  /** How many orders match in total (the active chip's count). */
+  shownCount: number;
 }) {
   const supabase = await createClient();
 
-  // Resolve the search term against supermarket names — Supabase doesn't
-  // ILIKE through embedded relations cleanly, so we do a 2-step: get matching
-  // store IDs, then filter orders by (order_number ILIKE %q% OR
-  // supermarket_id IN matchingIds).
-  // Characters with meaning in PostgREST filters can't go in an or() list
-  // (a comma used to show a raw database error).
-  const term = (q ?? "").replace(/[%_,()"\\*]/g, " ").replace(/\s+/g, " ").trim();
-  let matchingSupermarketIds: string[] = [];
-  if (term) {
-    const { data: stores } = await supabase
-      .from("supermarkets")
-      .select("id")
-      .ilike("name", `%${term}%`)
-      .limit(200);
-    matchingSupermarketIds = ((stores as Array<{ id: string }> | null) ?? []).map(
-      (s) => s.id,
-    );
-  }
-
-  let query = supabase
-    .from("orders")
-    .select(
-      "id, order_number, status, subtotal, created_at, delivery_date, supermarket_id, supermarkets:supermarket_id(name)",
-    )
-    .order("created_at", { ascending: false })
-    .limit(LIST_LIMIT);
-  if (store) query = query.eq("supermarket_id", store);
-
-  if (status === "active") {
-    query = query.in("status", ACTIVE_STATUSES);
-  } else if (status && (STATUS_KEYS as readonly string[]).includes(status)) {
-    query = query.eq("status", status);
-  }
-
-  if (term) {
-    // PostgREST `.or()` accepts the in.(...) format for the supermarket
-    // bucket; quote the UUIDs so an empty list short-circuits to false
-    // rather than syntax-erroring.
-    const idsClause =
-      matchingSupermarketIds.length > 0
-        ? `supermarket_id.in.(${matchingSupermarketIds.join(",")})`
-        : null;
-    const orParts = [`order_number.ilike.%${term}%`];
-    if (idsClause) orParts.push(idsClause);
-    query = query.or(orParts.join(","));
-  }
-
-  const { fromIso, toIso } = resolveDateBounds(range, from, to);
-  if (fromIso) query = query.gte("created_at", fromIso);
-  if (toIso) query = query.lt("created_at", toIso);
-
-  const [{ data, error }, storeRow] = await Promise.all([
-    query,
+  const [results, storeRow] = await Promise.all([
+    Promise.all(
+      scopedQueries(supabase, LIST_SELECT, scope, { head: false, status: statusFilter }).map((query) =>
+        query.order("created_at", { ascending: false }).order("id").limit(LIST_LIMIT),
+      ),
+    ),
     store
       ? supabase.from("supermarkets").select("name").eq("id", store).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
-  const rows = (data as unknown as OrderRow[]) ?? [];
+  const error = results.find((r) => r.error)?.error ?? null;
+  const byId = new Map<string, OrderRow>();
+  for (const r of results) {
+    for (const row of (r.data ?? []) as unknown as OrderRow[]) byId.set(row.id, row);
+  }
+  const rows = [...byId.values()]
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
+    .slice(0, LIST_LIMIT);
   const storeName = (storeRow.data as { name: string } | null)?.name ?? null;
 
   // Which store this list is narrowed to, with a one-tap way back.
@@ -506,7 +508,7 @@ async function OrderList({
       </Link>
       <Link
         href={buildHref({ status, q, range: range ?? undefined, from, to })}
-        className="ml-auto inline-flex items-center gap-1 font-semibold"
+        className="ml-auto inline-flex min-h-10 items-center gap-1 font-semibold"
       >
         <X className="h-4 w-4" /> Бүх дэлгүүр
       </Link>
@@ -533,19 +535,23 @@ async function OrderList({
     );
   }
 
-  // Group rows by yyyy-mm-dd while preserving the existing newest-first
-  // order. Each group carries its own subtotal so the admin can scan the
-  // day's revenue without doing mental math.
+  // Group rows by UB day while preserving the newest-first order. Money
+  // totals count what stores pay (after discount) and leave cancelled
+  // orders out — they're shown, struck through, but aren't sales.
   const groups: {
     key: string;
     label: string;
     rows: OrderRow[];
     total: number;
+    live: number;
   }[] = [];
   const groupIndex = new Map<string, number>();
   let grandTotal = 0;
+  let cancelled = 0;
   for (const r of rows) {
-    grandTotal += Number(r.subtotal ?? 0);
+    const isCancelled = r.status === "cancelled";
+    if (isCancelled) cancelled += 1;
+    else grandTotal += amountOf(r);
     const key = dayKeyOf(r.created_at);
     let idx = groupIndex.get(key);
     if (idx === undefined) {
@@ -556,23 +562,26 @@ async function OrderList({
         label: dayLabelOf(r.created_at),
         rows: [],
         total: 0,
+        live: 0,
       });
     }
     groups[idx].rows.push(r);
-    groups[idx].total += Number(r.subtotal ?? 0);
+    if (!isCancelled) {
+      groups[idx].total += amountOf(r);
+      groups[idx].live += 1;
+    }
   }
 
   return (
-    <>
+    <OrderSelectionProvider>
       {storeBanner}
-      {rows.length >= LIST_LIMIT && (
+      {shownCount > rows.length && (
         <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-[13px] text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-200 dark:ring-amber-800/60">
-          Сүүлийн {LIST_LIMIT} захиалгыг харуулж байна. Огноо эсвэл төлвөөр шүүж нарийсгана уу.
+          {shownCount.toLocaleString("mn-MN")} захиалгаас сүүлийн {rows.length}-г харуулж байна. Огноо эсвэл
+          төлвөөр шүүж нарийсгана уу.
         </p>
       )}
-      {/* Summary banner — total across whatever filters are active, with
-          the per-day count broken out so the admin sees revenue context
-          at a glance. */}
+      {/* Summary banner — total across whatever filters are active. */}
       <div className="mb-3 rounded-xl bg-card ring-1 ring-border px-3 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-3 flex-wrap">
         <div className="text-[12.5px] text-muted-foreground">
           Нийт{" "}
@@ -584,6 +593,7 @@ async function OrderList({
             {groups.length}
           </span>{" "}
           өдөр
+          {cancelled > 0 && <> · цуцлагдсан {cancelled} нь дүнд ороогүй</>}
         </div>
         <div className="text-[14px] font-bold tabular-nums">
           {formatMnt(grandTotal)}
@@ -595,7 +605,8 @@ async function OrderList({
       <div className="space-y-5">
         {groups.map((g) => (
           <section key={g.key}>
-            <div className="flex items-center gap-3 mb-2 px-1">
+            <div className="flex items-center gap-2 mb-2 px-1">
+              <SelectManyCheckbox ids={g.rows.map((r) => r.id)} label={`${g.label} — бүгдийг сонгох`} />
               <h2 className="text-[13px] font-bold tracking-tight">
                 {g.label}
               </h2>
@@ -607,39 +618,41 @@ async function OrderList({
               </span>
             </div>
 
-            {/* Mobile: card list */}
+            {/* Mobile: cards. The checkbox and the action sit beside the
+                link, not inside it. */}
             <div className="sm:hidden space-y-2">
               {g.rows.map((o) => (
-                <Link
+                <div
                   key={o.id}
-                  href={`/admin/orders/${o.id}`}
-                  className="block bg-background border rounded-lg p-3 hover:shadow-sm transition-shadow"
+                  className={`flex items-start gap-1 rounded-lg border bg-background p-2 ${o.status === "cancelled" ? "opacity-70" : ""}`}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-sm font-medium">
-                          {o.order_number}
-                        </span>
-                        <OrderStatusPill status={o.status} />
-                      </div>
-                      <div className="text-sm mt-1 truncate">
-                        {o.supermarkets?.name ?? "—"}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {formatShortDate(o.created_at)}
-                      </div>
+                  <SelectOrderCheckbox id={o.id} label={`${o.order_number} сонгох`} />
+                  <Link href={`/admin/orders/${o.id}`} className="min-w-0 flex-1 py-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-sm font-medium">
+                        {o.order_number}
+                      </span>
+                      <OrderStatusPill status={o.status} />
                     </div>
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                      <div className="text-sm font-semibold">
-                        {formatMnt(o.subtotal)}
-                      </div>
-                      {/* Inline next-status action — stopPropagation inside
-                          the button keeps the surrounding Link inert. */}
-                      <QuickAdvanceButton orderId={o.id} status={o.status} deliveryDate={o.delivery_date} />
+                    <div className="text-sm mt-1 truncate">
+                      {o.supermarkets?.name ?? "—"}
                     </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {formatShortDate(o.created_at)}
+                    </div>
+                  </Link>
+                  <div className="flex flex-col items-end gap-2 shrink-0 py-1">
+                    <div className={`text-sm font-semibold ${o.status === "cancelled" ? "line-through text-muted-foreground" : ""}`}>
+                      {formatMnt(amountOf(o))}
+                    </div>
+                    <QuickAdvanceButton
+                      orderId={o.id}
+                      orderNumber={o.order_number}
+                      status={o.status}
+                      deliveryDate={o.delivery_date}
+                    />
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
 
@@ -648,6 +661,7 @@ async function OrderList({
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12" />
                     <TableHead>Дугаар</TableHead>
                     <TableHead>Дэлгүүр</TableHead>
                     <TableHead>Статус</TableHead>
@@ -658,7 +672,10 @@ async function OrderList({
                 </TableHeader>
                 <TableBody>
                   {g.rows.map((o) => (
-                    <TableRow key={o.id}>
+                    <TableRow key={o.id} className={o.status === "cancelled" ? "opacity-70" : undefined}>
+                      <TableCell className="py-0.5">
+                        <SelectOrderCheckbox id={o.id} label={`${o.order_number} сонгох`} />
+                      </TableCell>
                       <TableCell>
                         <Link
                           href={`/admin/orders/${o.id}`}
@@ -679,8 +696,10 @@ async function OrderList({
                       <TableCell>
                         <OrderStatusPill status={o.status} />
                       </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatMnt(o.subtotal)}
+                      <TableCell
+                        className={`text-right font-medium ${o.status === "cancelled" ? "line-through text-muted-foreground" : ""}`}
+                      >
+                        {formatMnt(amountOf(o))}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDateTime(o.created_at)}
@@ -688,6 +707,7 @@ async function OrderList({
                       <TableCell className="text-right">
                         <QuickAdvanceButton
                           orderId={o.id}
+                          orderNumber={o.order_number}
                           status={o.status}
                           deliveryDate={o.delivery_date}
                         />
@@ -698,10 +718,11 @@ async function OrderList({
                       table grid makes alignment cheap. */}
                   <TableRow className="bg-muted/40 hover:bg-muted/40">
                     <TableCell
-                      colSpan={3}
+                      colSpan={4}
                       className="text-[12px] text-muted-foreground"
                     >
-                      Өдрийн нийт · {g.rows.length} захиалга
+                      Өдрийн нийт · {g.live} захиалга
+                      {g.rows.length > g.live && ` (цуцлагдсан ${g.rows.length - g.live} ороогүй)`}
                     </TableCell>
                     <TableCell className="text-right font-bold tabular-nums">
                       {formatMnt(g.total)}
@@ -714,7 +735,7 @@ async function OrderList({
           </section>
         ))}
       </div>
-    </>
+    </OrderSelectionProvider>
   );
 }
 

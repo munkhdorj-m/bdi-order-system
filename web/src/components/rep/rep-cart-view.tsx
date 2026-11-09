@@ -9,19 +9,25 @@ import { toast } from "sonner";
 import {
   clearCart,
   removeFromCart,
+  removeManyFromCart,
+  restoreCartItem,
   totalAmount,
   totalQty,
   useCart,
   type CartItem,
+  type CartProductInfo,
+  type CartScope,
 } from "@/lib/cart";
 import { formatMnt } from "@/lib/format";
 import { Button } from "@/components/ui/button";
+import { MobileListSkeleton, RepBarSkeleton } from "@/components/page-skeletons";
 import { RepHeader } from "@/components/rep/rep-header";
 import { CartStepper } from "@/components/catalog/cart-controls";
 import { ProductPlaceholder, categoryVisual } from "@/lib/category-visual";
-import { placeOrderForStore } from "@/app/rep/stores/[id]/cart/actions";
+import { placeOrderForStore, type RepPlaceOrderResult } from "@/app/rep/stores/[id]/cart/actions";
 import { useCartPriceSync } from "@/components/catalog/use-cart-price-sync";
 import { useCheckoutId } from "@/lib/checkout-id";
+import { useMounted } from "@/lib/use-mounted";
 
 /**
  * A rep's cart for one store. The store's name is in the header and on
@@ -30,28 +36,36 @@ import { useCheckoutId } from "@/lib/checkout-id";
 export function RepCartView({
   storeId,
   storeName,
-  prices,
+  catalog,
 }: {
   storeId: string;
   storeName: string;
-  /** Today's price per product for this store — re-prices a saved cart. */
-  prices?: Record<string, number>;
+  /** Today's catalog for this store (price, category, photo, stock). */
+  catalog?: Record<string, CartProductInfo>;
 }) {
-  const scope = useMemo(() => ({ storeId }), [storeId]);
+  const scope = useMemo<CartScope>(() => ({ storeId }), [storeId]);
+  const mounted = useMounted();
   const liveCart = useCart(scope);
-  useCartPriceSync(prices, storeId);
+  useCartPriceSync(catalog, scope);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [snapshot, setSnapshot] = useState<CartItem[] | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
-  const checkoutId = useCheckoutId();
+  const checkoutId = useCheckoutId(scope);
 
   const cart = pending || submitted ? (snapshot ?? liveCart) : liveCart;
   const total = totalAmount(cart);
   const pieces = totalQty(cart);
   const catalogHref = `/rep/stores/${storeId}/catalog`;
+
+  function removeLine(item: CartItem, index: number) {
+    removeFromCart(item.product_id, scope);
+    toast(`«${item.name}» сагснаас хасагдлаа`, {
+      action: { label: "Буцаах", onClick: () => restoreCartItem(item, index, scope) },
+    });
+  }
 
   function handleSubmit() {
     setError(null);
@@ -61,7 +75,7 @@ export function RepCartView({
     // Same cart re-sent → same id → the server won't make a second order.
     const requestId = checkoutId(JSON.stringify([storeId, items, note]));
     startTransition(async () => {
-      let result: Awaited<ReturnType<typeof placeOrderForStore>>;
+      let result: RepPlaceOrderResult;
       try {
         result = await placeOrderForStore({ supermarketId: storeId, items, notes: note, requestId });
       } catch {
@@ -69,6 +83,8 @@ export function RepCartView({
         result = { error: "Холболт тасарлаа. Дахин илгээнэ үү — захиалга давхардахгүй." };
       }
       if (result.error) {
+        // Products no longer sold to this store: take them out, say so.
+        if (result.unavailable?.length) removeManyFromCart(result.unavailable, scope);
         setError(result.error);
         toast.error(result.error);
         setSnapshot(null);
@@ -79,6 +95,17 @@ export function RepCartView({
       // replace: Back from the order shouldn't land on an empty cart.
       if (result.orderId) router.replace(`/rep/orders/${result.orderId}?new=1`);
     });
+  }
+
+  // The cart is read from the phone: show the page's shape until then,
+  // not a false "Сагс хоосон байна".
+  if (!mounted) {
+    return (
+      <div>
+        <RepBarSkeleton />
+        <MobileListSkeleton rows={3} />
+      </div>
+    );
   }
 
   if (liveCart.length === 0 && !submitted && !pending) {
@@ -111,60 +138,67 @@ export function RepCartView({
 
       <main className="mx-auto max-w-2xl px-3 py-4 pb-40 sm:px-4">
         <div className="space-y-2">
-          {cart.map((item) => (
-            <div key={item.product_id} className="flex gap-3 rounded-2xl bg-card p-3 ring-1 ring-border">
-              <div className="relative size-16 shrink-0 overflow-hidden rounded-xl bg-muted sm:size-20">
-                {item.image_url ? (
-                  <Image src={item.image_url} alt={item.name} fill sizes="80px" className="object-cover" />
-                ) : (
-                  <ProductPlaceholder visual={categoryVisual({ name: "", icon: item.category_icon })} />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                {item.brand && (
-                  <div className="text-[11px] font-bold uppercase tracking-wide text-primary">{item.brand}</div>
-                )}
-                <Link
-                  href={`/rep/stores/${storeId}/catalog/${item.product_id}`}
-                  className="line-clamp-2 text-[14px] font-medium leading-tight hover:underline"
-                >
-                  {item.name}
-                </Link>
-                <div className="mt-1 text-[12.5px] text-muted-foreground tabular-nums">
-                  {formatMnt(item.unit_price)} × {item.qty} ={" "}
-                  <span className="font-semibold text-foreground">{formatMnt(item.unit_price * item.qty)}</span>
+          {cart.map((item, index) => {
+            const stock = catalog?.[item.product_id]?.stock;
+            const noStock = stock !== undefined && stock <= 0;
+            return (
+              <div key={item.product_id} className="flex gap-3 rounded-2xl bg-card p-3 ring-1 ring-border">
+                <div className="relative size-16 shrink-0 overflow-hidden rounded-xl bg-muted sm:size-20">
+                  {item.image_url ? (
+                    <Image src={item.image_url} alt={item.name} fill sizes="80px" quality={85} className="object-cover" />
+                  ) : (
+                    <ProductPlaceholder visual={categoryVisual({ name: "", icon: item.category_icon })} />
+                  )}
                 </div>
-                <div className="mt-2 flex items-center gap-2">
-                  <div className="w-40">
-                    <CartStepper
-                      product={{
-                        product_id: item.product_id,
-                        name: item.name,
-                        brand: item.brand,
-                        image_url: item.image_url,
-                        unit_price: item.unit_price,
-                        category_id: item.category_id,
-                        category_icon: item.category_icon,
-                      }}
-                      boxCount={null}
-                      scope={scope}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      removeFromCart(item.product_id, scope);
-                      toast(`«${item.name}» сагснаас хасагдлаа`);
-                    }}
-                    aria-label={`${item.name} — сагснаас хасах`}
-                    className="ml-auto flex size-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+                <div className="min-w-0 flex-1">
+                  {item.brand && (
+                    <div className="text-[11px] font-bold uppercase tracking-wide text-primary">{item.brand}</div>
+                  )}
+                  <Link
+                    href={`/rep/stores/${storeId}/catalog/${item.product_id}`}
+                    className="line-clamp-2 text-[14px] font-medium leading-tight hover:underline"
                   >
-                    <Trash2 className="h-5 w-5" />
-                  </button>
+                    {item.name}
+                  </Link>
+                  {noStock && (
+                    // Reps may still send it (website stock isn't exact yet).
+                    <div className="mt-1 inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[12px] font-bold text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                      Үлдэгдэлгүй
+                    </div>
+                  )}
+                  <div className="mt-1 text-[13px] text-muted-foreground tabular-nums">
+                    {formatMnt(item.unit_price)} × {item.qty} ={" "}
+                    <span className="font-semibold text-foreground">{formatMnt(item.unit_price * item.qty)}</span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="w-44">
+                      <CartStepper
+                        product={{
+                          product_id: item.product_id,
+                          name: item.name,
+                          brand: item.brand,
+                          image_url: item.image_url,
+                          unit_price: item.unit_price,
+                          category_id: item.category_id,
+                          category_icon: item.category_icon,
+                        }}
+                        boxCount={null}
+                        scope={scope}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeLine(item, index)}
+                      aria-label={`${item.name} — сагснаас хасах`}
+                      className="ml-auto flex size-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="mt-6">

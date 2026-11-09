@@ -73,7 +73,7 @@ export function SaleCard({
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,transparent_40%,rgba(255,255,255,0.12)_50%,transparent_60%)]" />
       </div>
       <div className="px-3 py-2.5">
-        <div className="text-[10.5px] uppercase tracking-[0.08em] font-bold text-emerald-700 dark:text-emerald-300 line-clamp-1">
+        <div className="text-[11.5px] uppercase tracking-[0.06em] font-bold text-emerald-700 dark:text-emerald-300 line-clamp-1">
           {r.name}
         </div>
         <div className="text-[12.5px] font-semibold leading-snug line-clamp-2 mt-0.5 min-h-[2.4em]">
@@ -118,7 +118,7 @@ export function BonusCard({
       />
 
       <div className="relative p-3">
-        <div className="flex items-center gap-1 text-[10.5px] uppercase tracking-[0.08em] font-bold text-amber-700 dark:text-amber-300">
+        <div className="flex items-center gap-1 text-[11.5px] uppercase tracking-[0.06em] font-bold text-amber-700 dark:text-amber-300">
           <Sparkles className="h-3 w-3" strokeWidth={2.4} />
           Бэлэг урамшуулал
         </div>
@@ -131,7 +131,7 @@ export function BonusCard({
           <span className="text-[20px] font-black tabular-nums tracking-tight text-amber-900 dark:text-amber-100">
             {formatMnt(threshold)}
           </span>
-          <span className="text-[11px] text-amber-800/80 dark:text-amber-300/80 font-semibold">
+          <span className="text-[12px] text-amber-800/80 dark:text-amber-300/80 font-semibold">
             -аас дээш
           </span>
         </div>
@@ -139,7 +139,7 @@ export function BonusCard({
         {/* Reward chip — what they get. Inner card with white-ish
             backdrop so it reads as a separate "gift unlocked" pill. */}
         <div className="mt-2 rounded-xl bg-white/70 dark:bg-black/25 ring-1 ring-amber-300/50 dark:ring-amber-700/40 px-2.5 py-1.5">
-          <div className="flex items-center gap-1 text-[9.5px] uppercase tracking-[0.08em] font-bold text-amber-700/85 dark:text-amber-300/85">
+          <div className="flex items-center gap-1 text-[11px] uppercase tracking-[0.06em] font-bold text-amber-700/85 dark:text-amber-300/85">
             <Gift className="h-3 w-3" strokeWidth={2.4} />
             Үнэгүй
           </div>
@@ -204,7 +204,7 @@ export function Countdown({
 
   return (
     <div
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums ring-1 ${toneClass}`}
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-bold tabular-nums ring-1 ${toneClass}`}
     >
       <Timer className="h-3 w-3" strokeWidth={2.4} />
       {label}

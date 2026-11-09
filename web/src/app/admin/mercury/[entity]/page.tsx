@@ -146,9 +146,8 @@ export default async function MercuryEntityPage({
               <Link
                 key={m}
                 href={href(m)}
-                className={`shrink-0 rounded-full px-3 py-1 text-[12.5px] tabular-nums transition-colors ${
-                  m === month ? "bg-primary text-primary-foreground font-semibold" : "bg-muted hover:bg-muted/70"
-                }`}
+                className="chip tabular-nums"
+                data-active={m === month || undefined}
               >
                 {m}
               </Link>

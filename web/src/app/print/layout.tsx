@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { homePathForRole, requireSession } from "@/lib/auth";
+import { hasActiveRole, homePathForRole, requireSession } from "@/lib/auth";
 
 /**
  * Printable documents (delivery notes, loading list). No app chrome; always
@@ -7,7 +7,7 @@ import { homePathForRole, requireSession } from "@/lib/auth";
  */
 export default async function PrintLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
-  if (session.profile.role !== "admin") redirect(homePathForRole(session.profile));
+  if (!hasActiveRole(session.profile, "admin")) redirect(homePathForRole(session.profile));
 
   return (
     <div className="min-h-screen bg-neutral-100 text-black print:bg-white [color-scheme:light]">

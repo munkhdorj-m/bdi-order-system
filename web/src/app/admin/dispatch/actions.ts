@@ -4,12 +4,10 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { adminGuardError, getSession } from "@/lib/auth";
 import { isIsoDay } from "@/lib/dispatch";
 import { LIVE_STATUSES } from "@/lib/ebarimt";
-import { notify } from "@/lib/notify";
-import { STATUS_LABELS } from "@/lib/order-status";
+import { notifyOrderStatus } from "@/lib/orders/status-notify";
 
 /**
  * Daily dispatch — Mercury's "Захиалгын хүргэлт хуваарлах" and
@@ -36,7 +34,20 @@ function refresh() {
 
 function uniqueIds(ids: unknown): string[] {
   if (!Array.isArray(ids)) return [];
-  return [...new Set(ids.filter((x): x is string => typeof x === "string" && x.length > 0))].slice(0, 500);
+  return [...new Set(ids.filter((x): x is string => typeof x === "string" && x.length > 0))];
+}
+
+/** Most orders one click may move — refused above this, never cut quietly. */
+const MAX_IDS = 1000;
+const TOO_MANY = `Нэг удаад ${MAX_IDS} хүртэл захиалга.`;
+
+/** Order ids per request — keeps `id=in.(…)` URLs short. */
+const ID_CHUNK = 100;
+
+function chunked<T>(list: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
 }
 
 async function loadShipment(supabase: SupabaseClient, id: string) {
@@ -50,33 +61,6 @@ async function loadShipment(supabase: SupabaseClient, id: string) {
   return { shipment: data as { id: string; shipment_no: number; delivery_date: string; status: "open" | "closed" } };
 }
 
-/**
- * Tell buyers (not staff) about a status change on their orders. Runs in
- * after(), so it uses the service-role client rather than the request's
- * cookies, and never throws.
- */
-async function notifyBuyers(
-  orders: { id: string; order_number: string; placed_by: string }[],
-  status: "confirmed" | "shipped",
-) {
-  if (orders.length === 0) return;
-  const { data: people } = await createAdminClient()
-    .from("profiles")
-    .select("id, role")
-    .in("id", [...new Set(orders.map((o) => o.placed_by))]);
-  const buyers = new Set((people ?? []).filter((p) => p.role === "buyer").map((p) => p.id as string));
-  for (const o of orders) {
-    if (!buyers.has(o.placed_by)) continue;
-    await notify({
-      user_id: o.placed_by,
-      kind: "order_status",
-      title: `${o.order_number} · ${STATUS_LABELS[status]}`,
-      body: status === "shipped" ? "Захиалга хүргэлтэнд гарлаа." : `Шинэ төлөв: ${STATUS_LABELS[status]}`,
-      href: `/orders/${o.id}`,
-      order_id: o.id,
-    });
-  }
-}
 
 export async function createShipment(input: {
   deliveryDate: string;
@@ -145,6 +129,7 @@ export async function assignOrders(shipmentId: string, orderIds: string[]): Prom
   if (guardErr) return { error: guardErr };
   const ids = uniqueIds(orderIds);
   if (ids.length === 0) return { error: "Захиалга сонгоно уу." };
+  if (ids.length > MAX_IDS) return { error: TOO_MANY };
 
   const supabase = await createClient();
   const loaded = await loadShipment(supabase, shipmentId);
@@ -152,34 +137,47 @@ export async function assignOrders(shipmentId: string, orderIds: string[]): Prom
   const shipment = loaded.shipment!;
   if (shipment.status !== "open") return { error: "Ачилт хаагдсан байна. Эхлээд буцааж нээнэ үү." };
 
-  // Only active orders that aren't on another run yet.
-  const { data: moved, error } = await supabase
-    .from("orders")
-    .update({ shipment_id: shipment.id, delivery_date: shipment.delivery_date })
-    .in("id", ids)
-    .is("shipment_id", null)
-    .in("status", ["pending", "confirmed"])
-    .select("id, order_number, status, placed_by");
-  if (error) return { error: error.message };
+  // Only active orders that aren't on another run yet. In chunks, so a big
+  // "assign all" doesn't build an overlong request URL.
+  const moved: { id: string; order_number: string; status: string; placed_by: string }[] = [];
+  for (const chunk of chunked(ids, ID_CHUNK)) {
+    const { data, error } = await supabase
+      .from("orders")
+      .update({ shipment_id: shipment.id, delivery_date: shipment.delivery_date })
+      .in("id", chunk)
+      .is("shipment_id", null)
+      .in("status", ["pending", "confirmed"])
+      .select("id, order_number, status, placed_by");
+    if (error) {
+      if (moved.length > 0) refresh();
+      return { count: moved.length, error: error.message };
+    }
+    moved.push(...((data ?? []) as typeof moved));
+  }
 
   // Scheduling a pending order is accepting it.
-  const pending = (moved ?? []).filter((o) => o.status === "pending");
+  const pending = moved.filter((o) => o.status === "pending");
   if (pending.length > 0) {
-    const { error: confirmErr } = await supabase
-      .from("orders")
-      .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
-      .in("id", pending.map((o) => o.id as string));
-    if (confirmErr) return { error: confirmErr.message };
+    for (const chunk of chunked(pending.map((o) => o.id), ID_CHUNK)) {
+      const { error: confirmErr } = await supabase
+        .from("orders")
+        .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
+        .in("id", chunk);
+      if (confirmErr) {
+        refresh();
+        return { count: moved.length, error: confirmErr.message };
+      }
+    }
     after(() =>
-      notifyBuyers(
-        pending.map((o) => ({ id: o.id as string, order_number: o.order_number as string, placed_by: o.placed_by as string })),
+      notifyOrderStatus(
+        pending.map((o) => o.id as string),
         "confirmed",
       ),
     );
   }
 
   refresh();
-  const count = moved?.length ?? 0;
+  const count = moved.length;
   if (count < ids.length) {
     return {
       count,
@@ -197,26 +195,38 @@ export async function unassignOrders(orderIds: string[]): Promise<Result> {
   if (guardErr) return { error: guardErr };
   const ids = uniqueIds(orderIds);
   if (ids.length === 0) return { error: "Захиалга сонгоно уу." };
+  if (ids.length > MAX_IDS) return { error: TOO_MANY };
 
   const supabase = await createClient();
-  const { data: rows, error } = await supabase
-    .from("orders")
-    .select("id, shipment:shipment_id(status)")
-    .in("id", ids);
-  if (error) return { error: error.message };
-  const removable = (rows ?? [])
-    .filter((r) => (r.shipment as unknown as { status: string } | null)?.status === "open")
-    .map((r) => r.id as string);
+  const removable: string[] = [];
+  for (const chunk of chunked(ids, ID_CHUNK)) {
+    const { data: rows, error } = await supabase
+      .from("orders")
+      .select("id, shipment:shipment_id(status)")
+      .in("id", chunk);
+    if (error) return { error: error.message };
+    for (const r of rows ?? []) {
+      if ((r.shipment as unknown as { status: string } | null)?.status === "open") removable.push(r.id as string);
+    }
+  }
   if (removable.length === 0) return { error: "Хаагдсан ачилтаас захиалга хасах боломжгүй." };
 
-  const { error: updErr } = await supabase
-    .from("orders")
-    .update({ shipment_id: null })
-    .in("id", removable)
-    .in("status", ["pending", "confirmed"]);
-  if (updErr) return { error: updErr.message };
+  let count = 0;
+  for (const chunk of chunked(removable, ID_CHUNK)) {
+    const { data: removed, error: updErr } = await supabase
+      .from("orders")
+      .update({ shipment_id: null })
+      .in("id", chunk)
+      .in("status", ["pending", "confirmed"])
+      .select("id");
+    if (updErr) {
+      if (count > 0) refresh();
+      return { count, error: updErr.message };
+    }
+    count += removed?.length ?? 0;
+  }
   refresh();
-  return { count: removable.length };
+  return { count };
 }
 
 export async function closeShipment(shipmentId: string): Promise<Result> {
@@ -256,8 +266,8 @@ export async function closeShipment(shipmentId: string): Promise<Result> {
   if (closeErr) return { error: closeErr.message };
 
   after(() =>
-    notifyBuyers(
-      shipped.map((o) => ({ id: o.id as string, order_number: o.order_number as string, placed_by: o.placed_by as string })),
+    notifyOrderStatus(
+      shipped.map((o) => o.id as string),
       "shipped",
     ),
   );
@@ -298,12 +308,21 @@ export async function reopenShipment(shipmentId: string): Promise<Result> {
     }
   }
 
-  const { error: ordErr } = await supabase
+  const { data: reopened, error: ordErr } = await supabase
     .from("orders")
     .update({ status: "confirmed", shipped_at: null })
     .eq("shipment_id", shipmentId)
-    .eq("status", "shipped");
+    .eq("status", "shipped")
+    .select("id");
   if (ordErr) return { error: ordErr.message };
+  // Orders cancelled after the run left stay linked to the closed run for
+  // its history; an open run doesn't keep them.
+  const { error: detachErr } = await supabase
+    .from("orders")
+    .update({ shipment_id: null })
+    .eq("shipment_id", shipmentId)
+    .eq("status", "cancelled");
+  if (detachErr) return { error: detachErr.message };
 
   const { error: openErr } = await supabase
     .from("shipments")
@@ -311,7 +330,7 @@ export async function reopenShipment(shipmentId: string): Promise<Result> {
     .eq("id", shipmentId);
   if (openErr) return { error: openErr.message };
   refresh();
-  return { count: ids.length };
+  return { count: reopened?.length ?? 0 };
 }
 
 export async function deleteShipment(shipmentId: string): Promise<Result> {
@@ -322,10 +341,12 @@ export async function deleteShipment(shipmentId: string): Promise<Result> {
   if (loaded.error) return { error: loaded.error };
   if (loaded.shipment!.status !== "open") return { error: "Хаагдсан ачилтыг устгах боломжгүй." };
 
-  const { count } = await supabase
+  const { count, error: countErr } = await supabase
     .from("orders")
     .select("id", { count: "exact", head: true })
-    .eq("shipment_id", shipmentId);
+    .eq("shipment_id", shipmentId)
+    .neq("status", "cancelled");
+  if (countErr) return { error: countErr.message };
   if ((count ?? 0) > 0) return { error: "Эхлээд ачилтаас бүх захиалгыг хасна уу." };
 
   const { error } = await supabase.from("shipments").delete().eq("id", shipmentId);

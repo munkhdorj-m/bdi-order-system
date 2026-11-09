@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -75,6 +76,7 @@ function toBoardOrder(o: OrderRow): BoardOrder {
       address: o.store?.address ?? null,
       phone: o.store?.contact_phone ?? null,
       registry: o.store?.registry_number ?? null,
+      district: o.store?.district?.replace(/\s+/g, " ").trim() || null,
       weekday: resolveDeliveryDay({
         storeDeliveryDay: o.store?.delivery_day ?? null,
         district: o.store?.district ?? null,
@@ -95,32 +97,52 @@ export default async function DispatchPage({ searchParams }: { searchParams: Sea
   const date = isIsoDay(sp.date) ? sp.date : todayUb();
   const supabase = await createClient();
 
-  const [unassignedRes, shipmentsRes, distributorsRes] = await Promise.all([
-    supabase
-      .from("orders")
-      .select(ORDER_SELECT)
-      .is("shipment_id", null)
-      .in("status", ["pending", "confirmed"])
-      .order("created_at", { ascending: true })
-      .limit(500),
+  // Everything in one round: unplanned orders (all of them, paged), the
+  // day's runs, the orders on those runs (found through the run's day, so
+  // no second trip) and the distributors.
+  const [unassignedRes, shipmentsRes, assignedRes, distributorsRes] = await Promise.all([
+    fetchAll<OrderRow>(() =>
+      supabase
+        .from("orders")
+        .select(ORDER_SELECT)
+        .is("shipment_id", null)
+        .in("status", ["pending", "confirmed"])
+        .order("created_at", { ascending: true })
+        .order("id"),
+    )
+      .then((data) => ({ data, error: null as { message: string } | null }))
+      .catch((e: Error) => ({ data: [] as OrderRow[], error: { message: e.message } })),
     supabase
       .from("shipments")
       .select("id, shipment_no, status, notes, created_at, closed_at, distributor:distributor_id(id, name, phone)")
       .eq("delivery_date", date)
       .order("shipment_no", { ascending: true }),
+    fetchAll<OrderRow>(() =>
+      supabase
+        .from("orders")
+        .select(`${ORDER_SELECT}, run:shipment_id!inner(delivery_date)`)
+        .eq("run.delivery_date", date)
+        .neq("status", "cancelled")
+        .order("order_number", { ascending: true })
+        .order("id"),
+    )
+      .then((data) => ({ data, error: null as { message: string } | null }))
+      .catch((e: Error) => ({ data: [] as OrderRow[], error: { message: e.message } })),
     supabase.from("distributors").select("id, name, phone, active").order("name"),
   ]);
 
-  const setupError = unassignedRes.error ?? shipmentsRes.error ?? distributorsRes.error;
+  const setupError = unassignedRes.error ?? shipmentsRes.error ?? assignedRes.error ?? distributorsRes.error;
   if (setupError) {
     return (
       <div className="max-w-3xl">
         <h1 className="text-2xl font-semibold tracking-tight mb-4">Хүргэлт хуваарлах</h1>
         <Card className="p-6 text-sm">
-          <div className="font-medium mb-1">Хүргэлтийн хүснэгтүүд бэлэн биш байна.</div>
-          <p className="text-muted-foreground">
-            Supabase SQL Editor дээр <code>docs/fixes/37-dispatch-and-ebarimt.sql</code>-ийг ажиллуулна уу.
-          </p>
+          <div className="font-medium mb-1">Хүргэлтийн мэдээллийг уншиж чадсангүй.</div>
+          {/relation|does not exist|schema cache/i.test(setupError.message) && (
+            <p className="text-muted-foreground">
+              Supabase SQL Editor дээр <code>docs/fixes/37-dispatch-and-ebarimt.sql</code>-ийг ажиллуулна уу.
+            </p>
+          )}
           <p className="text-muted-foreground mt-2 break-words">Алдаа: {setupError.message}</p>
         </Card>
       </div>
@@ -138,16 +160,7 @@ export default async function DispatchPage({ searchParams }: { searchParams: Sea
   }[];
 
   // Orders on the day's runs (for counts, the selected run's list and its product summary).
-  const shipmentIds = shipmentRows.map((s) => s.id);
-  const assignedRes = shipmentIds.length
-    ? await supabase
-        .from("orders")
-        .select(ORDER_SELECT)
-        .in("shipment_id", shipmentIds)
-        .neq("status", "cancelled")
-        .order("order_number", { ascending: true })
-    : { data: [], error: null };
-  const assigned = ((assignedRes.data ?? []) as unknown as OrderRow[]);
+  const assigned = assignedRes.data;
 
   const shipments: BoardShipment[] = shipmentRows.map((s) => {
     const mine = assigned.filter((o) => o.shipment_id === s.id);
@@ -220,7 +233,7 @@ export default async function DispatchPage({ searchParams }: { searchParams: Sea
         key={date}
         date={date}
         today={todayUb()}
-        unassigned={((unassignedRes.data ?? []) as unknown as OrderRow[]).map(toBoardOrder)}
+        unassigned={unassignedRes.data.map(toBoardOrder)}
         shipments={shipments}
         selectedId={selected?.id ?? null}
         selectedOrders={selectedOrders.map(toBoardOrder)}

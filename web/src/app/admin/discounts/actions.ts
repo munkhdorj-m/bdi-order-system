@@ -1,14 +1,19 @@
 "use server";
 
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { adminGuardError } from "@/lib/auth";
-import { listBuyerIds, notifyMany } from "@/lib/notify";
+import { notifyMany } from "@/lib/notify";
+import { parseUbDateTimeInput } from "@/lib/dispatch";
 
 type ActionState = { error?: string };
 
 type DiscountKind = "product" | "threshold_bonus";
+type TargetMode = "all" | "include" | "exclude";
 
 function parseString(v: FormDataEntryValue | null): string | null {
   if (v === null) return null;
@@ -43,8 +48,16 @@ function buildPayload(
   const kind = kindRaw as DiscountKind;
 
   const active = formData.get("active") === "on";
-  const startsAt = parseString(formData.get("starts_at"));
-  const endsAt = parseString(formData.get("ends_at"));
+  // The form's datetime-local values are Ulaanbaatar time. Parsed on the
+  // (UTC) server without an offset they used to land 8 hours late.
+  const startsAt = parseUbDateTimeInput(parseString(formData.get("starts_at")));
+  const endsAt = parseUbDateTimeInput(parseString(formData.get("ends_at")));
+  if (startsAt === null || endsAt === null) {
+    return { error: "Эхлэх / дуусах огноо буруу байна." };
+  }
+  if (startsAt && endsAt && endsAt <= startsAt) {
+    return { error: "Дуусах хугацаа эхлэхээс хойш байх ёстой." };
+  }
   const notes = parseString(formData.get("notes"));
 
   // kind-specific fields
@@ -109,8 +122,8 @@ function buildPayload(
       product_id: productId,
       category_id: kind === "product" ? categoryId : null,
       active,
-      starts_at: startsAt ? new Date(startsAt).toISOString() : null,
-      ends_at: endsAt ? new Date(endsAt).toISOString() : null,
+      starts_at: startsAt ?? null,
+      ends_at: endsAt ?? null,
       notes,
       target_mode: targetModeRaw,
       target_price_list_ids: targetListIds,
@@ -132,26 +145,67 @@ export async function createDiscount(
   const { data: row, error } = await supabase
     .from("discounts")
     .insert(built.payload)
-    .select("id, name, active")
+    .select("id, name, active, starts_at, ends_at, target_mode, target_price_list_ids")
     .single();
   if (error) return { error: error.message };
 
-  // Only broadcast when the new discount is immediately active. Scheduled
-  // (active=false / starts_at in future) discounts are silent until they
-  // flip on — admin can manually broadcast later.
-  if (row?.active) {
-    const buyerIds = await listBuyerIds();
-    await notifyMany(buyerIds, {
-      kind: "discount_new",
-      title: "Шинэ хямдрал",
-      body: row.name,
-      href: "/catalog",
-      discount_id: row.id,
+  // Tell the stores only when the deal is on right now (a scheduled or
+  // switched-off one stays quiet), only the stores it applies to, and
+  // after the response — the admin doesn't wait for every push.
+  const now = Date.now();
+  const liveNow =
+    row.active &&
+    (!row.starts_at || Date.parse(row.starts_at) <= now) &&
+    (!row.ends_at || Date.parse(row.ends_at) > now);
+  if (liveNow) {
+    const mode = (row.target_mode ?? "all") as TargetMode;
+    const lists = (row.target_price_list_ids ?? []) as string[];
+    after(async () => {
+      try {
+        const recipients = await discountRecipients(mode, lists);
+        await notifyMany(recipients, {
+          kind: "discount_new",
+          title: "Шинэ хямдрал",
+          body: row.name as string,
+          href: "/catalog",
+          discount_id: row.id as string,
+        });
+      } catch (e) {
+        console.error("[discounts] broadcast failed:", e);
+      }
     });
   }
 
   revalidatePath("/admin/discounts");
   redirect("/admin/discounts");
+}
+
+/**
+ * Active store users whose store the deal applies to: every store for
+ * "all", stores on a chosen price list for "include", the rest (stores
+ * with no price list too) for "exclude". Users without a store are skipped.
+ */
+async function discountRecipients(mode: TargetMode, listIds: string[]): Promise<string[]> {
+  const admin = createAdminClient();
+  const rows = await fetchAll<{ id: string; store: { price_list_id: string | null } | null }>(() =>
+    admin
+      .from("profiles")
+      .select("id, store:supermarket_id(price_list_id)")
+      .eq("role", "buyer")
+      .eq("active", true)
+      .not("supermarket_id", "is", null)
+      .order("id"),
+  );
+  const chosen = new Set(listIds);
+  return rows
+    .filter((r) => {
+      if (!r.store) return false;
+      const list = r.store.price_list_id;
+      if (mode === "include") return list !== null && chosen.has(list);
+      if (mode === "exclude") return list === null || !chosen.has(list);
+      return true;
+    })
+    .map((r) => r.id);
 }
 
 export async function updateDiscount(
@@ -175,24 +229,6 @@ export async function updateDiscount(
   revalidatePath("/admin/discounts");
   revalidatePath(`/admin/discounts/${id}`);
   redirect("/admin/discounts");
-}
-
-export async function toggleDiscountActive(
-  id: string,
-  next: boolean,
-): Promise<ActionState> {
-  const guardErr = await adminGuardError();
-  if (guardErr) return { error: guardErr };
-
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("discounts")
-    .update({ active: next })
-    .eq("id", id);
-  if (error) return { error: error.message };
-
-  revalidatePath("/admin/discounts");
-  return {};
 }
 
 export async function deleteDiscount(id: string): Promise<ActionState> {

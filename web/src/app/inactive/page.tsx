@@ -1,10 +1,15 @@
-import { requireSession } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { homePathForRole, requireSession } from "@/lib/auth";
 import { SignOutButton } from "@/components/SignOutButton";
 import { ContactLinks } from "@/components/contact-links";
 import { hasContactLinks } from "@/lib/contact";
 
+/** An account an admin switched off (a sign-up still waiting sees /pending). */
 export default async function InactivePage() {
   const session = await requireSession();
+  // Switched back on (or a pending sign-up): go to where this account belongs.
+  const home = homePathForRole(session.profile);
+  if (home !== "/inactive") redirect(home);
 
   return (
     <main className="flex-1 flex items-center justify-center px-6 py-12 bg-aurora">

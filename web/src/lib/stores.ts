@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllParallel } from "@/lib/supabase/fetch-all";
 
 export type StoreOption = {
   id: string;
@@ -8,41 +9,21 @@ export type StoreOption = {
 };
 
 /**
- * Fetch EVERY supermarket, paging past the PostgREST/Supabase per-request
- * row ceiling.
- *
- * A single `.limit(n)` is silently clamped to the project's "max rows"
- * setting (commonly 1000), so a one-shot query can never return more than
- * that — which hid later-alphabet stores from the user-assignment picker
- * once the catalog passed ~1000 stores. Here we request in pages and
- * advance by however many rows actually came back (so it's correct even
- * if the server caps a page below PAGE), stopping when a page is empty.
- *
- * Sorted active-first, then name, with id as a stable tiebreaker so the
- * paging windows never skip or duplicate a row when names collide.
+ * EVERY supermarket for the store pickers (~1,300, so past the 1,000-row
+ * cap of one request): the first page brings the count, the rest load in
+ * parallel. Active first, then by name, id as the tiebreaker so pages
+ * never skip or repeat a row.
  */
 export async function fetchAllStores(): Promise<StoreOption[]> {
   const supabase = await createClient();
-  const PAGE = 1000;
-  const MAX_PAGES = 50; // safety stop: 50k stores
-  const all: StoreOption[] = [];
-
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const from = all.length;
-    const { data, error } = await supabase
+  const rows = await fetchAllParallel<StoreOption>((count) =>
+    supabase
       .from("supermarkets")
-      .select("id, name, address, active")
+      .select("id, name, address, active", count ? { count: "exact" } : undefined)
       .order("active", { ascending: false })
       .order("name")
-      .order("id")
-      .range(from, from + PAGE - 1);
-
-    if (error || !data || data.length === 0) break;
-    all.push(...(data as StoreOption[]));
-    // Stop only on an empty page. We advance `from` by the actual rows
-    // returned (all.length), so this stays correct even if the server
-    // caps a page below PAGE — we never break early and miss rows.
-  }
-
-  return all;
+      .order("id"),
+  );
+  // A store added between two pages could appear twice.
+  return [...new Map(rows.map((s) => [s.id, s])).values()];
 }

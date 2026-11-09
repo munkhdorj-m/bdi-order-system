@@ -69,7 +69,10 @@ export function OrderEditControls({ orderId, orderNumber, items }: Props) {
   }
 
   function changeQty(item: OrderItem, delta: number) {
-    const next = Math.max(1, item.qty + delta);
+    setQty(item, Math.max(1, item.qty + delta));
+  }
+
+  function setQty(item: OrderItem, next: number) {
     if (next === item.qty) return;
     // Absolute quantities, and Next runs a client's actions one at a time,
     // so quick repeated taps settle on the last one.
@@ -77,7 +80,8 @@ export function OrderEditControls({ orderId, orderNumber, items }: Props) {
   }
 
   function confirmRemoveItem(item: OrderItem) {
-    if (view.length <= 1) {
+    // Free gifts don't count: at least one paid line has to stay.
+    if (view.filter((i) => i.unit_price > 0).length <= 1) {
       const msg = "Сүүлчийн барааг хасч болохгүй";
       setError(msg);
       toast.error(msg);
@@ -164,25 +168,23 @@ export function OrderEditControls({ orderId, orderNumber, items }: Props) {
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <div className="inline-flex items-center rounded-full border border-border bg-muted/30">
+                <div className="inline-flex items-center rounded-xl border border-input bg-card">
                   <button
                     type="button"
                     onClick={() => changeQty(item, -1)}
                     disabled={cancelling || item.qty <= 1}
                     aria-label="Хасах"
-                    className="size-10 flex items-center justify-center hover:bg-muted rounded-l-full disabled:opacity-40 active:scale-90 transition-transform"
+                    className="size-10 flex items-center justify-center hover:bg-muted rounded-l-xl disabled:opacity-40 active:scale-90 transition-transform"
                   >
                     <Minus className="h-4 w-4" strokeWidth={2.4} />
                   </button>
-                  <span className="px-3 text-sm font-semibold min-w-10 text-center tabular-nums">
-                    {item.qty}
-                  </span>
+                  <QtyField value={item.qty} disabled={cancelling} onCommit={(n) => setQty(item, n)} />
                   <button
                     type="button"
                     onClick={() => changeQty(item, +1)}
                     disabled={cancelling}
                     aria-label="Нэмэх"
-                    className="size-10 flex items-center justify-center hover:bg-muted rounded-r-full disabled:opacity-40 active:scale-90 transition-transform"
+                    className="size-10 flex items-center justify-center hover:bg-muted rounded-r-xl disabled:opacity-40 active:scale-90 transition-transform"
                   >
                     <Plus className="h-4 w-4" strokeWidth={2.4} />
                   </button>
@@ -257,5 +259,55 @@ export function OrderEditControls({ orderId, orderNumber, items }: Props) {
         )}
       </div>
     </div>
+  );
+}
+
+/** The quantity, typeable: tap it, type 72, press Enter — one save. */
+function QtyField({
+  value,
+  disabled,
+  onCommit,
+}: {
+  value: number;
+  disabled: boolean;
+  onCommit: (n: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  const [shown, setShown] = useState(value);
+  if (shown !== value) {
+    setShown(value);
+    setDraft(String(value));
+  }
+  function commit() {
+    const n = Math.floor(Number(draft));
+    if (draft.trim() === "" || !Number.isFinite(n) || n < 1) {
+      setDraft(String(value));
+      return;
+    }
+    if (n !== value) onCommit(n);
+  }
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      maxLength={5}
+      value={draft}
+      disabled={disabled}
+      aria-label="Тоо ширхэг"
+      onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
+      onFocus={(e) => e.target.select()}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          (e.target as HTMLInputElement).blur();
+        } else if (e.key === "Escape") {
+          setDraft(String(value));
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      className="h-10 w-14 bg-transparent text-center text-sm font-semibold tabular-nums outline-none focus:bg-muted/60"
+    />
   );
 }

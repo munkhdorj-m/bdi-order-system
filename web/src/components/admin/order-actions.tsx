@@ -30,7 +30,7 @@ type Props = {
   deliveryDate?: string | null;
 };
 
-type Confirming = "cancel" | "delete" | null;
+type Confirming = "cancel" | "delete" | "deliver" | null;
 
 /**
  * Status controls on the order page. Confirmed orders ship through a
@@ -108,15 +108,29 @@ export function OrderActions({ orderId, status, deliveryDate }: Props) {
       ) : (
         next &&
         nextLabel && (
-          <Button
-            disabled={pending}
-            onClick={() =>
-              run(() => advanceOrderStatus(orderId, status), `${STATUS_LABELS[next]} боллоо`)
-            }
-          >
-            {nextLabel}
-            <ArrowRight className="h-4 w-4" />
-          </Button>
+          <>
+            <Button
+              disabled={pending}
+              onClick={() =>
+                // "Delivered" is final — ask first.
+                next === "delivered"
+                  ? setConfirming("deliver")
+                  : run(() => advanceOrderStatus(orderId, status), `${STATUS_LABELS[next]} боллоо`)
+              }
+            >
+              {nextLabel}
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            <ConfirmDialog
+              open={confirming === "deliver"}
+              onOpenChange={(o) => setConfirming(o ? "deliver" : null)}
+              title="Хүргэгдсэн гэж тэмдэглэх үү?"
+              description="Дэлгүүрт мэдэгдэл очно. Хүргэгдсэн захиалгыг дараа нь өөрчлөх боломжгүй."
+              confirmLabel="Хүргэгдсэн"
+              pending={pending}
+              onConfirm={() => run(() => advanceOrderStatus(orderId, status), `${STATUS_LABELS[next]} боллоо`)}
+            />
+          </>
         )
       )}
       {!isFinal(status) && (

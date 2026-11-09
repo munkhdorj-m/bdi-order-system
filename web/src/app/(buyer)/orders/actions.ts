@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSession } from "@/lib/auth";
 import { listAdminIds, notifyMany } from "@/lib/notify";
 import { isUuid, loadOwnPendingOrder } from "@/lib/orders/write";
+import { recomputeOrderDeals } from "@/lib/orders/deals";
 
 type Result = { error?: string; ok?: boolean };
 
@@ -40,6 +41,8 @@ async function stillPending(admin: ReturnType<typeof createAdminClient>, orderId
 function refresh(orderId: string) {
   revalidatePath(`/orders/${orderId}`);
   revalidatePath("/orders");
+  revalidatePath(`/rep/orders/${orderId}`);
+  revalidatePath("/rep", "layout");
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath("/admin/orders");
 }
@@ -74,8 +77,11 @@ export async function updateOrderItemQty(
     return { error: "Энэ барааны тоог өөрчлөх боломжгүй." };
   }
 
-  // orders.subtotal follows via the recompute_order_subtotal trigger.
+  // orders.subtotal follows via the recompute_order_subtotal trigger;
+  // the discount and the free gifts are worked out again here.
+  const deals = await recomputeOrderDeals(orderId);
   refresh(orderId);
+  if (deals.error) return { error: `Тоо хадгалагдсан ч хөнгөлөлтийг дахин бодоход алдаа гарлаа: ${deals.error}` };
   return { ok: true };
 }
 
@@ -114,7 +120,9 @@ export async function removeOrderItem(
     return { error: "Энэ барааг хасах боломжгүй." };
   }
 
+  const deals = await recomputeOrderDeals(orderId);
   refresh(orderId);
+  if (deals.error) return { error: `Бараа хасагдсан ч хөнгөлөлтийг дахин бодоход алдаа гарлаа: ${deals.error}` };
   return { ok: true };
 }
 

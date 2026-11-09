@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { Bell, ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { homePathForRole, requireSession } from "@/lib/auth";
+import { homePathForRole, requireSession, type UserRole } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 import { MarkAllReadButton } from "@/components/mark-all-read-button";
 import { PushToggle } from "@/components/push-toggle";
-import type { NotificationItem } from "@/components/notifications-bell";
+import { NotificationLink, type NotificationItem } from "@/components/notifications-bell";
 
 const KIND_LABELS: Record<NotificationItem["kind"], string> = {
   order_new: "Захиалга",
@@ -14,6 +14,13 @@ const KIND_LABELS: Record<NotificationItem["kind"], string> = {
   user_approved: "Бүртгэл",
   user_pending: "Шинэ хэрэглэгч",
   discount_new: "Хямдрал",
+};
+
+/** What a push brings, per role — the office, a store, a rep. */
+const PUSH_HINT: Record<UserRole, string> = {
+  admin: "Шинэ захиалга, шинэ бүртгэл орж ирэхэд энэ төхөөрөмж дээр шууд мэдэгдэл ирнэ.",
+  buyer: "Захиалга тань баталгаажих, хүргэлтэнд гарах, хүргэгдэхэд энэ утсанд шууд мэдэгдэл ирнэ.",
+  rep: "Таны оруулсан захиалгын төлөв өөрчлөгдөхөд энэ утсанд шууд мэдэгдэл ирнэ.",
 };
 
 function formatDateTime(iso: string) {
@@ -50,7 +57,7 @@ export default async function NotificationsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="on-brand sticky top-0 z-10 flex h-14 items-center gap-2.5 bg-brand-bar px-2 text-brand-bar-foreground shadow-[0_6px_18px_-12px_rgb(15_25_60/0.5)] sm:px-4">
+      <header className="on-brand sticky top-0 z-10 flex h-14 items-center gap-2.5 bg-brand-bar px-2 text-brand-bar-foreground sm:px-4">
         <Link
           href={home}
           aria-label="Буцах"
@@ -76,16 +83,15 @@ export default async function NotificationsPage() {
           {unreadCount > 0 && <MarkAllReadButton />}
         </div>
 
-        {/* Per-device push opt-in. Rendered for every role, but it's the
-            admins who actually need it — a new order or signup should
-            reach a phone in a pocket, not wait for someone to refresh. */}
+        {/* Per-device push opt-in, explained in terms of what THIS person
+            gets: the office hears of new orders and sign-ups; a store or a
+            rep hears when their orders move along. */}
         <div className="mb-4 rounded-2xl bg-card ring-1 ring-border p-4">
-          <div className="text-[13px] font-semibold mb-1">
-            Утас / компьютерт мэдэгдэл авах
+          <div className="text-[14px] font-semibold mb-1">
+            Утсандаа мэдэгдэл авах
           </div>
-          <p className="text-[12px] text-muted-foreground mb-3">
-            Идэвхжүүлбэл шинэ захиалга, шинэ бүртгэл орж ирэхэд энэ төхөөрөмж
-            дээр шууд мэдэгдэл ирнэ. Төхөөрөмж бүр дээр тусад нь асаана.
+          <p className="text-[13px] text-muted-foreground mb-3">
+            {PUSH_HINT[session.profile.role]} Төхөөрөмж бүр дээр тусад нь асаана.
           </p>
           <PushToggle />
         </div>
@@ -98,32 +104,39 @@ export default async function NotificationsPage() {
         ) : (
           <ul className="divide-y divide-border rounded-2xl bg-card ring-1 ring-border overflow-hidden">
             {items.map((n) => {
-              const Body = n.href ? Link : "div";
+              const rowClass = `block px-4 py-3 hover:bg-muted/40 transition-colors ${
+                !n.read_at ? "bg-primary/5" : ""
+              }`;
+              const content = (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] font-bold text-muted-foreground">
+                      {KIND_LABELS[n.kind]}
+                    </span>
+                    {!n.read_at && (
+                      <span className="rounded-full bg-primary/10 px-1.5 text-[11px] font-bold text-primary">
+                        Шинэ
+                      </span>
+                    )}
+                    <span className="text-[12px] text-muted-foreground ml-auto tabular-nums">
+                      {formatDateTime(n.created_at)}
+                    </span>
+                  </div>
+                  <div className="text-[14px] font-semibold mt-0.5">{n.title}</div>
+                  {n.body && (
+                    <div className="text-[13px] text-muted-foreground mt-0.5">{n.body}</div>
+                  )}
+                </>
+              );
               return (
                 <li key={n.id}>
-                  <Body
-                    href={n.href ?? "#"}
-                    className={`block px-4 py-3 hover:bg-muted/40 transition-colors ${
-                      !n.read_at ? "bg-primary/5" : ""
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] uppercase tracking-[0.08em] font-bold text-muted-foreground">
-                        {KIND_LABELS[n.kind]}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground ml-auto tabular-nums">
-                        {formatDateTime(n.created_at)}
-                      </span>
-                    </div>
-                    <div className="text-[13.5px] font-semibold mt-0.5">
-                      {n.title}
-                    </div>
-                    {n.body && (
-                      <div className="text-[12px] text-muted-foreground mt-0.5">
-                        {n.body}
-                      </div>
-                    )}
-                  </Body>
+                  {n.href ? (
+                    <NotificationLink id={n.id} href={n.href} unread={!n.read_at} className={rowClass}>
+                      {content}
+                    </NotificationLink>
+                  ) : (
+                    <div className={rowClass}>{content}</div>
+                  )}
                 </li>
               );
             })}

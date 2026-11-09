@@ -30,15 +30,16 @@ export type NotificationItem = {
   created_at: string;
 };
 
+/** "дөнгөж сая" / "5 мин өмнө" / "3 цагийн өмнө" / "2 өдрийн өмнө". */
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
-  if (m < 1) return "одоо";
-  if (m < 60) return `${m} мин`;
+  if (m < 1) return "дөнгөж сая";
+  if (m < 60) return `${m} мин өмнө`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h} цаг`;
+  if (h < 24) return `${h} цагийн өмнө`;
   const d = Math.floor(h / 24);
-  return `${d} өдөр`;
+  return `${d} өдрийн өмнө`;
 }
 
 const KIND_DOT: Record<NotificationItem["kind"], string> = {
@@ -92,11 +93,11 @@ export function NotificationsBell({
         <button
           type="button"
           aria-label="Мэдэгдэл"
-          className="relative size-9 rounded-full hover:bg-muted active:scale-95 transition-all flex items-center justify-center text-foreground/70"
+          className="relative size-10 rounded-xl hover:bg-muted active:scale-95 transition-all flex items-center justify-center text-foreground/70"
         >
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-gold text-gold-foreground text-[9.5px] font-bold tabular-nums flex items-center justify-center ring-2 ring-[var(--badge-ring,var(--background))]">
+            <span className="absolute top-0 right-0 min-w-[18px] h-[18px] px-1 rounded-full bg-gold text-gold-foreground text-[11px] font-bold tabular-nums flex items-center justify-center ring-2 ring-[var(--badge-ring,var(--background))]">
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}
@@ -114,7 +115,7 @@ export function NotificationsBell({
               type="button"
               onClick={handleMarkAll}
               disabled={pending}
-              className="text-[11.5px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1 disabled:opacity-50"
+              className="-my-1.5 h-9 rounded-lg px-2 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground inline-flex items-center gap-1 disabled:opacity-50"
             >
               <CheckCheck className="h-3.5 w-3.5" />
               Бүгдийг уншсан
@@ -142,16 +143,16 @@ export function NotificationsBell({
                         className={`mt-1.5 size-1.5 rounded-full shrink-0 ${isUnread ? KIND_DOT[n.kind] : "bg-muted-foreground/40"}`}
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="text-[12.5px] font-semibold line-clamp-2">
+                        <div className="text-[13px] font-semibold line-clamp-2">
                           {n.title}
                         </div>
                         {n.body && (
-                          <div className="text-[11.5px] text-muted-foreground mt-0.5 line-clamp-2">
+                          <div className="text-[12px] text-muted-foreground mt-0.5 line-clamp-2">
                             {n.body}
                           </div>
                         )}
-                        <div className="text-[10px] text-muted-foreground/80 mt-1 tabular-nums">
-                          {relativeTime(n.created_at)} өмнө
+                        <div className="text-[11.5px] text-muted-foreground/80 mt-1 tabular-nums">
+                          {relativeTime(n.created_at)}
                         </div>
                       </div>
                     </Wrapper>
@@ -163,12 +164,43 @@ export function NotificationsBell({
         </div>
         <Link
           href="/notifications"
-          className="block px-3 py-2 border-t text-center text-[12px] text-muted-foreground hover:text-foreground"
+          className="block px-3 py-3 border-t text-center text-[13px] font-medium text-muted-foreground hover:text-foreground"
           onClick={() => setOpen(false)}
         >
           Бүгдийг харах
         </Link>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/**
+ * One row of the full /notifications feed. Opening it marks it read, like
+ * the bell does — otherwise rows opened from this page stayed "шинэ".
+ */
+export function NotificationLink({
+  id,
+  href,
+  unread,
+  className,
+  children,
+}: {
+  id: string;
+  href: string;
+  unread: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className={className}
+      onClick={() => {
+        // Fire and forget: the page it opens doesn't wait for it.
+        if (unread) void markNotificationRead(id);
+      }}
+    >
+      {children}
+    </Link>
   );
 }

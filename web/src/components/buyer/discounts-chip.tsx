@@ -21,7 +21,7 @@ import {
  * hero — sits in the shell header next to the notifications bell and
  * stays reachable from every buyer page.
  *
- * Trigger: a size-9 icon button styled to match the bell, with a count
+ * Trigger: a 40px icon button styled to match the bell, with a count
  * badge in the top-right corner when there's at least one active deal.
  *
  * Drawer: a `Sheet` opening from the right on `sm+` and from the
@@ -57,13 +57,13 @@ export function DiscountsChip({
         <button
           type="button"
           aria-label="Хямдрал, бэлэг"
-          className="relative size-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/70 active:scale-95 transition-all"
+          className="relative size-10 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/70 active:scale-95 transition-all"
         >
           {/* Gift icon reads as "deals / freebies" instantly — clearer
               than a generic sparkle for users scanning the header. */}
           <Gift className="h-[18px] w-[18px]" strokeWidth={2} />
           {count > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-emerald-500 text-white text-[9.5px] font-bold tabular-nums flex items-center justify-center ring-2 ring-[var(--badge-ring,var(--background))]">
+            <span className="absolute top-0 right-0 min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-500 text-white text-[11px] font-bold tabular-nums flex items-center justify-center ring-2 ring-[var(--badge-ring,var(--background))]">
               {count > 99 ? "99+" : count}
             </span>
           )}
@@ -177,12 +177,12 @@ function DrawerSection({
           {title}
         </h3>
         <span
-          className={`inline-flex items-center px-1.5 rounded-full text-[10px] font-bold tabular-nums ${countTone}`}
+          className={`inline-flex items-center px-1.5 rounded-full text-[11px] font-bold tabular-nums ${countTone}`}
         >
           {count}
         </span>
       </div>
-      <p className="text-[11px] text-muted-foreground mb-2.5 px-0.5">
+      <p className="text-[12px] text-muted-foreground mb-2.5 px-0.5">
         {subtitle}
       </p>
       <div className="flex flex-col gap-2">{children}</div>

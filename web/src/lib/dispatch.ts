@@ -75,6 +75,33 @@ export function ubDayOf(iso: string): string {
   return new Date(iso).toLocaleDateString("sv-SE", { timeZone: UB });
 }
 
+const UB_OFFSET_MS = 8 * 3600_000;
+
+/**
+ * An instant as "2026-11-08T13:05" in UB time — the value an
+ * <input type="datetime-local"> needs. Same on the server (UTC) and in
+ * any browser, so the form never shifts by the viewer's own timezone.
+ */
+export function ubDateTimeInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  return new Date(t + UB_OFFSET_MS).toISOString().slice(0, 16);
+}
+
+/**
+ * "2026-11-08T13:05" typed as UB time → ISO instant. `undefined` for an
+ * empty value, `null` when it isn't a valid date-time.
+ */
+export function parseUbDateTimeInput(v: string | null | undefined): string | null | undefined {
+  const s = (v ?? "").trim();
+  if (!s) return undefined;
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(s);
+  if (!m) return null;
+  const t = Date.parse(`${m[1]}T${m[2]}:${m[3]}:${m[4] ?? "00"}+08:00`);
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+}
+
 /**
  * Pieces → full cartons + loose pieces, as on Mercury's delivery note
  * (Вох / Зад). `perBox` is products.box_count (pieces per carton).

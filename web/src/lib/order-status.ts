@@ -27,33 +27,34 @@ export const STATUS_LABELS: Record<OrderStatus, string> = {
 // user flips the theme toggle.
 export const STATUS_COLOR: Record<OrderStatus, string> = {
   pending:
-    "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
+    "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-300/70 dark:bg-amber-950/60 dark:text-amber-200 dark:ring-amber-800/70",
   confirmed:
-    "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200",
+    "bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-300/70 dark:bg-blue-950/60 dark:text-blue-200 dark:ring-blue-800/70",
   shipped:
-    "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200",
+    "bg-violet-50 text-violet-800 ring-1 ring-inset ring-violet-300/70 dark:bg-violet-950/60 dark:text-violet-200 dark:ring-violet-800/70",
   delivered:
-    "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
+    "bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-300/70 dark:bg-emerald-950/60 dark:text-emerald-200 dark:ring-emerald-800/70",
   cancelled:
-    "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200",
+    "bg-rose-50 text-rose-800 ring-1 ring-inset ring-rose-300/70 dark:bg-rose-950/60 dark:text-rose-200 dark:ring-rose-800/70",
+};
+
+/** The little dot in front of a status label. */
+export const STATUS_DOT: Record<OrderStatus, string> = {
+  pending: "bg-amber-500",
+  confirmed: "bg-blue-600",
+  shipped: "bg-violet-500",
+  delivered: "bg-emerald-500",
+  cancelled: "bg-rose-500",
 };
 
 // Solid color tokens for the progress-stepper circles (when the step is
 // the current one). Same hue family as STATUS_COLOR.
 export const STATUS_SOLID: Record<OrderStatus, string> = {
   pending: "bg-amber-500 text-white",
-  confirmed: "bg-sky-500 text-white",
+  confirmed: "bg-blue-600 text-white",
   shipped: "bg-violet-500 text-white",
   delivered: "bg-emerald-500 text-white",
   cancelled: "bg-rose-500 text-white",
-};
-
-export const STATUS_RING: Record<OrderStatus, string> = {
-  pending: "ring-amber-200 dark:ring-amber-900",
-  confirmed: "ring-sky-200 dark:ring-sky-900",
-  shipped: "ring-violet-200 dark:ring-violet-900",
-  delivered: "ring-emerald-200 dark:ring-emerald-900",
-  cancelled: "ring-rose-200 dark:ring-rose-900",
 };
 
 export const STATUS_ICON: Record<OrderStatus, LucideIcon> = {

@@ -1,42 +1,30 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { DiscountForm } from "@/components/admin/discount-form";
+import { fetchAll } from "@/lib/supabase/fetch-all";
+import { DiscountForm, type ProductOption } from "@/components/admin/discount-form";
+import { countPerPriceList } from "../../price-lists/counts";
 import { createDiscount } from "../actions";
 
 export default async function NewDiscountPage() {
   const supabase = await createClient();
-  const [
-    { data: products },
-    { data: categories },
-    { data: priceListRows },
-    { data: storeListRows },
-  ] = await Promise.all([
-    supabase
-      .from("products")
-      .select("id, name, sku")
-      .eq("active", true)
-      .order("name")
-      .limit(10000),
+  const [products, { data: categories }, { data: priceListRows }] = await Promise.all([
+    fetchAll<ProductOption>(() =>
+      supabase.from("products").select("id, name, sku").eq("active", true).order("name").order("id"),
+    ),
     supabase.from("categories").select("id, name").order("sort_order"),
     supabase.from("price_lists").select("id, name").order("name"),
-    supabase
-      .from("supermarkets")
-      .select("price_list_id")
-      .not("price_list_id", "is", null),
   ]);
 
   // Store count per price list — shown in the scope picker so the admin
-  // sees the blast radius of each chain before targeting it.
-  const countByList = new Map<string, number>();
-  for (const row of storeListRows ?? []) {
-    const id = row.price_list_id as string;
-    countByList.set(id, (countByList.get(id) ?? 0) + 1);
-  }
-  const priceLists = (priceListRows ?? []).map((pl) => ({
-    id: pl.id as string,
-    name: pl.name as string,
-    storeCount: countByList.get(pl.id as string) ?? 0,
+  // sees the blast radius of each chain before targeting it. Counted in
+  // the database (reading every store stopped at 1,000 rows).
+  const lists = (priceListRows ?? []) as { id: string; name: string }[];
+  const countByList = await countPerPriceList(supabase, "supermarkets", lists.map((l) => l.id));
+  const priceLists = lists.map((pl) => ({
+    id: pl.id,
+    name: pl.name,
+    storeCount: countByList.get(pl.id) ?? 0,
   }));
 
   return (
@@ -52,7 +40,7 @@ export default async function NewDiscountPage() {
         Шинэ хямдрал
       </h1>
       <DiscountForm
-        products={products ?? []}
+        products={products}
         categories={categories ?? []}
         priceLists={priceLists}
         action={createDiscount}

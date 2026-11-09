@@ -10,6 +10,8 @@ import {
   User,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
+import { DISTRICT_DELIVERY_DAY } from "@/lib/delivery";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -118,13 +120,21 @@ export default async function AdminSupermarketsPage({
 
   query = query.range(offset, offset + PAGE_SIZE - 1);
 
-  const [{ data, count, error }, distinctDistricts] = await Promise.all([
+  // District options: the known UB districts, plus any other spelling
+  // actually in use. Reading every store's district to find the distinct
+  // values stopped at 1,000 rows and dropped late-alphabet districts.
+  const known = Object.keys(DISTRICT_DELIVERY_DAY);
+  const [{ data, count, error }, otherDistricts] = await Promise.all([
     query,
-    supabase
-      .from("supermarkets")
-      .select("district")
-      .not("district", "is", null)
-      .order("district"),
+    fetchAll<{ district: string | null }>(() =>
+      supabase
+        .from("supermarkets")
+        .select("district")
+        .not("district", "is", null)
+        .not("district", "in", `(${known.map((d) => `"${d}"`).join(",")})`)
+        .order("district")
+        .order("id"),
+    ).catch(() => [] as { district: string | null }[]),
   ]);
 
   const rows = (data as unknown as SupermarketRow[]) ?? [];
@@ -132,12 +142,12 @@ export default async function AdminSupermarketsPage({
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const districts = Array.from(
-    new Set(
-      ((distinctDistricts.data as { district: string | null }[] | null) ?? [])
-        .map((r) => r.district)
-        .filter((d): d is string => !!d),
-    ),
-  );
+    new Set([
+      ...known,
+      ...otherDistricts.map((r) => r.district?.trim()).filter((d): d is string => !!d),
+      ...(districtFilter && districtFilter !== "all" ? [districtFilter] : []),
+    ]),
+  ).sort((a, b) => a.localeCompare(b, "mn"));
 
   return (
     <div className="w-full">
@@ -297,7 +307,7 @@ export default async function AdminSupermarketsPage({
                   className="block"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="size-11 rounded-xl bg-gradient-to-br from-primary to-[oklch(0.42_0.18_263)] text-primary-foreground flex items-center justify-center font-bold text-base shrink-0">
+                    <div className="size-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center font-bold text-base shrink-0">
                       {s.name.trim()[0]?.toUpperCase() ?? "•"}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -411,11 +421,8 @@ function TypeChip({
   return (
     <Link
       href={buildHref({ q, type: value || undefined, district })}
-      className={`whitespace-nowrap shrink-0 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${
-        active
-          ? "bg-primary text-primary-foreground border-primary"
-          : "bg-background hover:bg-muted"
-      }`}
+      className="chip"
+      data-active={active || undefined}
     >
       {children}
     </Link>

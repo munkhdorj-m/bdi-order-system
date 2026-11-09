@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { Plus, ShoppingCart } from "lucide-react";
-import { useCart } from "@/lib/cart";
+import { useCartLineCount } from "@/lib/cart";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -12,16 +12,16 @@ import { Button } from "@/components/ui/button";
  */
 export function RepStoreCta({ storeId }: { storeId: string }) {
   const scope = useMemo(() => ({ storeId }), [storeId]);
-  const cart = useCart(scope);
+  const lines = useCartLineCount(scope);
   const catalog = `/rep/stores/${storeId}/catalog`;
 
-  if (cart.length > 0) {
+  if (lines > 0) {
     return (
       <div className="mt-3 flex gap-2">
         <Button asChild variant="gold" size="lg" className="h-14 flex-1 rounded-2xl text-[15px]">
           <Link href={`/rep/stores/${storeId}/cart`}>
             <ShoppingCart className="size-5" />
-            Сагс · {cart.length} бараа — илгээх
+            Сагс · {lines} бараа — илгээх
           </Link>
         </Button>
         <Button asChild variant="outline" size="lg" className="h-14 rounded-2xl px-4">

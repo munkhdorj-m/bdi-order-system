@@ -48,7 +48,7 @@ export function CatalogSearchTrigger() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Бараа хайх"
-        className="size-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/70 active:scale-95 transition-all sm:hidden"
+        className="size-10 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/70 active:scale-95 transition-all sm:hidden"
       >
         <Search className="h-[18px] w-[18px]" strokeWidth={2.25} />
       </button>
@@ -70,7 +70,7 @@ export function CatalogSearchTrigger() {
               type="search"
               name="q"
               defaultValue={currentQ}
-              placeholder="Бараа, бренд, SKU хайх..."
+              placeholder="Бараа, брэнд, SKU хайх..."
               autoComplete="off"
               className="flex-1 bg-transparent pl-10 pr-3 text-[15px] placeholder:text-muted-foreground/80 focus:outline-none"
             />
@@ -78,7 +78,7 @@ export function CatalogSearchTrigger() {
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="text-muted-foreground hover:text-foreground px-2 active:scale-95 transition-all"
+            className="size-10 shrink-0 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground active:scale-95 transition-all"
             aria-label="Хаах"
           >
             <X className="h-5 w-5" />

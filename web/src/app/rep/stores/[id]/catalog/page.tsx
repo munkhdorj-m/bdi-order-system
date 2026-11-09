@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { ClipboardList } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { RepHeader } from "@/components/rep/rep-header";
@@ -31,15 +32,10 @@ export default async function RepCatalogPage({
     .from("supermarkets")
     .select("name, district")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
-  if (!storeRaw) {
-    return (
-      <div className="px-4 py-12 text-center text-sm text-muted-foreground">
-        Дэлгүүр олдсонгүй эсвэл хандах эрхгүй.
-      </div>
-    );
-  }
+  // Not this rep's store (any more): rep/not-found.tsx, with a way back.
+  if (!storeRaw) notFound();
   const store = storeRaw as unknown as StoreContext;
   const basePath = `/rep/stores/${id}/catalog`;
 
@@ -56,13 +52,13 @@ export default async function RepCatalogPage({
       <div className="max-w-5xl mx-auto">
         {/* Which store this order is for (its name is also in the bar). */}
         <div className="px-3 pt-3 sm:px-4">
-          <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-[12.5px] ring-1 ring-amber-300/70 dark:bg-amber-950/40 dark:ring-amber-800/60">
+          <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-[13px] ring-1 ring-amber-300/70 dark:bg-amber-950/40 dark:ring-amber-800/60">
             <ClipboardList className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" strokeWidth={2.2} />
             <span className="min-w-0 flex-1 truncate text-amber-950 dark:text-amber-100">
               <b className="font-semibold">{store.name}</b>
               {store.district ? ` · ${store.district}` : ""} — үнэ нь энэ дэлгүүрийнх
             </span>
-            <Link href="/rep" className="shrink-0 font-semibold text-amber-900 underline dark:text-amber-200">
+            <Link href="/rep" className="-my-2 -mr-2 inline-flex h-10 shrink-0 items-center rounded-lg px-2 font-semibold text-amber-900 underline dark:text-amber-200">
               Солих
             </Link>
           </div>

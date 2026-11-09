@@ -27,7 +27,7 @@ export default async function EditSupermarketPage({
     supabase
       .from("supermarkets")
       .select(
-        "id, name, type, district, address, contact_phone, assigned_rep_id, price_list_id, delivery_day, notes, active",
+        "id, name, type, district, address, contact_phone, assigned_rep_id, price_list_id, delivery_day, notes, active, registry_number, ebarimt_tin, ebarimt_name, external_id",
       )
       .eq("id", id)
       .single(),
@@ -38,13 +38,18 @@ export default async function EditSupermarketPage({
       .order("full_name"),
     supabase
       .from("price_lists")
-      .select("id, name")
-      .eq("active", true)
+      .select("id, name, active")
       .order("name"),
     getSupermarketSuggestions(),
   ]);
 
   if (!supermarket) notFound();
+
+  // Active lists, plus an archived one this store still uses — otherwise
+  // the picker showed "— Жишиг үнэ —" while the store paid list prices.
+  const listOptions = ((priceLists ?? []) as { id: string; name: string; active: boolean }[])
+    .filter((pl) => pl.active || pl.id === supermarket.price_list_id)
+    .map((pl) => ({ id: pl.id, name: pl.name, archived: !pl.active }));
 
   const update = updateSupermarket.bind(null, id);
 
@@ -92,7 +97,7 @@ export default async function EditSupermarketPage({
 
       <SupermarketForm
         reps={reps ?? []}
-        priceLists={priceLists ?? []}
+        priceLists={listOptions}
         defaults={supermarket}
         typeSuggestions={suggestions.types}
         districtSuggestions={suggestions.districts}

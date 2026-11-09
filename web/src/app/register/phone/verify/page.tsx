@@ -1,7 +1,11 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ChevronLeft, MessageSquareText, ShieldCheck } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { authMessage } from "@/lib/auth";
+import { REGISTER_DRAFT_COOKIE, readRegisterDraft } from "@/lib/sms/draft-cookie";
+import { localMnNumber } from "@/lib/sms/verify-mn";
 import { VerifyMnPoller } from "@/components/buyer/verify-mn-poller";
 
 type SearchParams = Promise<{
@@ -29,9 +33,14 @@ export default async function VerifyOtpPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { session: sessionId, error } = await searchParams;
+  const { session: sessionId, error: errorCode } = await searchParams;
+  const error = authMessage(errorCode);
 
   if (!sessionId) redirect("/register/phone");
+
+  // Only the browser that started this check sees it (its code and phone).
+  const draft = readRegisterDraft((await cookies()).get(REGISTER_DRAFT_COOKIE)?.value);
+  if (draft?.sessionId !== sessionId) redirect("/register/phone?error=session-missing");
 
   const admin = createAdminClient();
   const { data: row } = await admin
@@ -42,11 +51,7 @@ export default async function VerifyOtpPage({
     .eq("session_id", sessionId)
     .maybeSingle();
 
-  if (!row) {
-    redirect(
-      `/register/phone?error=${encodeURIComponent("Сесс олдсонгүй. Дахин эхлүүлнэ үү.")}`,
-    );
-  }
+  if (!row) redirect("/register/phone?error=session-missing");
 
   return (
     <main className="relative flex-1 min-h-screen flex flex-col items-center justify-center overflow-hidden px-5 py-10 text-white bg-brand-gradient">
@@ -130,7 +135,7 @@ export default async function VerifyOtpPage({
 
         <div className="mt-6 text-center">
           <Link
-            href={`/register/phone?phone=${encodeURIComponent(row.phone)}`}
+            href={`/register/phone?phone=${encodeURIComponent(localMnNumber(row.phone))}`}
             className="text-[13px] text-white/80 inline-flex items-center gap-1.5 hover:text-white font-semibold"
           >
             <ChevronLeft className="h-3.5 w-3.5" />

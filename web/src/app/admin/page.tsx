@@ -71,7 +71,7 @@ const TONE_STYLE: Record<
 > = {
   amber: {
     icon: "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-200",
-    alertRing: "ring-[color-mix(in_oklch,var(--chart-amber)_30%,transparent)]",
+    alertRing: "ring-amber-300/70 dark:ring-amber-800/70",
   },
   primary: {
     icon: "bg-[color-mix(in_oklch,var(--primary)_15%,var(--card))] text-primary",
@@ -112,11 +112,10 @@ export default async function AdminDashboard() {
       .in("status", ACTIVE_STATUSES),
     // Users awaiting admin approval. Surfaced as a banner at the top of
     // the dashboard so a new signup never quietly stays locked out.
-    // (A switched-off user is also active=false, but already has a store.)
+    // A store user with no store yet = a sign-up waiting for approval.
     supabase
       .from("profiles")
       .select("id", { count: "exact", head: true })
-      .eq("active", false)
       .eq("role", "buyer")
       .is("supermarket_id", null),
     // Pending queue — newest first. Capped to 6 per design; the "Бүгд"
@@ -188,7 +187,7 @@ export default async function AdminDashboard() {
     {
       label: "Идэвхтэй захиалга",
       value: activeCount ?? 0,
-      sub: "Шинэ + багцлаж + илгээсэн",
+      sub: "Хүлээгдэж буй, баталгаажсан, хүргэлтэнд",
       href: "/admin/orders?status=active",
       icon: ClipboardList,
       tone: "primary",

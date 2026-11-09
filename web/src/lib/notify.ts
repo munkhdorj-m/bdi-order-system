@@ -24,8 +24,12 @@
  */
 
 import { createAdminClient } from "./supabase/admin";
+import { fetchAll } from "./supabase/fetch-all";
 import { sendPushToUsers } from "./push";
 import { sendTelegram } from "./telegram";
+
+/** Rows per notifications insert — keeps one broadcast from becoming one giant request. */
+const INSERT_CHUNK = 500;
 
 export type NotificationKind =
   | "order_new"
@@ -138,8 +142,12 @@ export async function notifyMany(
   try {
     const admin = createAdminClient();
     const rows = recipients.map((user_id) => ({ user_id, ...template }));
-    const { error } = await admin.from("notifications").insert(rows);
-    if (error) console.error("notifyMany failed:", error.message);
+    for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+      const { error } = await admin
+        .from("notifications")
+        .insert(rows.slice(i, i + INSERT_CHUNK));
+      if (error) console.error("notifyMany failed:", error.message);
+    }
   } catch (e) {
     console.error("notifyMany threw:", e);
   }
@@ -154,42 +162,35 @@ export async function notifyMany(
   }
 }
 
-/** Helper: every admin user id. Used to fan out new-order notifications. */
-export async function listAdminIds(): Promise<string[]> {
+/**
+ * Every active user id with `role`, past PostgREST's 1,000-row page (a
+ * single query silently stopped there — the 1,001st buyer never heard of
+ * a discount).
+ */
+async function listActiveIds(role: "admin" | "buyer"): Promise<string[]> {
   try {
     const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("role", "admin")
-      .eq("active", true);
-    if (error) {
-      console.error("listAdminIds failed:", error.message);
-      return [];
-    }
-    return (data ?? []).map((r) => r.id as string);
+    const rows = await fetchAll<{ id: string }>(() =>
+      admin
+        .from("profiles")
+        .select("id")
+        .eq("role", role)
+        .eq("active", true)
+        .order("id"),
+    );
+    return rows.map((r) => r.id);
   } catch (e) {
-    console.error("listAdminIds threw:", e);
+    console.error(`listActiveIds(${role}) failed:`, e instanceof Error ? e.message : e);
     return [];
   }
 }
 
+/** Helper: every active admin user id. Used to fan out new-order notifications. */
+export function listAdminIds(): Promise<string[]> {
+  return listActiveIds("admin");
+}
+
 /** Helper: every active buyer user id. Used for discount broadcasts. */
-export async function listBuyerIds(): Promise<string[]> {
-  try {
-    const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("role", "buyer")
-      .eq("active", true);
-    if (error) {
-      console.error("listBuyerIds failed:", error.message);
-      return [];
-    }
-    return (data ?? []).map((r) => r.id as string);
-  } catch (e) {
-    console.error("listBuyerIds threw:", e);
-    return [];
-  }
+export function listBuyerIds(): Promise<string[]> {
+  return listActiveIds("buyer");
 }

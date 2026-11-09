@@ -1,8 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getSession } from "@/lib/auth";
+import { PUSH_DEVICE_COOKIE, isPushEndpoint } from "@/lib/push";
 
 type Result = { ok?: boolean; error?: string };
 
@@ -21,7 +24,7 @@ export async function markNotificationRead(id: string): Promise<Result> {
     .eq("id", id)
     .is("read_at", null);
   if (error) return { error: error.message };
-  revalidatePath("/");
+  revalidatePath("/", "layout"); // every bell in every area
   return { ok: true };
 }
 
@@ -37,7 +40,7 @@ export async function markAllNotificationsRead(): Promise<Result> {
     .eq("user_id", session.userId)
     .is("read_at", null);
   if (error) return { error: error.message };
-  revalidatePath("/");
+  revalidatePath("/", "layout"); // every bell in every area
   return { ok: true };
 }
 
@@ -55,14 +58,22 @@ export type PushSubscriptionInput = {
   auth: string;
 };
 
+/** Devices kept per user; the least recently seen beyond this are dropped. */
+const MAX_DEVICES_PER_USER = 10;
+/** base64url keys: p256dh is 65 bytes (87 chars), auth 16 bytes (22 chars). */
+const KEY_RE = /^[A-Za-z0-9_-]{16,200}={0,2}$/;
+
 /**
  * Store (or refresh) the calling user's push subscription.
  *
  * Called on every app load once permission is granted, not just the
  * first time — browsers silently rotate endpoints, and a stale row
  * means a device that stops receiving alerts without anyone noticing.
- * `endpoint` is unique, so the upsert refreshes in place rather than
- * accumulating a row per app open.
+ *
+ * A device belongs to whoever is signed in on it NOW: if the endpoint is
+ * still stored for the previous user (a shared shop tablet), it moves to
+ * this user. Before, that save was refused silently and the device kept
+ * getting the previous user's — possibly an admin's — alerts.
  */
 export async function savePushSubscription(
   sub: PushSubscriptionInput,
@@ -71,24 +82,62 @@ export async function savePushSubscription(
   const session = await getSession();
   if (!session) return { error: "Нэвтрэлт хэрэгтэй." };
 
-  if (!sub?.endpoint || !sub?.p256dh || !sub?.auth) {
-    return { error: "Захиалга дутуу байна." };
+  if (
+    !sub ||
+    !isPushEndpoint(sub.endpoint) ||
+    typeof sub.p256dh !== "string" ||
+    typeof sub.auth !== "string" ||
+    !KEY_RE.test(sub.p256dh) ||
+    !KEY_RE.test(sub.auth)
+  ) {
+    return { error: "Энэ төхөөрөмжийн мэдэгдлийн тохиргоо буруу байна." };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("push_subscriptions").upsert(
-    {
-      user_id: session.userId,
-      endpoint: sub.endpoint,
-      p256dh: sub.p256dh,
-      auth: sub.auth,
-      user_agent: userAgent?.slice(0, 400) ?? null,
-      last_seen_at: new Date().toISOString(),
-    },
-    { onConflict: "endpoint" },
-  );
+  // Service role: the row may still belong to the previous user of this
+  // device. user_id always comes from the verified session, never the client.
+  const admin = createAdminClient();
+  const { data: row, error } = await admin
+    .from("push_subscriptions")
+    .upsert(
+      {
+        user_id: session.userId,
+        endpoint: sub.endpoint,
+        p256dh: sub.p256dh,
+        auth: sub.auth,
+        user_agent: typeof userAgent === "string" ? userAgent.slice(0, 400) : null,
+        last_seen_at: new Date().toISOString(),
+      },
+      { onConflict: "endpoint" },
+    )
+    .select("id")
+    .single();
+  if (error || !row) {
+    console.error("[push] save subscription failed:", error?.message);
+    return { error: "Мэдэгдэл хадгалж чадсангүй. Дахин оролдоно уу." };
+  }
 
-  if (error) return { error: error.message };
+  // Cap devices per user: forget the ones not seen for longest.
+  const { data: extra } = await admin
+    .from("push_subscriptions")
+    .select("id")
+    .eq("user_id", session.userId)
+    .order("last_seen_at", { ascending: false })
+    .range(MAX_DEVICES_PER_USER, MAX_DEVICES_PER_USER + 100);
+  if (extra && extra.length > 0) {
+    await admin
+      .from("push_subscriptions")
+      .delete()
+      .in("id", extra.map((r) => r.id as string));
+  }
+
+  // Remember which row is this device, so sign-out can remove it.
+  (await cookies()).set(PUSH_DEVICE_COOKIE, row.id as string, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 400 * 24 * 60 * 60,
+  });
   return { ok: true };
 }
 
@@ -102,7 +151,7 @@ export async function deletePushSubscription(
 ): Promise<Result> {
   const session = await getSession();
   if (!session) return { error: "Нэвтрэлт хэрэгтэй." };
-  if (!endpoint) return { error: "Endpoint байхгүй." };
+  if (typeof endpoint !== "string" || !endpoint) return { error: "Endpoint байхгүй." };
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -111,5 +160,6 @@ export async function deletePushSubscription(
     .eq("endpoint", endpoint);
 
   if (error) return { error: error.message };
+  (await cookies()).delete(PUSH_DEVICE_COOKIE);
   return { ok: true };
 }

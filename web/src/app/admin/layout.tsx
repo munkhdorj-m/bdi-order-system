@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { requireSession, homePathForRole } from "@/lib/auth";
+import { hasActiveRole, homePathForRole, requireSession } from "@/lib/auth";
 import { AdminSidebar } from "@/components/admin/sidebar";
 import { AdminHeader } from "@/components/admin/header";
 
@@ -9,7 +9,7 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   const session = await requireSession();
-  if (session.profile.role !== "admin") {
+  if (!hasActiveRole(session.profile, "admin")) {
     redirect(homePathForRole(session.profile));
   }
 

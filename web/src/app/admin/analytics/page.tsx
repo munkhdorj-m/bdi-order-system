@@ -20,6 +20,7 @@ import {
   STATUS_SOLID,
   type OrderStatus,
 } from "@/lib/order-status";
+import { formatDayMonth } from "@/lib/datetime";
 
 // =====================================================================
 // /admin/analytics
@@ -298,8 +299,7 @@ export default async function AdminAnalyticsPage() {
     .sort((a, b) => b.units - a.units)
     .slice(0, 10);
 
-  const fmtDay = (d: Date) =>
-    d.toLocaleDateString("mn-MN", { timeZone: "Asia/Ulaanbaatar", month: "2-digit", day: "2-digit" });
+  const fmtDay = (d: Date) => formatDayMonth(d); // "11.08"
 
   return (
     <div className="max-w-6xl">
@@ -486,7 +486,7 @@ export default async function AdminAnalyticsPage() {
                   return (
                     <li key={s.id}>
                       <Link
-                        href={`/admin/orders?q=${encodeURIComponent(s.name)}`}
+                        href={`/admin/orders?store=${s.id}&range=30d`}
                         className="px-5 py-2.5 flex items-center gap-3 hover:bg-muted/40 transition-colors"
                       >
                         <span className="size-6 rounded-full bg-muted text-muted-foreground text-[11px] font-bold flex items-center justify-center shrink-0 tabular-nums">

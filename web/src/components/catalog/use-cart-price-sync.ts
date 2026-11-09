@@ -2,16 +2,24 @@
 
 import { useEffect } from "react";
 import { toast } from "sonner";
-import { syncCartPrices } from "@/lib/cart";
+import { adoptLegacyCart, syncCart, type CartProductInfo, type CartScope } from "@/lib/cart";
 
 /**
- * On opening a cart: apply the store's current prices to it and say what
- * changed, so the total shown is the total the order will have.
+ * On opening a cart: bring it in line with the store's catalog today —
+ * price, category (deals match on it), photo — and say what changed, so
+ * the total shown is the total the order will have.
  */
-export function useCartPriceSync(prices: Record<string, number> | undefined, storeId?: string) {
+export function useCartPriceSync(
+  catalog: Record<string, CartProductInfo> | undefined,
+  scope: CartScope,
+) {
+  const { storeId, owner } = scope;
   useEffect(() => {
-    if (!prices) return;
-    const { repriced, removed } = syncCartPrices(prices, storeId ? { storeId } : undefined);
+    if (!catalog) return;
+    const s: CartScope = { storeId, owner };
+    // A store's cart from before carts were kept per shop.
+    if (owner === "buyer") adoptLegacyCart(s);
+    const { repriced, removed } = syncCart(catalog, s);
     if (removed.length > 0) {
       toast.warning(
         removed.length === 1
@@ -20,5 +28,5 @@ export function useCartPriceSync(prices: Record<string, number> | undefined, sto
       );
     }
     if (repriced > 0) toast.info(`${repriced} барааны үнэ өөрчлөгдсөн — шинэ үнээр тооцлоо`);
-  }, [prices, storeId]);
+  }, [catalog, storeId, owner]);
 }

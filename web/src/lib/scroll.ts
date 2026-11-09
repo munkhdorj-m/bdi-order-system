@@ -17,8 +17,8 @@ export function fastScrollTo(top: number, durationMs = 260): void {
   const step = (now: number) => {
     const p = Math.min(1, (now - t0) / durationMs);
     const eased = 1 - Math.pow(1 - p, 3); // ease-out cubic
-    // "instant": the page sets `scroll-behavior: smooth`, which would
-    // otherwise animate every frame again.
+    // "instant": each frame jumps exactly where the easing says; a
+    // `scroll-behavior: smooth` anywhere would otherwise re-animate it.
     window.scrollTo({ top: start + distance * eased, behavior: "instant" });
     if (p < 1) requestAnimationFrame(step);
   };

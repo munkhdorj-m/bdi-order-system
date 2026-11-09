@@ -22,10 +22,20 @@ export type PlaceOrderInput = {
   requestId?: string;
 };
 
+/** A cart line that can't be ordered, so the cart can mark or drop it. */
+export type CartProblem = {
+  product_id: string;
+  /** unavailable = no longer sold to this store; sold_out = stock is 0. */
+  reason: "unavailable" | "sold_out";
+  name?: string;
+};
+
 export type PlaceOrderResult = {
   orderId?: string;
   orderNumber?: string;
   error?: string;
+  /** Every line that blocked the order (not just the first). */
+  problems?: CartProblem[];
 };
 
 export async function placeOrder(
@@ -101,18 +111,25 @@ export async function placeOrder(
     (storePlRow?.price_list_id as string | null) ?? null,
   );
 
-  const missing = cleaned.filter((i) => !priceMap.has(i.product_id));
-  if (missing.length > 0) {
-    return { error: "Зарим бараа боломжгүй болсон байна. Сагсаа шинэчилнэ үү." };
-  }
-
-  // Stock gate — the catalog hides sold-out products, but a cart built
-  // earlier (localStorage survives days) can still hold one. Name the
-  // product so the buyer knows exactly which line to drop.
-  const soldOut = (priced ?? []).filter((p) => (p.stock ?? 0) <= 0);
-  if (soldOut.length > 0) {
+  // Lines that can't be ordered: products no longer sold to this store,
+  // and — the stock gate — sold-out ones (a cart can sit on a phone for
+  // days). ALL of them are returned so the cart can mark every line at
+  // once instead of one failed send per product.
+  const problems: CartProblem[] = [
+    ...cleaned
+      .filter((i) => !priceMap.has(i.product_id))
+      .map((i) => ({ product_id: i.product_id, reason: "unavailable" as const })),
+    ...(priced ?? [])
+      .filter((p) => (Number(p.stock) || 0) <= 0)
+      .map((p) => ({ product_id: p.product_id as string, reason: "sold_out" as const, name: p.name as string })),
+  ];
+  if (problems.length > 0) {
+    const only = problems.length === 1 ? problems[0] : null;
     return {
-      error: `"${soldOut[0].name}" дууссан байна. Сагснаасаа хасаад дахин илгээнэ үү.`,
+      problems,
+      error: only?.name
+        ? `«${only.name}» дууссан байна. Сагснаасаа хасаад дахин илгээнэ үү.`
+        : `${problems.length} бараа одоо захиалах боломжгүй байна. Сагсанд тэмдэглэлээ — хасаад дахин илгээнэ үү.`,
     };
   }
 

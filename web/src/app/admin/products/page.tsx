@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ImageOff, Plus, Search, Settings2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { getCategories, type CategoryRow } from "@/lib/categories";
 import {
   ALL_PRODUCTS_VISUAL,
@@ -67,15 +68,21 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
   };
 
   const supabase = await createClient();
-  const [{ data, error }, categories] = await Promise.all([
-    supabase
-      .from("products")
-      .select("id, sku, name, brand, internal_code, image_url, base_price, stock, active, category_id")
-      .order("name")
-      .limit(2000),
+  // Every product (a single request stops at 1,000 rows).
+  const [loaded, categories] = await Promise.all([
+    fetchAll<ProductRow>(() =>
+      supabase
+        .from("products")
+        .select("id, sku, name, brand, internal_code, image_url, base_price, stock, active, category_id")
+        .order("name")
+        .order("id"),
+    )
+      .then((rows) => ({ rows, error: null as string | null }))
+      .catch((e: Error) => ({ rows: [] as ProductRow[], error: e.message })),
     getCategories(),
   ]);
-  const all = (data as ProductRow[] | null) ?? [];
+  const all = loaded.rows;
+  const error = loaded.error ? { message: loaded.error } : null;
   const catById = new Map(categories.map((c) => [c.id, c]));
   const catOptions = categories.map((c) => ({ id: c.id, name: c.name }));
 
@@ -276,7 +283,7 @@ function AdminProductCard({
       <Link href={`/admin/products/${p.id}`} className="flex flex-1 flex-col">
         <div className={cn("relative aspect-[4/3] overflow-hidden", p.image_url ? "bg-muted" : visual.tone.wash)}>
           {p.image_url ? (
-            <Image src={p.image_url} alt={p.name} fill sizes="240px" unoptimized className="object-cover" />
+            <Image src={p.image_url} alt={p.name} fill sizes="240px" quality={85} className="object-cover" />
           ) : (
             <ProductPlaceholder visual={visual} />
           )}

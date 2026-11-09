@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -59,6 +60,7 @@ export type BoardOrder = {
     address: string | null;
     phone: string | null;
     registry: string | null;
+    district: string | null;
     weekday: number | null;
   };
   placedBy: string | null;
@@ -91,9 +93,41 @@ export type BoardDistributor = { id: string; name: string; phone: string | null;
 
 type ActionResult = { error?: string; count?: number; id?: string };
 
+type Confirm =
+  | { kind: "close" | "reopen" | "delete" }
+  | { kind: "assignAll"; ids: string[] }
+  | { kind: "unassign"; ids: string[] }
+  | null;
+
 const NEW_DISTRIBUTOR = "__new__";
 /** Unplanned orders older than this are folded away on the board. */
 const OLD_AFTER_DAYS = 14;
+/** Weekday filter value for stores without a delivery day. */
+const NO_DAY = "none";
+const ALL = "all";
+
+/** A 40px tap target around a small checkbox. */
+function CheckBox({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+}) {
+  return (
+    <label className="-m-2 flex size-10 shrink-0 cursor-pointer items-center justify-center">
+      <input
+        type="checkbox"
+        className="size-4 accent-[var(--primary)]"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        aria-label={label}
+      />
+    </label>
+  );
+}
 
 function OrderLine({
   o,
@@ -115,13 +149,9 @@ function OrderLine({
   return (
     <li className={`flex gap-3 px-3 py-2.5 ${checked ? "bg-primary/5" : ""}`}>
       {onCheck && (
-        <input
-          type="checkbox"
-          className="mt-1 size-4 accent-[var(--primary)]"
-          checked={!!checked}
-          onChange={(e) => onCheck(e.target.checked)}
-          aria-label={`${o.store.name} сонгох`}
-        />
+        <div className="pt-0.5">
+          <CheckBox checked={!!checked} onChange={onCheck} label={`${o.store.name} сонгох`} />
+        </div>
       )}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -132,7 +162,7 @@ function OrderLine({
           <span className="font-mono text-[11px] text-muted-foreground">{o.order_number}</span>
         </div>
         <div className="text-[11.5px] text-muted-foreground truncate">
-          {[o.store.address, o.store.phone && `☎ ${o.store.phone}`, o.store.registry && `РД ${o.store.registry}`]
+          {[o.store.district, o.store.address, o.store.phone && `☎ ${o.store.phone}`, o.store.registry && `РД ${o.store.registry}`]
             .filter(Boolean)
             .join(" · ") || "—"}
         </div>
@@ -165,7 +195,7 @@ function OrderLine({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-7 px-2 text-muted-foreground"
+            className="h-10 px-2.5 text-muted-foreground sm:h-8"
             onClick={onRemove}
             disabled={busy}
             title="Ачилтаас хасах"
@@ -201,13 +231,25 @@ export function DispatchBoard({
   const router = useRouter();
   const [busy, start] = useTransition();
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [pickedOnRun, setPickedOnRun] = useState<Set<string>>(new Set());
   const [showLater, setShowLater] = useState(false);
   const [showOld, setShowOld] = useState(false);
-  const [confirm, setConfirm] = useState<"close" | "reopen" | "delete" | null>(null);
+  const [confirm, setConfirm] = useState<Confirm>(null);
   const [creating, setCreating] = useState(shipments.length === 0);
   const [newDist, setNewDist] = useState<string>(distributors[0]?.id ?? NEW_DISTRIBUTOR);
   const [newDistName, setNewDistName] = useState("");
   const [newDistPhone, setNewDistPhone] = useState("");
+  const [dayFilter, setDayFilter] = useState<string>(ALL);
+  const [districtFilter, setDistrictFilter] = useState<string>(ALL);
+
+  // Switching to another run drops a pending confirmation and the run's
+  // ticked orders, so "Тийм, хаах" can never land on a run you didn't pick.
+  const [prevSelected, setPrevSelected] = useState(selectedId);
+  if (prevSelected !== selectedId) {
+    setPrevSelected(selectedId);
+    setConfirm(null);
+    setPickedOnRun(new Set());
+  }
 
   const selected = shipments.find((s) => s.id === selectedId) ?? null;
   const open = selected?.status === "open";
@@ -219,8 +261,21 @@ export function DispatchBoard({
   const isOld = (o: BoardOrder) => !o.delivery_date && ubDayOf(o.created_at) < oldCutoff;
   const later = unassigned.filter(isLater);
   const old = unassigned.filter(isOld);
-  const visible = unassigned.filter((o) => (showLater || !isLater(o)) && (showOld || !isOld(o)));
+
+  // Route building: narrow the list to one delivery weekday and/or district.
+  const districts = [...new Set(unassigned.map((o) => o.store.district).filter((d): d is string => !!d))].sort(
+    (a, b) => a.localeCompare(b, "mn"),
+  );
+  const matchesRoute = (o: BoardOrder) =>
+    (dayFilter === ALL ||
+      (dayFilter === NO_DAY ? !o.store.weekday : String(o.store.weekday) === dayFilter)) &&
+    (districtFilter === ALL || o.store.district === districtFilter);
+  const visible = unassigned.filter(
+    (o) => (showLater || !isLater(o)) && (showOld || !isOld(o)) && matchesRoute(o),
+  );
   const pickedVisible = visible.filter((o) => picked.has(o.id));
+  const pickedRunOrders = selectedOrders.filter((o) => pickedOnRun.has(o.id));
+  const filtered = dayFilter !== ALL || districtFilter !== ALL;
 
   function href(next: { date?: string; shipment?: string | null }) {
     const q = new URLSearchParams({ date: next.date ?? date });
@@ -252,6 +307,16 @@ export function DispatchBoard({
     );
   }
 
+  function unassign(ids: string[]) {
+    run(
+      () => unassignOrders(ids),
+      (r) => {
+        if (r.count) toast.success(`${r.count} захиалга ачилтаас хасагдлаа`);
+        setPickedOnRun(new Set());
+      },
+    );
+  }
+
   function create() {
     if (newDist === NEW_DISTRIBUTOR && !newDistName.trim()) return toast.error("Түгээгчийн нэрийг бичнэ үү.");
     run(
@@ -271,8 +336,60 @@ export function DispatchBoard({
     );
   }
 
+  function confirmNow() {
+    if (!confirm || !selected) return;
+    switch (confirm.kind) {
+      case "close":
+        return run(
+          () => closeShipment(selected.id),
+          (r) => toast.success(`Ачилт хаагдлаа · ${r.count} захиалга хүргэлтэнд гарлаа`),
+        );
+      case "reopen":
+        return run(() => reopenShipment(selected.id), () => toast.success("Ачилт буцааж нээгдлээ"));
+      case "delete":
+        return run(() => deleteShipment(selected.id), () => router.push(href({ shipment: null })));
+      case "assignAll":
+        return assign(confirm.ids);
+      case "unassign":
+        return unassign(confirm.ids);
+    }
+  }
+
+  const confirmText: Record<string, { title: string; description: string; label: string; destructive?: boolean }> = {
+    close: {
+      title: `Ачилт №${selected?.shipment_no ?? ""}-г хаах уу?`,
+      description: `${selectedOrders.length} захиалга "Хүргэлтэнд гарсан" болж, Е-баримт илгээх боломжтой болно. Дэлгүүрүүдэд мэдэгдэл очно.`,
+      label: "Тийм, хаах",
+    },
+    reopen: {
+      title: `Ачилт №${selected?.shipment_no ?? ""}-г буцааж нээх үү?`,
+      description: "Захиалгууд дахин «Баталгаажсан» болж, ачилтад нэмж хасах боломжтой болно.",
+      label: "Тийм, нээх",
+    },
+    delete: {
+      title: `Хоосон ачилт №${selected?.shipment_no ?? ""}-г устгах уу?`,
+      description: "Буцаах боломжгүй.",
+      label: "Тийм, устгах",
+      destructive: true,
+    },
+    assignAll: {
+      title: `${confirm && "ids" in confirm ? confirm.ids.length : 0} захиалгыг №${selected?.shipment_no ?? ""} ачилтад оруулах уу?`,
+      description: filtered
+        ? "Шүүлтүүрт харагдаж буй бүх захиалга. Хүлээгдэж буй захиалгууд баталгаажна."
+        : "Жагсаалтад харагдаж буй бүх захиалга. Хүлээгдэж буй захиалгууд баталгаажна.",
+      label: "Тийм, оруулах",
+    },
+    unassign: {
+      title: `${confirm && "ids" in confirm ? confirm.ids.length : 0} захиалгыг ачилтаас хасах уу?`,
+      description: "Захиалгууд «Хуваарлагдаагүй» жагсаалт руу буцна.",
+      label: "Тийм, хасах",
+    },
+  };
+  const dialog = confirm ? confirmText[confirm.kind] : null;
+
   const totalPieces = productLines.reduce((s, p) => s + p.qty, 0);
   const totalBoxes = productLines.reduce((s, p) => s + p.boxes, 0);
+  const hasOrders = selectedOrders.length > 0;
 
   return (
     <div className="space-y-4">
@@ -308,12 +425,10 @@ export function DispatchBoard({
         {/* Unassigned orders */}
         <Card className="gap-0 p-0 overflow-hidden">
           <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2.5">
-            <input
-              type="checkbox"
-              className="size-4 accent-[var(--primary)]"
+            <CheckBox
               checked={visible.length > 0 && pickedVisible.length === visible.length}
-              onChange={(e) => setPicked(e.target.checked ? new Set(visible.map((o) => o.id)) : new Set())}
-              aria-label="Бүгдийг сонгох"
+              onChange={(v) => setPicked(v ? new Set(visible.map((o) => o.id)) : new Set())}
+              label="Бүгдийг сонгох"
             />
             <div className="font-semibold text-[14px]">
               Хуваарлагдаагүй <span className="text-muted-foreground tabular-nums">({visible.length})</span>
@@ -326,22 +441,65 @@ export function DispatchBoard({
                 disabled={busy || pickedVisible.length === 0}
                 onClick={() => assign(pickedVisible.map((o) => o.id))}
               >
-                Сонгосныг <ArrowRight className="h-3.5 w-3.5" />
+                Сонгосныг ({pickedVisible.length}) <ArrowRight className="h-3.5 w-3.5" />
                 {selected ? ` №${selected.shipment_no}` : ""}
               </Button>
               <Button
                 type="button"
                 size="sm"
                 disabled={busy || visible.length === 0}
-                onClick={() => assign(visible.map((o) => o.id))}
+                onClick={() => {
+                  if (!selected) return toast.error("Эхлээд ачилт үүсгэнэ үү.");
+                  if (!open) return toast.error("Энэ ачилт хаагдсан. Шинэ ачилт үүсгэх эсвэл буцааж нээнэ үү.");
+                  setConfirm({ kind: "assignAll", ids: visible.map((o) => o.id) });
+                }}
               >
                 Бүгдийг хуваарлах
               </Button>
             </div>
           </div>
+
+          {/* Route filter: one delivery weekday and/or district at a time. */}
+          <div className="flex flex-wrap items-center gap-1.5 border-b px-3 py-2">
+            {[
+              { key: ALL, label: "Бүх өдөр" },
+              ...([1, 2, 3, 4, 5, 6, 7] as Weekday[])
+                .filter((d) => unassigned.some((o) => o.store.weekday === d))
+                .map((d) => ({ key: String(d), label: WEEKDAY_LABELS_MN[d] })),
+              ...(unassigned.some((o) => !o.store.weekday) ? [{ key: NO_DAY, label: "Хуваарьгүй" }] : []),
+            ].map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                className="chip h-9 px-3"
+                data-active={dayFilter === c.key || undefined}
+                onClick={() => setDayFilter(c.key)}
+              >
+                {c.label}
+              </button>
+            ))}
+            {districts.length > 0 && (
+              <div className="ml-auto w-48">
+                <Select value={districtFilter} onValueChange={setDistrictFilter}>
+                  <SelectTrigger size="default" className="h-9 w-full rounded-xl text-[12.5px]" aria-label="Дүүрэг">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL}>Бүх дүүрэг</SelectItem>
+                    {districts.map((d) => (
+                      <SelectItem key={d} value={d}>
+                        {d}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+
           {visible.length === 0 ? (
             <div className="p-10 text-center text-sm text-muted-foreground">
-              Хуваарлах захиалга алга.
+              {filtered ? "Энэ шүүлтүүрт захиалга алга." : "Хуваарлах захиалга алга."}
             </div>
           ) : (
             <ul className="divide-y">
@@ -368,7 +526,7 @@ export function DispatchBoard({
             <button
               type="button"
               onClick={() => setShowLater((v) => !v)}
-              className="w-full border-t px-3 py-2 text-left text-[12px] text-muted-foreground hover:bg-muted/50"
+              className="min-h-10 w-full border-t px-3 py-2 text-left text-[12px] text-muted-foreground hover:bg-muted/50"
             >
               {showLater ? "Дараагийн өдрүүдийнхийг нуух" : `+ ${later.length} захиалга дараагийн өдрүүдэд төлөвлөгдсөн — харуулах`}
             </button>
@@ -377,7 +535,7 @@ export function DispatchBoard({
             <button
               type="button"
               onClick={() => setShowOld((v) => !v)}
-              className="w-full border-t px-3 py-2 text-left text-[12px] text-muted-foreground hover:bg-muted/50"
+              className="min-h-10 w-full border-t px-3 py-2 text-left text-[12px] text-muted-foreground hover:bg-muted/50"
             >
               {showOld
                 ? "Хуучин захиалгуудыг нуух"
@@ -393,11 +551,8 @@ export function DispatchBoard({
               <Link
                 key={s.id}
                 href={href({ shipment: s.id })}
-                className={`rounded-full px-3 py-1.5 text-[12.5px] ring-1 transition-colors ${
-                  s.id === selectedId
-                    ? "bg-primary text-primary-foreground ring-primary"
-                    : "bg-card ring-border hover:bg-muted"
-                }`}
+                className="chip h-10 font-medium"
+                data-active={s.id === selectedId || undefined}
               >
                 <span className="font-semibold">№{s.shipment_no}</span>
                 {s.distributor ? ` · ${s.distributor.name}` : ""} · {s.orderCount}
@@ -482,7 +637,7 @@ export function DispatchBoard({
                       onValueChange={(v) => run(() => setShipmentDistributor(selected.id, v || null))}
                       disabled={busy}
                     >
-                      <SelectTrigger size="default" className="h-8 w-full rounded-xl text-[12.5px]">
+                      <SelectTrigger size="default" className="h-9 w-full rounded-xl text-[12.5px]">
                         <SelectValue placeholder="Түгээгч сонгох" />
                       </SelectTrigger>
                       <SelectContent>
@@ -511,89 +666,78 @@ export function DispatchBoard({
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button asChild size="sm" variant="outline" disabled={selectedOrders.length === 0}>
-                    <a href={`/print/invoices?shipment=${selected.id}`} target="_blank" rel="noreferrer">
-                      <Printer className="h-4 w-4" />
-                      Падаан
-                    </a>
-                  </Button>
-                  <Button asChild size="sm" variant="outline" disabled={selectedOrders.length === 0}>
-                    <a href={`/print/picklist?shipment=${selected.id}`} target="_blank" rel="noreferrer">
-                      <Printer className="h-4 w-4" />
-                      Нэгтгэл
-                    </a>
-                  </Button>
-                  <Button asChild size="sm" variant="outline" disabled={selectedOrders.length === 0}>
-                    <a href={`/admin/export?shipment=${selected.id}`}>
-                      <FileSpreadsheet className="h-4 w-4" />
-                      Excel
-                    </a>
-                  </Button>
+                  {hasOrders ? (
+                    <>
+                      <Button asChild size="sm" variant="outline">
+                        <a href={`/print/invoices?shipment=${selected.id}`} target="_blank" rel="noreferrer">
+                          <Printer className="h-4 w-4" />
+                          Падаан
+                        </a>
+                      </Button>
+                      <Button asChild size="sm" variant="outline">
+                        <a href={`/print/picklist?shipment=${selected.id}`} target="_blank" rel="noreferrer">
+                          <Printer className="h-4 w-4" />
+                          Нэгтгэл
+                        </a>
+                      </Button>
+                      <Button asChild size="sm" variant="outline">
+                        <a href={`/admin/export?shipment=${selected.id}`}>
+                          <FileSpreadsheet className="h-4 w-4" />
+                          Excel
+                        </a>
+                      </Button>
+                    </>
+                  ) : (
+                    <span className="self-center text-[12px] text-muted-foreground">Захиалгагүй ачилтын баримт хэвлэхгүй.</span>
+                  )}
                   <div className="ml-auto flex gap-2">
-                    {confirm ? (
+                    {open ? (
                       <>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={confirm === "delete" ? "destructive" : "default"}
-                          disabled={busy}
-                          onClick={() =>
-                            run(
-                              () =>
-                                confirm === "close"
-                                  ? closeShipment(selected.id)
-                                  : confirm === "reopen"
-                                    ? reopenShipment(selected.id)
-                                    : deleteShipment(selected.id),
-                              (r) => {
-                                if (confirm === "close") toast.success(`Ачилт хаагдлаа · ${r.count} захиалга хүргэлтэнд гарлаа`);
-                                if (confirm === "reopen") toast.success("Ачилт буцааж нээгдлээ");
-                                if (confirm === "delete") router.push(href({ shipment: null }));
-                              },
-                            )
-                          }
-                        >
-                          {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-                          {confirm === "close" ? "Тийм, хаах" : confirm === "reopen" ? "Тийм, нээх" : "Тийм, устгах"}
-                        </Button>
-                        <Button type="button" size="sm" variant="ghost" onClick={() => setConfirm(null)}>
-                          Болих
-                        </Button>
-                      </>
-                    ) : open ? (
-                      <>
-                        {selectedOrders.length === 0 && (
-                          <Button type="button" size="sm" variant="ghost" onClick={() => setConfirm("delete")} title="Хоосон ачилтыг устгах" aria-label="Хоосон ачилтыг устгах">
+                        {pickedRunOrders.length > 0 && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() => setConfirm({ kind: "unassign", ids: pickedRunOrders.map((o) => o.id) })}
+                          >
+                            <X className="h-4 w-4" />
+                            Сонгосныг хасах ({pickedRunOrders.length})
+                          </Button>
+                        )}
+                        {!hasOrders && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setConfirm({ kind: "delete" })}
+                            title="Хоосон ачилтыг устгах"
+                            aria-label="Хоосон ачилтыг устгах"
+                          >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         )}
                         <Button
                           type="button"
                           size="sm"
-                          disabled={busy || selectedOrders.length === 0}
-                          onClick={() => setConfirm("close")}
+                          disabled={busy || !hasOrders}
+                          onClick={() => setConfirm({ kind: "close" })}
                         >
                           <Lock className="h-4 w-4" />
                           Ачилт хаах
                         </Button>
                       </>
                     ) : (
-                      <Button type="button" size="sm" variant="outline" onClick={() => setConfirm("reopen")}>
+                      <Button type="button" size="sm" variant="outline" onClick={() => setConfirm({ kind: "reopen" })}>
                         <LockOpen className="h-4 w-4" />
                         Буцааж нээх
                       </Button>
                     )}
                   </div>
                 </div>
-                {confirm === "close" && (
-                  <p className="text-[12px] text-muted-foreground">
-                    Хаасны дараа {selectedOrders.length} захиалга &quot;Хүргэлтэнд гарсан&quot; болж, Е-баримт илгээх
-                    боломжтой болно. Дэлгүүрүүдэд мэдэгдэл очно.
-                  </p>
-                )}
               </div>
 
-              {selectedOrders.length === 0 ? (
+              {!hasOrders ? (
                 <div className="p-8 text-center text-sm text-muted-foreground">
                   Ачилт хоосон. Зүүн талаас захиалга сонгож нэмнэ үү.
                 </div>
@@ -605,7 +749,19 @@ export function DispatchBoard({
                       o={o}
                       date={date}
                       busy={busy}
-                      onRemove={open ? () => run(() => unassignOrders([o.id])) : undefined}
+                      checked={open ? pickedOnRun.has(o.id) : undefined}
+                      onCheck={
+                        open
+                          ? (v) =>
+                              setPickedOnRun((prev) => {
+                                const next = new Set(prev);
+                                if (v) next.add(o.id);
+                                else next.delete(o.id);
+                                return next;
+                              })
+                          : undefined
+                      }
+                      onRemove={open ? () => unassign([o.id]) : undefined}
                     />
                   ))}
                 </ul>
@@ -613,7 +769,7 @@ export function DispatchBoard({
 
               {productLines.length > 0 && (
                 <details className="border-t">
-                  <summary className="cursor-pointer px-3 py-2.5 text-[13px] font-semibold">
+                  <summary className="flex min-h-10 cursor-pointer items-center px-3 py-2.5 text-[13px] font-semibold">
                     Барааны нэгтгэл ({productLines.length} бараа)
                   </summary>
                   <div className="overflow-x-auto">
@@ -649,6 +805,19 @@ export function DispatchBoard({
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={dialog !== null}
+        onOpenChange={(o) => {
+          if (!o && !busy) setConfirm(null);
+        }}
+        title={dialog?.title ?? ""}
+        description={dialog?.description}
+        confirmLabel={dialog?.label}
+        destructive={dialog?.destructive}
+        pending={busy}
+        onConfirm={confirmNow}
+      />
     </div>
   );
 }

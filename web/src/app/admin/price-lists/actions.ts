@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { adminGuardError } from "@/lib/auth";
 
 type ActionState = { error?: string; ok?: boolean };
@@ -133,58 +134,118 @@ export async function savePriceListItems(
   return { ok: true };
 }
 
+export type AssignCandidate = {
+  id: string;
+  name: string;
+  address: string | null;
+  active: boolean;
+  /** The list the store uses now (null = base prices). */
+  currentListId: string | null;
+  currentListName: string | null;
+};
+
+/** Search words: letters/digits only — no LIKE or PostgREST wildcards. */
+function cleanKeywords(raw: string): string[] {
+  return [
+    ...new Set(
+      raw
+        .split(",")
+        .map((s) => s.replace(/[%_*"'\\(),.:;]/g, " ").replace(/\s+/g, " ").trim())
+        .filter((s) => s.length >= 2),
+    ),
+  ].slice(0, 10);
+}
+
 /**
- * Bulk-assign this price list to every store whose name/notes/address
- * contains any of the comma-separated keywords. Useful for big chains:
- * type "Nomin, Номин" → every Nomin branch points at this list.
+ * Step 1 of bulk assignment: which stores match the words. Nothing is
+ * written here — the admin reviews the list, unticks what doesn't belong
+ * and confirms (step 2). Store names only by default; address/notes on
+ * request, since addresses often name a landmark ("Номины хажууд").
  */
-export async function autoAssignByKeyword(
+export async function previewPriceListMatches(
   priceListId: string,
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
+  input: { keywords: string; address: boolean; notes: boolean },
+): Promise<{ stores?: AssignCandidate[]; error?: string }> {
   const guardErr = await adminGuardError();
   if (guardErr) return { error: guardErr };
 
-  const raw = parseString(formData.get("keywords"));
-  if (!raw) return { error: "Түлхүүр үг оруулна уу (жишээ нь: Nomin, Номин)" };
-
-  const keywords = raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (keywords.length === 0) return { error: "Түлхүүр үг хоосон байна." };
+  const keywords = cleanKeywords(String(input.keywords ?? ""));
+  if (keywords.length === 0) {
+    return { error: "2-оос дээш үсэгтэй түлхүүр үг оруулна уу (жишээ нь: Nomin, Номин)." };
+  }
+  const columns = ["name", ...(input.address ? ["address"] : []), ...(input.notes ? ["notes"] : [])];
 
   const supabase = await createClient();
-
-  // Build an OR filter: name ilike '%kw1%' OR notes ilike '%kw1%' OR ...
-  const orParts: string[] = [];
-  for (const kw of keywords) {
-    const escaped = kw.replace(/[%_,()]/g, "");
-    if (!escaped) continue;
-    orParts.push(
-      `name.ilike.%${escaped}%`,
-      `notes.ilike.%${escaped}%`,
-      `address.ilike.%${escaped}%`,
+  type Row = {
+    id: string;
+    name: string;
+    address: string | null;
+    active: boolean;
+    price_list_id: string | null;
+    list: { name: string } | null;
+  };
+  try {
+    const parts = await Promise.all(
+      keywords.flatMap((kw) =>
+        columns.map((col) =>
+          fetchAll<Row>(() =>
+            supabase
+              .from("supermarkets")
+              .select("id, name, address, active, price_list_id, list:price_list_id(name)")
+              .ilike(col, `%${kw}%`)
+              .order("id"),
+          ),
+        ),
+      ),
     );
+    const byId = new Map<string, Row>();
+    for (const r of parts.flat()) byId.set(r.id, r);
+    const stores = [...byId.values()]
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        address: r.address,
+        active: r.active,
+        currentListId: r.price_list_id,
+        currentListName: r.price_list_id === priceListId ? null : (r.list?.name ?? null),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "mn"));
+    return { stores };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
   }
-  if (orParts.length === 0) return { error: "Хүчинтэй түлхүүр үг алга." };
-
-  const { error, count } = await supabase
-    .from("supermarkets")
-    .update({ price_list_id: priceListId }, { count: "exact" })
-    .or(orParts.join(","));
-  if (error) return { error: error.message };
-
-  revalidatePath(`/admin/price-lists/${priceListId}`);
-  revalidatePath("/admin/supermarkets");
-  return { ok: true, error: `${count ?? 0} дэлгүүрт оноогдлоо.` };
 }
 
-export async function unassignStore(
-  storeId: string,
-  redirectTo: string,
-): Promise<void> {
+/** Step 2: put exactly the stores the admin confirmed on this list. */
+export async function assignPriceListToStores(
+  priceListId: string,
+  storeIds: string[],
+): Promise<{ count?: number; error?: string }> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
+  const ids = [...new Set((storeIds ?? []).filter((x) => typeof x === "string" && x))];
+  if (ids.length === 0) return { error: "Дэлгүүр сонгоно уу." };
+
+  const supabase = await createClient();
+  let count = 0;
+  for (let i = 0; i < ids.length; i += 150) {
+    const { data, error } = await supabase
+      .from("supermarkets")
+      .update({ price_list_id: priceListId })
+      .in("id", ids.slice(i, i + 150))
+      .select("id");
+    if (error) return { count, error: error.message };
+    count += data?.length ?? 0;
+  }
+
+  revalidatePath(`/admin/price-lists/${priceListId}`);
+  revalidatePath("/admin/price-lists");
+  revalidatePath("/admin/supermarkets");
+  return { count };
+}
+
+export async function unassignStore(storeId: string, priceListId: string): Promise<void> {
   const guardErr = await adminGuardError();
   if (guardErr) throw new Error(guardErr);
 
@@ -192,7 +253,9 @@ export async function unassignStore(
   const { error } = await supabase
     .from("supermarkets")
     .update({ price_list_id: null })
-    .eq("id", storeId);
+    .eq("id", storeId)
+    .eq("price_list_id", priceListId);
   if (error) throw new Error(error.message);
-  revalidatePath(redirectTo);
+  revalidatePath(`/admin/price-lists/${priceListId}`);
+  revalidatePath("/admin/price-lists");
 }

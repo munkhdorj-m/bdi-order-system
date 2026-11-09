@@ -140,10 +140,14 @@ export default async function PrintInvoicesPage({ searchParams }: { searchParams
   const filter: DocFilter | null = sp.shipment
     ? { shipmentId: sp.shipment }
     : sp.orders
-      ? { orderIds: sp.orders.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 300) }
+      ? { orderIds: sp.orders.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 300) } // = the order list's limit
       : null;
   const supabase = await createClient();
-  const orders = filter ? await loadDocOrders(supabase, filter) : [];
+  const loaded = filter ? await loadDocOrders(supabase, filter) : [];
+  // A cancelled order gets no delivery note (a run's list already skips
+  // them; ticked orders from the order list may include some).
+  const orders = loaded.filter((o) => o.status !== "cancelled");
+  const skippedCancelled = loaded.length - orders.length;
 
   const base = new URLSearchParams();
   if (sp.shipment) base.set("shipment", sp.shipment);
@@ -172,7 +176,9 @@ export default async function PrintInvoicesPage({ searchParams }: { searchParams
       `}</style>
       <PrintToolbar
         title={title}
-        subtitle={`${orders.length} захиалга · ${layout === "a5" ? `A5, ${copies} хувь` : "A4, 2 хувь нэг хуудсанд"}`}
+        subtitle={`${orders.length} захиалга · ${layout === "a5" ? `A5, ${copies} хувь` : "A4, 2 хувь нэг хуудсанд"}${
+          skippedCancelled > 0 ? ` · цуцлагдсан ${skippedCancelled}-г хассан` : ""
+        }`}
         options={[
           { label: "A4 · 2 хувь", href: link("a4x2", 2), active: layout === "a4x2" },
           { label: "A5 · 1 хувь", href: link("a5", 1), active: layout === "a5" && copies === 1 },

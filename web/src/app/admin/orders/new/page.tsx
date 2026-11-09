@@ -8,22 +8,38 @@ import { loadStoreCatalog, type CatalogRow, type StoreSummary } from "./actions"
 
 type SearchParams = Promise<{ store?: string }>;
 
-/** Every store for the picker (paged past the 1,000-row API cap). */
+const STORE_PAGE = 1000;
+
+/**
+ * Every store for the picker (the picker filters on the phone, instantly).
+ * The first page also brings the total, the rest load side by side; any
+ * failed page fails the whole list (shown by admin/error.tsx with a retry)
+ * instead of quietly leaving stores out.
+ */
 async function allStores(): Promise<StorePickOption[]> {
   const supabase = await createClient();
-  const out: StorePickOption[] = [];
-  for (let page = 0; page < 50; page++) {
-    const { data, error } = await supabase
+  const page = (from: number, count = false) =>
+    supabase
       .from("supermarkets")
-      .select("id, name, address, registry_number, active")
+      .select("id, name, address, registry_number, active", count ? { count: "exact" } : undefined)
       .order("active", { ascending: false })
       .order("name")
       .order("id")
-      .range(out.length, out.length + 999);
-    if (error || !data || data.length === 0) break;
-    out.push(...(data as StorePickOption[]));
+      .range(from, from + STORE_PAGE - 1);
+
+  const first = await page(0, true);
+  if (first.error) throw new Error(`Дэлгүүрийн жагсаалт: ${first.error.message}`);
+  const out = [...((first.data ?? []) as StorePickOption[])];
+  const total = first.count ?? out.length;
+  const rest = await Promise.all(
+    Array.from({ length: Math.max(0, Math.ceil(total / STORE_PAGE) - 1) }, (_, i) => page((i + 1) * STORE_PAGE)),
+  );
+  for (const r of rest) {
+    if (r.error) throw new Error(`Дэлгүүрийн жагсаалт: ${r.error.message}`);
+    out.push(...((r.data ?? []) as StorePickOption[]));
   }
-  return out;
+  // De-dupe in case a store was added between pages.
+  return [...new Map(out.map((s) => [s.id, s])).values()];
 }
 
 /** Staff order entry — Mercury's "Нэмэх". `?store=<id>` preselects a store. */

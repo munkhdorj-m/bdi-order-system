@@ -12,19 +12,21 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
+        // Solid fills get a lit top edge and a darker bottom edge: a
+        // tactile "key" that reads as pressable at a glance (2.0 look).
         default:
-          "bg-primary text-primary-foreground shadow-sm shadow-primary/30 hover:bg-primary/92 hover:shadow-md hover:shadow-primary/25",
+          "bg-primary bg-[linear-gradient(180deg,rgb(255_255_255/0.13),rgb(255_255_255/0)_55%)] text-primary-foreground shadow-[inset_0_-2px_0_rgb(0_0_0/0.16),0_1px_2px_rgb(16_28_72/0.2),0_6px_14px_-8px_var(--primary)] hover:brightness-[1.06] active:shadow-[inset_0_1px_2px_rgb(0_0_0/0.2)]",
         /** The shopping action: add to cart, place order. */
         gold:
-          "bg-gold text-gold-foreground shadow-sm shadow-gold/40 hover:brightness-[1.04] hover:shadow-md hover:shadow-gold/35",
+          "bg-gold bg-[linear-gradient(180deg,rgb(255_255_255/0.28),rgb(255_255_255/0)_55%)] text-gold-foreground shadow-[inset_0_-2px_0_rgb(120_70_0/0.22),0_1px_2px_rgb(120_70_0/0.2),0_6px_14px_-8px_var(--gold)] hover:brightness-[1.04] active:shadow-[inset_0_1px_2px_rgb(120_70_0/0.25)]",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/70",
         outline:
-          "border border-input bg-card text-foreground shadow-[0_1px_1px_rgb(0_0_0/0.03)] hover:border-primary/35 hover:bg-accent/50 dark:hover:bg-accent/40",
+          "border border-input bg-card text-foreground shadow-[0_1px_2px_rgb(16_28_72/0.06)] hover:border-primary/40 hover:bg-accent/50 dark:hover:bg-accent/40",
         ghost:
           "text-muted-foreground hover:bg-muted hover:text-foreground dark:hover:bg-muted/60",
         destructive:
-          "bg-destructive text-destructive-foreground shadow-sm shadow-destructive/20 hover:bg-destructive/90",
+          "bg-destructive text-destructive-foreground shadow-[inset_0_-2px_0_rgb(0_0_0/0.16),0_1px_2px_rgb(0_0_0/0.15)] hover:brightness-[1.05]",
         link: "text-primary underline-offset-4 hover:underline rounded-none",
       },
       size: {

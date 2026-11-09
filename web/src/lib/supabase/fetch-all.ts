@@ -23,3 +23,38 @@ export async function fetchAll<T>(
   }
   return rows;
 }
+
+type CountedPage = PromiseLike<{
+  data: unknown[] | null;
+  error: { message: string } | null;
+  count?: number | null;
+}>;
+
+/**
+ * Like fetchAll, but the first page also brings the total row count and
+ * the remaining pages load side by side — one extra round trip instead of
+ * one per page. Any failed page throws: a quietly partial list (a store
+ * missing from a picker) is worse than an error page with a retry.
+ *
+ * `build(count)` must return a fresh, deterministically ordered query and
+ * ask for `{ count: "exact" }` when `count` is true.
+ */
+export async function fetchAllParallel<T>(
+  build: (count: boolean) => { range(from: number, to: number): CountedPage },
+  pageSize = 1000,
+): Promise<T[]> {
+  const first = await build(true).range(0, pageSize - 1);
+  if (first.error) throw new Error(first.error.message);
+  const rows = [...((first.data ?? []) as T[])];
+  const pages = Math.ceil((first.count ?? rows.length) / pageSize);
+  const rest = await Promise.all(
+    Array.from({ length: Math.max(0, pages - 1) }, (_, i) =>
+      build(false).range((i + 1) * pageSize, (i + 2) * pageSize - 1),
+    ),
+  );
+  for (const page of rest) {
+    if (page.error) throw new Error(page.error.message);
+    rows.push(...((page.data ?? []) as T[]));
+  }
+  return rows;
+}

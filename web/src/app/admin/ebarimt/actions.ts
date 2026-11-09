@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { adminGuardError, getSession } from "@/lib/auth";
 import { loadDocOrders } from "@/lib/order-docs";
-import { buildReceipt, LIVE_STATUSES } from "@/lib/ebarimt";
+import { buildReceipt, EBARIMT_QUEUE_BATCH, LIVE_STATUSES } from "@/lib/ebarimt";
 
 /**
  * e-Barimt queue — Mercury's "НӨАТУС V3" buttons. The website only queues;
@@ -21,6 +21,7 @@ export type QueueResult = {
 
 function refresh() {
   revalidatePath("/admin/ebarimt");
+  revalidatePath("/admin");
 }
 
 export async function queueReceipts(orderIds: string[]): Promise<QueueResult> {
@@ -29,8 +30,12 @@ export async function queueReceipts(orderIds: string[]): Promise<QueueResult> {
   if (guardErr) return { ...empty, error: guardErr };
   const session = await getSession();
 
-  const ids = [...new Set((orderIds ?? []).filter((x) => typeof x === "string" && x))].slice(0, 300);
+  const ids = [...new Set((orderIds ?? []).filter((x) => typeof x === "string" && x))];
   if (ids.length === 0) return { ...empty, error: "Захиалга сонгоно уу." };
+  // Never drop the rest quietly — the page sends big selections in batches.
+  if (ids.length > EBARIMT_QUEUE_BATCH) {
+    return { ...empty, error: `Нэг удаад ${EBARIMT_QUEUE_BATCH} хүртэл захиалга илгээнэ.` };
+  }
 
   const supabase = await createClient();
   let orders;
@@ -40,15 +45,24 @@ export async function queueReceipts(orderIds: string[]): Promise<QueueResult> {
     return { ...empty, error: e instanceof Error ? e.message : String(e) };
   }
 
-  const { data: live, error: liveErr } = await supabase
-    .from("ebarimt_receipts")
-    .select("order_id")
-    .in("order_id", ids)
-    .in("status", LIVE_STATUSES);
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+  const liveParts = await Promise.all(
+    chunks.map((chunk) =>
+      supabase.from("ebarimt_receipts").select("order_id").in("order_id", chunk).in("status", LIVE_STATUSES),
+    ),
+  );
+  const liveErr = liveParts.find((p) => p.error)?.error;
   if (liveErr) return { ...empty, error: liveErr.message };
-  const hasLive = new Set((live ?? []).map((r) => r.order_id as string));
+  const hasLive = new Set(liveParts.flatMap((p) => (p.data ?? []).map((r) => r.order_id as string)));
 
   const result: QueueResult = { ...empty };
+  const found = new Set(orders.map((o) => o.id));
+  const missing = ids.filter((id) => !found.has(id)).length;
+  if (missing > 0) result.warnings.push(`${missing} захиалга олдсонгүй.`);
+
+  // Build every receipt first, then write them in one request.
+  const toInsert: { order: string; warnings: string[]; row: Record<string, unknown> }[] = [];
   for (const o of orders) {
     if (o.status !== "shipped" && o.status !== "delivered") {
       result.skipped.push({ order: o.order_number, reason: "Ачилт хаагдаагүй байна." });
@@ -77,27 +91,47 @@ export async function queueReceipts(orderIds: string[]): Promise<QueueResult> {
       result.skipped.push({ order: o.order_number, reason: built.problems.join(" ") });
       continue;
     }
-    const { error } = await supabase.from("ebarimt_receipts").insert({
-      order_id: o.id,
-      status: "queued",
-      receipt_type: built.type,
-      registry_number: built.registryNumber,
-      customer_tin: built.type === "B2B_RECEIPT" ? (o.store?.ebarimt_tin ?? null) : null,
-      total_amount: built.totalAmount,
-      total_vat: built.totalVat,
-      total_city_tax: built.totalCityTax,
-      request: built.request,
-      queued_by: session?.userId ?? null,
+    toInsert.push({
+      order: o.order_number,
+      warnings: built.warnings,
+      row: {
+        order_id: o.id,
+        status: "queued",
+        receipt_type: built.type,
+        registry_number: built.registryNumber,
+        customer_tin: built.type === "B2B_RECEIPT" ? (o.store?.ebarimt_tin ?? null) : null,
+        total_amount: built.totalAmount,
+        total_vat: built.totalVat,
+        total_city_tax: built.totalCityTax,
+        request: built.request,
+        queued_by: session?.userId ?? null,
+      },
     });
-    if (error) {
-      result.skipped.push({
-        order: o.order_number,
-        reason: /duplicate|unique/i.test(error.message) ? "Аль хэдийн дараалалд орсон." : error.message,
-      });
-      continue;
-    }
+  }
+
+  const accept = (t: (typeof toInsert)[number]) => {
     result.queued += 1;
-    for (const w of built.warnings) result.warnings.push(`${o.order_number}: ${w}`);
+    for (const w of t.warnings) result.warnings.push(`${t.order}: ${w}`);
+  };
+  if (toInsert.length > 0) {
+    const { error } = await supabase.from("ebarimt_receipts").insert(toInsert.map((t) => t.row));
+    if (!error) {
+      toInsert.forEach(accept);
+    } else {
+      // Usually one order got queued meanwhile (one live receipt per
+      // order) — retry one by one so the rest still go.
+      for (const t of toInsert) {
+        const { error: oneErr } = await supabase.from("ebarimt_receipts").insert(t.row);
+        if (oneErr) {
+          result.skipped.push({
+            order: t.order,
+            reason: /duplicate|unique/i.test(oneErr.message) ? "Аль хэдийн дараалалд орсон." : oneErr.message,
+          });
+        } else {
+          accept(t);
+        }
+      }
+    }
   }
 
   refresh();

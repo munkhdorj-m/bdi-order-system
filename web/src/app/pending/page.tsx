@@ -1,10 +1,16 @@
-import { requireSession } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { homePathForRole, requireSession } from "@/lib/auth";
 import { SignOutButton } from "@/components/SignOutButton";
 import { ContactLinks } from "@/components/contact-links";
 import { hasContactLinks } from "@/lib/contact";
 
+/** A store user waiting for an admin to give them a store (= approval). */
 export default async function PendingPage() {
   const session = await requireSession();
+  // Approved since (or never pending): go to where this account belongs —
+  // an installed app reopens on its last page.
+  const home = homePathForRole(session.profile);
+  if (home !== "/pending") redirect(home);
 
   return (
     <main className="flex-1 flex items-center justify-center px-6 py-12 bg-aurora">

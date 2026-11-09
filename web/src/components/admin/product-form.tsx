@@ -34,6 +34,11 @@ export type ProductFormDefaults = {
   stock?: number;
   image_url?: string | null;
   active?: boolean;
+  internal_code?: string | null;
+  vat_payable?: boolean | null;
+  city_tax?: boolean | null;
+  ebarimt_class_code?: string | null;
+  ebarimt_tax_code?: string | null;
 };
 
 export type CategoryOption = {
@@ -79,6 +84,9 @@ export function ProductForm({
   // visual "you can drop here" treatment.
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
+  // e-Barimt: a VAT-free item can't be sent without the tax office's code.
+  const [vatFree, setVatFree] = useState(defaults.vat_payable === false);
+  const [taxCode, setTaxCode] = useState(defaults.ebarimt_tax_code ?? "");
 
   function ingestFile(file: File | undefined | null) {
     if (!file) return;
@@ -349,6 +357,73 @@ export function ProductForm({
                   defaultValue={defaults.box_count ?? ""}
                 />
               </Field>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Код ба е-баримт</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="Дотоод код (Mercury)" htmlFor="internal_code">
+                <Input
+                  id="internal_code"
+                  name="internal_code"
+                  defaultValue={defaults.internal_code ?? ""}
+                  autoComplete="off"
+                />
+              </Field>
+              <Field
+                label="Ангиллын код (е-баримт)"
+                htmlFor="ebarimt_class_code"
+                help="Бүтээгдэхүүн, үйлчилгээний нэгдсэн ангиллын код."
+              >
+                <Input
+                  id="ebarimt_class_code"
+                  name="ebarimt_class_code"
+                  defaultValue={defaults.ebarimt_class_code ?? ""}
+                  inputMode="numeric"
+                  autoComplete="off"
+                />
+              </Field>
+              <div className="md:col-span-2 flex flex-wrap gap-x-6 gap-y-1">
+                <label className="inline-flex min-h-10 items-center gap-2 text-[13.5px]">
+                  <input
+                    type="checkbox"
+                    name="vat_free"
+                    checked={vatFree}
+                    onChange={(e) => setVatFree(e.target.checked)}
+                    className="size-4 accent-[var(--primary)]"
+                  />
+                  НӨАТ-гүй бараа
+                </label>
+                <label className="inline-flex min-h-10 items-center gap-2 text-[13.5px]">
+                  <input
+                    type="checkbox"
+                    name="city_tax"
+                    defaultChecked={defaults.city_tax === true}
+                    className="size-4 accent-[var(--primary)]"
+                  />
+                  Хотын татвар (2%) ногдоно
+                </label>
+              </div>
+              {vatFree && (
+                <Field label="Татварын бүтээгдэхүүний код *" htmlFor="ebarimt_tax_code" className="md:col-span-2">
+                  <Input
+                    id="ebarimt_tax_code"
+                    name="ebarimt_tax_code"
+                    value={taxCode}
+                    onChange={(e) => setTaxCode(e.target.value)}
+                    autoComplete="off"
+                  />
+                  {!taxCode.trim() && (
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                      Энэ кодгүй бол НӨАТ-гүй барааны е-баримт илгээгдэхгүй.
+                    </p>
+                  )}
+                </Field>
+              )}
+              {!vatFree && <input type="hidden" name="ebarimt_tax_code" value={taxCode} />}
             </CardContent>
           </Card>
 

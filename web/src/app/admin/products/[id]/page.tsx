@@ -16,7 +16,7 @@ export default async function EditProductPage({ params }: { params: Params }) {
     supabase
       .from("products")
       .select(
-        "id, sku, name, category_id, brand, description, unit, pack_size, box_count, base_price, cash_price, stock, image_url, active",
+        "id, sku, name, category_id, brand, description, unit, pack_size, box_count, base_price, cash_price, stock, image_url, active, internal_code, vat_payable, city_tax, ebarimt_class_code, ebarimt_tax_code",
       )
       .eq("id", id)
       .single(),

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { KeyRound } from "lucide-react";
+import { authMessage } from "@/lib/auth";
 import { startPasswordReset } from "./actions";
 
 type SearchParams = Promise<{ error?: string; phone?: string }>;
@@ -14,7 +15,9 @@ export default async function ForgotPasswordPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { error, phone } = await searchParams;
+  const { error: errorCode, phone } = await searchParams;
+  // Only our own messages are shown — never free text from the URL.
+  const error = authMessage(errorCode);
 
   return (
     <main className="relative flex-1 min-h-screen flex flex-col items-center justify-center overflow-hidden px-5 py-10 text-white bg-brand-gradient">

@@ -3,6 +3,7 @@ import { Montserrat, Onest } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { ServiceWorkerRegister } from "@/components/sw-register";
+import { BRAND } from "@/lib/brand";
 import "./globals.css";
 
 // Type pairing for the "Тэнгэр ба алт" look:
@@ -46,18 +47,17 @@ export const metadata: Metadata = {
 /**
  * Viewport + theme-color metadata. Splitting these out is required in
  * Next 16 — putting `themeColor` / `viewport` on the Metadata object
- * is deprecated. The two-entry array gives the Android Chrome system
- * bar an indigo tint in light mode and a near-black tint in dark mode.
+ * is deprecated. The two-entry array tints the Android system bar brand
+ * blue (matching the store/rep top bar) in light mode, navy in dark mode.
  *
  * `viewportFit: "cover"` is the PWA install dance: when the app runs
  * standalone on a notched iPhone, this lets us paint into the safe
  * area and use env(safe-area-inset-*) on sticky bars / tab bars.
  */
 export const viewport: Viewport = {
-  // Keep in sync with --brand-bar / dark --background in globals.css.
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#1c49ba" },
-    { media: "(prefers-color-scheme: dark)", color: "#0f1630" },
+    { media: "(prefers-color-scheme: light)", color: BRAND.blue },
+    { media: "(prefers-color-scheme: dark)", color: BRAND.navy },
   ],
   viewportFit: "cover",
   width: "device-width",
@@ -76,9 +76,6 @@ export default function RootLayout({
       // next-themes mutates <html class> before hydration; this stops React
       // from warning about the mismatch between server (no .dark) and client.
       suppressHydrationWarning
-      // Tells Next router transitions to ignore the global `scroll-behavior: smooth`
-      // rule so route jumps don't smooth-scroll (which feels janky on Next).
-      data-scroll-behavior="smooth"
       className={`${onest.variable} ${montserrat.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">

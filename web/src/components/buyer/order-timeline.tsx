@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import { type OrderStatus } from "@/lib/order-status";
+import { formatDayMonthTime } from "@/lib/datetime";
 
 type Timestamps = {
   pending: string;
@@ -15,15 +16,9 @@ type Step = {
   at: string | null;
 };
 
+// "11.08 13:05" (mn-MN Intl would print "XI/08 13:05").
 function formatShort(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("mn-MN", {
-    timeZone: "Asia/Ulaanbaatar",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDayMonthTime(iso);
 }
 
 /**
@@ -112,7 +107,7 @@ function TimelineList({
               >
                 {row.label}
               </div>
-              <div className="text-[11px] text-muted-foreground tabular-nums">
+              <div className="text-[12px] text-muted-foreground tabular-nums">
                 {formatShort(row.at)}
               </div>
             </div>

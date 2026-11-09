@@ -12,9 +12,9 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        // rounded-2xl + a whisper of shadow — matches the buyer-side card
-        // language so admin/rep/buyer all read as one product.
-        "group/card flex flex-col gap-4 overflow-hidden rounded-2xl bg-card py-4 text-sm text-card-foreground ring-1 ring-border shadow-[0_1px_2px_rgb(15_23_42/0.05),0_6px_20px_-12px_rgb(15_23_42/0.14)] dark:shadow-none has-[>[data-slot=table-container]]:gap-0 has-[>[data-slot=table-container]]:py-0 has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:gap-3 data-[size=sm]:py-3 data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-2xl *:[img:last-child]:rounded-b-2xl",
+        // rounded-2xl + the shared card elevation (--elev-1) — one card
+        // language across admin, rep and store screens.
+        "group/card flex flex-col gap-4 overflow-hidden rounded-2xl bg-card py-4 text-sm text-card-foreground ring-1 ring-border/80 shadow-card dark:ring-border has-[>[data-slot=table-container]]:gap-0 has-[>[data-slot=table-container]]:py-0 has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:gap-3 data-[size=sm]:py-3 data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-2xl *:[img:last-child]:rounded-b-2xl",
         className
       )}
       {...props}

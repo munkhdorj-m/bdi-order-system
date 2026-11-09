@@ -108,9 +108,12 @@ export function PushToggle({ className }: { className?: string }) {
         if (cancelled) return;
 
         if (existing && Notification.permission === "granted") {
-          // Refresh the stored row in case the endpoint rotated.
-          await savePushSubscription(extractKeys(existing), navigator.userAgent);
-          if (!cancelled) setState("on");
+          // Refresh the stored row in case the endpoint rotated (it also
+          // moves a shared device to whoever is signed in now). Only show
+          // "on" if the server actually has it — otherwise the button
+          // claims alerts this account will never get.
+          const res = await savePushSubscription(extractKeys(existing), navigator.userAgent);
+          if (!cancelled) setState(res.ok ? "on" : "off");
         } else {
           setState("off");
         }

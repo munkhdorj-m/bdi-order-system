@@ -15,6 +15,8 @@
  * otherwise null for "scheduled on demand".
  */
 
+import { isoWeekday, nextDateForWeekday, todayUb } from "@/lib/dispatch";
+
 export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 export const WEEKDAY_LABELS_MN: Record<Weekday, string> = {
@@ -75,26 +77,24 @@ export function resolveDeliveryDay(args: {
 }
 
 /**
- * "Энэ долоо хоногийн Пүрэв (10/30)" — buyer-friendly label showing the
- * actual upcoming date for a given weekday. If `from` is on or past that
- * weekday, advances to the NEXT week's instance.
+ * "Пүрэв (11/13)" — a business day ("YYYY-MM-DD", Ulaanbaatar) as its
+ * weekday and month/day.
+ */
+export function formatDeliveryDay(day: string): string {
+  const weekday = isoWeekday(day) as Weekday;
+  const [, m, d] = day.split("-");
+  return `${WEEKDAY_LABELS_MN[weekday]} (${m}/${d})`;
+}
+
+/**
+ * "Пүрэв (11/13)" — the next delivery for a store's weekday, counted in
+ * Ulaanbaatar days (the server clock is UTC, so a plain Date would be a
+ * day behind before 08:00 UB). Today's weekday means next week's run.
  */
 export function formatNextDeliveryLabel(
   weekday: Weekday | null,
-  from: Date = new Date(),
+  today: string = todayUb(),
 ): string | null {
   if (weekday === null) return null;
-  const todayIso = from.getDay() === 0 ? 7 : from.getDay(); // JS Sun=0; we want ISO Sun=7
-  const target: Weekday = weekday;
-  let daysAhead = target - todayIso;
-  if (daysAhead <= 0) daysAhead += 7;
-  const date = new Date(from);
-  date.setDate(date.getDate() + daysAhead);
-  const day = WEEKDAY_LABELS_MN[target];
-  const md = date.toLocaleDateString("mn-MN", {
-    timeZone: "Asia/Ulaanbaatar",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  return `${day} (${md})`;
+  return formatDeliveryDay(nextDateForWeekday(today, weekday));
 }

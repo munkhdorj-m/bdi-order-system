@@ -1,7 +1,11 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ChevronLeft, MessageSquareText, ShieldCheck } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { authMessage } from "@/lib/auth";
+import { RESET_DRAFT_COOKIE, readResetDraft } from "@/lib/sms/draft-cookie";
+import { localMnNumber } from "@/lib/sms/verify-mn";
 import { VerifyMnPoller } from "@/components/buyer/verify-mn-poller";
 import { completePasswordReset } from "../actions";
 
@@ -20,8 +24,13 @@ export default async function ForgotPasswordVerifyPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { session: sessionId, error } = await searchParams;
+  const { session: sessionId, error: errorCode } = await searchParams;
+  const error = authMessage(errorCode);
   if (!sessionId) redirect("/forgot-password");
+
+  // Only the browser that started this reset sees it (its code and phone).
+  const draft = readResetDraft((await cookies()).get(RESET_DRAFT_COOKIE)?.value);
+  if (draft?.sessionId !== sessionId) redirect("/forgot-password?error=session-missing");
 
   const admin = createAdminClient();
   const { data: row } = await admin
@@ -31,11 +40,9 @@ export default async function ForgotPasswordVerifyPage({
     .maybeSingle();
 
   if (!row || row.purpose !== "password_reset") {
-    redirect(
-      `/forgot-password?error=${encodeURIComponent("Сесс олдсонгүй эсвэл аль хэдийн ашиглагдсан. Дахин эхлүүлнэ үү.")}`,
-    );
+    redirect("/forgot-password?error=session-missing");
   }
-  const localPhone = String(row.phone).replace(/^\+?976/, "");
+  const localPhone = localMnNumber(String(row.phone));
 
   return (
     <main className="relative flex-1 min-h-screen flex flex-col items-center justify-center overflow-hidden px-5 py-10 text-white bg-brand-gradient">

@@ -6,9 +6,15 @@ import { Button } from "@/components/ui/button";
 
 /**
  * A rep screen failed to load (weak signal in a shop, usually). Try again
- * or go back to the store list — carts are kept on the phone.
+ * — `unstable_retry` fetches the page again (Next 16), unlike `reset` — or
+ * go back to the store list; carts are kept on the phone.
  */
-export default function RepError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
+export default function RepError({
+  unstable_retry,
+}: {
+  error: Error & { digest?: string };
+  unstable_retry: () => void;
+}) {
   return (
     <div className="mx-auto flex max-w-sm flex-col items-center px-6 py-16 text-center">
       <div className="mb-4 flex size-16 items-center justify-center rounded-2xl bg-muted ring-1 ring-border">
@@ -19,7 +25,7 @@ export default function RepError({ reset }: { error: Error & { digest?: string }
         Холболтоо шалгаад дахин оролдоно уу. Сагсанд байгаа бараа хадгалагдсан.
       </p>
       <div className="mt-6 flex w-full flex-col gap-2">
-        <Button size="lg" onClick={reset}>
+        <Button size="lg" onClick={() => unstable_retry()}>
           <RotateCcw className="size-4" />
           Дахин оролдох
         </Button>

@@ -52,20 +52,19 @@ export default async function ProductDetailPage({
 
   const [
     { data: priced },
-    { data: extras },
     { data: discountRows },
     { data: storeRow },
     categories,
   ] = await Promise.all([
+    // The view carries the description too — no second products query.
     supabase
       .from("supermarket_prices")
       .select(
-        "product_id, sku, name, brand, image_url, category_id, effective_price, unit, pack_size, box_count, stock",
+        "product_id, sku, name, brand, image_url, category_id, effective_price, unit, pack_size, box_count, stock, description",
       )
       .eq("supermarket_id", supermarketId)
       .eq("product_id", id)
-      .single(),
-    supabase.from("products").select("description").eq("id", id).single(),
+      .maybeSingle(),
     // RLS scopes to active in-window product discounts. We only need
     // product-kind rules here to compute the per-product sale price.
     supabase
@@ -84,10 +83,7 @@ export default async function ProductDetailPage({
   ]);
 
   if (!priced) notFound();
-  const p = {
-    ...(priced as PriceRow),
-    description: extras?.description ?? null,
-  };
+  const p = priced as PriceRow;
 
   const rules = rulesForPriceList(
     (discountRows as unknown as DiscountRule[] | null) ?? [],
@@ -125,7 +121,7 @@ export default async function ProductDetailPage({
                 sizes="(max-width: 768px) 100vw, 640px"
                 quality={95}
                 className="object-cover"
-                priority
+                preload
               />
             ) : (
               <div className={`absolute inset-0 flex items-center justify-center ${visual.tone.wash}`}>
@@ -142,14 +138,14 @@ export default async function ProductDetailPage({
           {category && (
             <Link
               href={`/catalog?category=${category.id}`}
-              className={`mb-2 inline-flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2.5 text-[11.5px] font-semibold ring-1 ring-border hover:bg-muted ${visual.tone.text}`}
+              className={`mb-2 inline-flex min-h-8 items-center gap-1.5 rounded-full py-1 pl-1 pr-3 text-[12.5px] font-semibold ring-1 ring-border hover:bg-muted ${visual.tone.text}`}
             >
               <CategoryIconTile visual={visual} size="xs" />
               {category.name}
             </Link>
           )}
           {p.brand && (
-            <div className="text-[11px] uppercase tracking-[0.1em] font-bold text-primary">
+            <div className="text-[12px] uppercase tracking-[0.08em] font-bold text-primary">
               {p.brand}
             </div>
           )}
@@ -166,7 +162,7 @@ export default async function ProductDetailPage({
                 <span className="text-[14px] tabular-nums line-through text-muted-foreground/70">
                   {formatMnt(p.effective_price)}
                 </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500 text-white">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[12px] font-bold bg-emerald-600 text-white">
                   <Sparkles className="h-3 w-3" strokeWidth={2.4} />
                   −{sale.pct}%
                 </span>
@@ -188,7 +184,7 @@ export default async function ProductDetailPage({
               active per-product discount matching this row. */}
           {sale && (
             <div className="mt-2 rounded-2xl bg-emerald-50 ring-1 ring-emerald-200 px-3 py-2 dark:bg-emerald-950/30 dark:ring-emerald-800/60">
-              <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-emerald-700 dark:text-emerald-300">
+              <div className="text-[12px] font-bold text-emerald-700 dark:text-emerald-300">
                 Хямдрал
               </div>
               <div className="text-[12.5px] font-semibold text-emerald-900 dark:text-emerald-100">
@@ -235,7 +231,7 @@ export default async function ProductDetailPage({
                 </span>
               )}
             <span className="text-muted-foreground/50">·</span>
-            <span className="text-muted-foreground font-mono text-[11px]">
+            <span className="text-muted-foreground font-mono text-[12px]">
               SKU: {p.sku}
             </span>
           </div>
@@ -244,7 +240,7 @@ export default async function ProductDetailPage({
         {/* Description — flat paragraph, no card wrapper per design */}
         {p.description && (
           <div className="px-4 pt-6">
-            <div className="text-[11px] uppercase tracking-[0.1em] font-bold text-muted-foreground">
+            <div className="text-[12px] font-bold text-muted-foreground">
               Тайлбар
             </div>
             <p className="mt-2 text-[13.5px] leading-relaxed text-foreground/85 whitespace-pre-wrap">
@@ -289,6 +285,7 @@ export default async function ProductDetailPage({
               // though the cart stores the pre-discount unit_price.
               displayPrice={buyPrice}
               boxCount={p.box_count}
+              scope={{ storeId: supermarketId, owner: "buyer" }}
             />
           )}
         </div>

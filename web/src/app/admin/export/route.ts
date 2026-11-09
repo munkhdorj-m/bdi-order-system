@@ -1,38 +1,54 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getSession } from "@/lib/auth";
+import { getSession, hasActiveRole } from "@/lib/auth";
 import { buildXlsx, xlsxHeaders, type XlsxSheet } from "@/lib/xlsx";
 import { amountDue, loadDocOrders, type DocFilter, type DocOrder } from "@/lib/order-docs";
 import { formatDateTimeUb, isIsoDay, splitBoxes, todayUb, ubDayOf } from "@/lib/dispatch";
 import { PAYMENT_METHOD_PRINT } from "@/lib/payment-method";
-import { STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
+import { ACTIVE_STATUSES, STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
 
 /**
  * Excel export of orders — Mercury's "MS-Excel рүү хөрвүүлэх".
  *
+ *   ?orders=<id>,<id>,…            chosen orders (up to 300)
  *   ?shipment=<id>                 one delivery run
  *   ?date=YYYY-MM-DD               everything to deliver that day
- *   ?from=…&to=…[&status=…]        orders placed in a date range (UB days)
+ *   ?from=…&to=…[&status=…][&store=<id>]
+ *                                  orders placed in a date range (UB days);
+ *                                  status may be "active"
  *
  * Three tabs: orders, every order line (what the ERP / accountant needs),
  * and product totals.
  */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET(req: NextRequest) {
   const session = await getSession();
-  if (!session || session.profile.role !== "admin") {
+  if (!session || !hasActiveRole(session.profile, "admin")) {
     return new NextResponse("Зөвхөн админ татах боломжтой.", { status: 403 });
   }
 
   const sp = req.nextUrl.searchParams;
+  const orderIds = (sp.get("orders") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => UUID_RE.test(s));
   const shipment = sp.get("shipment");
   const date = sp.get("date");
   const from = sp.get("from");
   const to = sp.get("to");
   const status = sp.get("status");
+  const store = sp.get("store");
 
   let filter: DocFilter;
   let label: string;
-  if (shipment) {
+  if (orderIds.length > 0) {
+    if (orderIds.length > 300) {
+      return new NextResponse("Нэг удаад 300 хүртэл захиалга татна.", { status: 400 });
+    }
+    filter = { orderIds };
+    label = `Захиалга-сонгосон-${orderIds.length}`;
+  } else if (shipment) {
     filter = { shipmentId: shipment };
     label = "Ачилт";
   } else if (isIsoDay(date)) {
@@ -45,6 +61,8 @@ export async function GET(req: NextRequest) {
       createdFrom: f <= t ? f : t,
       createdTo: f <= t ? t : f,
       status: status && status in STATUS_LABELS ? (status as OrderStatus) : null,
+      statuses: status === "active" ? ACTIVE_STATUSES : null,
+      storeId: store && UUID_RE.test(store) ? store : null,
     };
     label = f === t ? `Захиалга-${f}` : `Захиалга-${f}_${t}`;
   } else {
@@ -64,17 +82,18 @@ export async function GET(req: NextRequest) {
     label = `Ачилт-${orders[0].shipment.shipment_no}-${orders[0].shipment.delivery_date}`;
   }
 
-  // e-Barimt bill numbers for orders that have one (table exists after fix 37).
+  // e-Barimt bill numbers for orders that have one (table exists after fix 37),
+  // a few requests side by side.
   const billByOrder = new Map<string, string>();
-  if (orders.length > 0) {
-    for (let i = 0; i < orders.length; i += 200) {
-      const { data } = await supabase
-        .from("ebarimt_receipts")
-        .select("order_id, bill_id")
-        .in("order_id", orders.slice(i, i + 200).map((o) => o.id))
-        .eq("status", "sent");
-      for (const r of data ?? []) if (r.bill_id) billByOrder.set(r.order_id as string, r.bill_id as string);
-    }
+  const chunks: string[][] = [];
+  for (let i = 0; i < orders.length; i += 150) chunks.push(orders.slice(i, i + 150).map((o) => o.id));
+  const parts = await Promise.all(
+    chunks.map((ids) =>
+      supabase.from("ebarimt_receipts").select("order_id, bill_id").in("order_id", ids).eq("status", "sent"),
+    ),
+  );
+  for (const { data } of parts) {
+    for (const r of data ?? []) if (r.bill_id) billByOrder.set(r.order_id as string, r.bill_id as string);
   }
 
   const day = (o: DocOrder) => o.shipment?.delivery_date ?? o.delivery_date ?? "";

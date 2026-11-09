@@ -53,6 +53,8 @@ export function UserForm({ defaults, supermarkets, action, isSelf }: Props) {
     {},
   );
   const [role, setRole] = useState(defaults.role);
+  // A sign-up waiting for a store: saving with a store approves them.
+  const awaitingStore = defaults.role === "buyer" && !defaults.supermarket_id;
 
   const storeOptions = useMemo(
     () =>
@@ -96,6 +98,8 @@ export function UserForm({ defaults, supermarkets, action, isSelf }: Props) {
             <Label htmlFor="role" className="mb-1.5 block">
               Эрх *
             </Label>
+            {/* A locked select isn't submitted — send the role anyway. */}
+            {isSelf && <input type="hidden" name="role" value={defaults.role} />}
             <Select
               name="role"
               required
@@ -145,6 +149,12 @@ export function UserForm({ defaults, supermarkets, action, isSelf }: Props) {
               <p className="text-xs text-muted-foreground mt-1">
                 {storeOptions.length} дэлгүүрээс сонгох
               </p>
+              {awaitingStore && (
+                <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-[12.5px] text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900">
+                  Шинэ бүртгэл. Дэлгүүрийг нь сонгоод «Хадгалах» дарахад бүртгэл
+                  баталгаажиж, хэрэглэгчид мэдэгдэл очно.
+                </p>
+              )}
             </div>
           )}
         </CardContent>

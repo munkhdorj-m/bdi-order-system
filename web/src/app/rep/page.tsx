@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { Bell, LogOut, Store as StoreIcon } from "lucide-react";
+import { Bell, ChevronRight, ClipboardList, Store as StoreIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { requireSession } from "@/lib/auth";
 import { addDays, todayUb, ubDayStart } from "@/lib/dispatch";
 import { RepStoreList, type RepStore } from "@/components/rep/rep-store-list";
+import { SignOutButton } from "@/components/buyer/sign-out-button";
 
 type StoreRow = {
   id: string;
@@ -37,32 +39,37 @@ export default async function MyStoresPage() {
     .select("id, name, district, address, contact_phone")
     .eq("active", true)
     .order("name");
+  // Shown by rep/error.tsx, whose "Дахин оролдох" loads the page again —
+  // better than an empty list that looks like "no stores".
+  if (error) throw new Error(`Дэлгүүрийн жагсаалт ачаалж чадсангүй: ${error.message}`);
   const rows = (stores as StoreRow[] | null) ?? [];
 
   // Latest order per store (recent window only — enough for "x ago") and
-  // this UB month's count for the header.
+  // this UB month's count for the header. RLS already limits orders to the
+  // rep's own stores. Every row of the window is read (page by page): a
+  // big territory passes PostgREST's 1,000-row cap in 60 days, and the cut
+  // would mark busy stores "60+ өдөр".
   const today = todayUb();
   const lastOrder = new Map<string, string>();
   let monthCount = 0;
   if (rows.length > 0) {
-    const ids = rows.map((s) => s.id);
-    const [{ data: recent }, { count }] = await Promise.all([
-      supabase
-        .from("orders")
-        .select("supermarket_id, created_at")
-        .in("supermarket_id", ids)
-        .neq("status", "cancelled")
-        .gte("created_at", ubDayStart(addDays(today, -LOOKBACK_DAYS)))
-        .order("created_at", { ascending: false })
-        .limit(1000),
+    const [recent, { count }] = await Promise.all([
+      fetchAll<{ supermarket_id: string; created_at: string }>(() =>
+        supabase
+          .from("orders")
+          .select("supermarket_id, created_at")
+          .neq("status", "cancelled")
+          .gte("created_at", ubDayStart(addDays(today, -LOOKBACK_DAYS)))
+          .order("created_at", { ascending: false })
+          .order("id"),
+      ).catch(() => []),
       supabase
         .from("orders")
         .select("id", { count: "exact", head: true })
-        .in("supermarket_id", ids)
         .neq("status", "cancelled")
         .gte("created_at", ubDayStart(`${today.slice(0, 7)}-01`)),
     ]);
-    for (const o of recent ?? []) {
+    for (const o of recent) {
       if (!lastOrder.has(o.supermarket_id)) lastOrder.set(o.supermarket_id, o.created_at);
     }
     monthCount = count ?? 0;
@@ -93,7 +100,7 @@ export default async function MyStoresPage() {
               {initials || "Т"}
             </div>
             <div className="min-w-0 flex-1 leading-tight">
-              <div className="text-[11px] font-medium text-white/70">Төлөөлөгч</div>
+              <div className="text-[12px] font-medium text-white/75">Төлөөлөгч</div>
               <div className="truncate text-[15px] font-semibold text-white">{name}</div>
             </div>
             <Link
@@ -103,15 +110,10 @@ export default async function MyStoresPage() {
             >
               <Bell className="h-[18px] w-[18px]" strokeWidth={2.2} />
             </Link>
-            <form action="/auth/signout" method="post">
-              <button
-                type="submit"
-                className="flex size-10 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15"
-                aria-label="Гарах"
-              >
-                <LogOut className="h-[18px] w-[18px]" />
-              </button>
-            </form>
+            <SignOutButton
+              title={session.profile.phone ?? undefined}
+              className="bg-white/10 ring-1 ring-white/15"
+            />
           </div>
 
           <div className="mt-4 grid grid-cols-3 gap-2">
@@ -119,16 +121,20 @@ export default async function MyStoresPage() {
             <StatTile value={monthCount} label="Энэ сарын захиалга" />
             <StatTile value={warnCount} label="7+ өдөр захиалаагүй" warn={warnCount > 0} />
           </div>
+
+          {/* Every order across the rep's stores: today's, pending, by status. */}
+          <Link
+            href="/rep/orders"
+            className="mt-2 flex h-11 items-center gap-2.5 rounded-xl bg-white/10 px-3 ring-1 ring-white/15"
+          >
+            <ClipboardList className="h-[18px] w-[18px] shrink-0" strokeWidth={2.2} />
+            <span className="flex-1 text-[14px] font-semibold text-white">Миний захиалгууд</span>
+            <ChevronRight className="h-4 w-4 shrink-0 opacity-80" />
+          </Link>
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-3 pt-2 sm:px-4">
-        {error && (
-          <div className="mb-4 rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-            {error.message}
-          </div>
-        )}
-
         {rows.length === 0 ? (
           <div className="py-16 text-center text-sm text-muted-foreground">
             <StoreIcon className="mx-auto mb-3 h-10 w-10 opacity-40" />
@@ -146,7 +152,7 @@ function StatTile({ value, label, warn = false }: { value: number; label: string
   return (
     <div className={`rounded-xl px-3 py-2 ring-1 ${warn ? "bg-gold/25 ring-gold/40" : "bg-white/10 ring-white/15"}`}>
       <div className="font-display text-[19px] font-semibold tabular-nums leading-tight text-white">{value}</div>
-      <div className="text-[10.5px] leading-tight text-white/75">{label}</div>
+      <div className="text-[12px] leading-tight text-white/80">{label}</div>
     </div>
   );
 }

@@ -23,6 +23,8 @@ import { randomInt } from "node:crypto";
 
 const API_BASE = "https://api.verify.mn";
 const SHORTCODE = "144773";
+/** A hung verify.mn must not hold a server action or the poll route open. */
+const REQUEST_TIMEOUT_MS = 10_000;
 
 /** verify.mn rejects polls faster than 2s on the same sessionId. We
  *  use 3s as the floor with a small safety margin. */
@@ -97,6 +99,7 @@ export async function createPhoneVerification(args: {
       callback: args.callbackUrl,
     }),
     // No keepalive — server actions own the request lifecycle.
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   if (res.status === 401) {
@@ -151,6 +154,7 @@ export async function checkPhoneVerification(
 ): Promise<VerifyMnStatus> {
   const res = await fetch(
     `${API_BASE}/sessions/${encodeURIComponent(sessionId)}`,
+    { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
   );
 
   if (res.status === 404) {
@@ -196,4 +200,19 @@ export function normalizeMnPhone(raw: string): string | null {
   const local = noPlus.startsWith("976") ? noPlus.slice(3) : noPlus;
   if (!/^[6789]\d{7}$/.test(local)) return null;
   return `+976${local}`;
+}
+
+/**
+ * Both stored shapes of one phone. verify.mn uses E.164 ("+976…"), while
+ * Supabase Auth — and profiles.phone after it — keep it without the "+".
+ * Use with `.in("phone", phoneVariants(p))` to match either.
+ */
+export function phoneVariants(phone: string): string[] {
+  const noPlus = phone.replace(/^\+/, "");
+  return [`+${noPlus}`, noPlus];
+}
+
+/** "+97699112233" → "99112233", for pre-filling forms. */
+export function localMnNumber(phone: string): string {
+  return phone.replace(/^\+?976/, "");
 }

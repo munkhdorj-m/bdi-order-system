@@ -58,7 +58,7 @@ export function CartBar({
           </span>
         </span>
         <span className="min-w-0 flex-1 leading-tight">
-          <span className="block text-[11.5px] text-white/75">
+          <span className="block text-[12px] text-white/80">
             {lines} төрөл · {pieces} ширхэг
           </span>
           <span className="block font-display text-[16px] font-semibold tabular-nums">{formatMnt(total)}</span>

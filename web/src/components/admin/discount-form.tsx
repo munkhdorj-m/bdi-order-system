@@ -24,6 +24,7 @@ import {
   type SelectOption,
 } from "@/components/ui/searchable-select";
 import { ActiveSwitch } from "@/components/ui/active-switch";
+import { ubDateTimeInput } from "@/lib/dispatch";
 
 type ActionState = { error?: string };
 
@@ -66,17 +67,6 @@ type Props = {
   action: (prev: ActionState, formData: FormData) => Promise<ActionState>;
   submitLabel: string;
 };
-
-/**
- * Datetime-local input needs a "yyyy-MM-ddTHH:mm" string in local time.
- * The DB stores ISO UTC, so we slice off the seconds + Z.
- */
-function isoToLocalInput(iso?: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 export function DiscountForm({
   defaults = {},
@@ -413,19 +403,19 @@ export function DiscountForm({
             <DateTimeInput
               id="starts_at"
               name="starts_at"
-              defaultValue={isoToLocalInput(defaults.starts_at)}
+              defaultValue={ubDateTimeInput(defaults.starts_at)}
             />
           </Field>
           <Field label="Дуусах" htmlFor="ends_at">
             <DateTimeInput
               id="ends_at"
               name="ends_at"
-              defaultValue={isoToLocalInput(defaults.ends_at)}
+              defaultValue={ubDateTimeInput(defaults.ends_at)}
             />
           </Field>
         </div>
         <p className="text-[11.5px] text-muted-foreground -mt-1.5">
-          Хоосон үлдээвэл хязгааргүй ажиллана.
+          Улаанбаатарын цагаар. Хоосон үлдээвэл хязгааргүй ажиллана.
         </p>
       </Section>
 

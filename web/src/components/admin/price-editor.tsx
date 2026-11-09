@@ -7,12 +7,15 @@ import { Callout } from "@/components/ui/callout";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 
-type ProductRow = {
+export type PriceEditorRow = {
   id: string;
   sku: string;
   name: string;
   brand: string | null;
-  base_price: number;
+  /** What applies when this row has no price here — the comparison base. */
+  ref_price: number;
+  /** Where ref_price comes from, shown under it (e.g. "жагсаалт"). */
+  ref_note?: string | null;
   category_name: string | null;
   custom_price: number | null;
 };
@@ -20,8 +23,16 @@ type ProductRow = {
 type ActionState = { error?: string; ok?: boolean };
 
 type Props = {
-  products: ProductRow[];
+  products: PriceEditorRow[];
   action: (prev: ActionState, formData: FormData) => Promise<ActionState>;
+  /** Header of the reference column. */
+  refLabel?: string;
+  /** Header of the editable column. */
+  priceLabel: string;
+  /** One line under the table explaining what an empty field means. */
+  note: string;
+  /** Confirmation after a save. */
+  savedLabel?: string;
 };
 
 type TabKey = "overrides" | "all";
@@ -40,15 +51,23 @@ function diffPercent(custom: number | null, base: number): string | null {
 }
 
 /**
- * Per-store price editor laid out per the Hi-Fi AdminPriceList:
+ * Price editor for a price list or one store's own prices:
  *   - Search input + tab filter (overrides-only / all)
  *   - Bulk action: "−5% бөөнөөр" applies a percentage to every visible row
  *   - Override rows get a primary-tinted background + primary-ring input;
  *     "default" rows show a muted italic placeholder so the admin can
  *     tell at a glance which prices are overridden vs inherited
- *   - Δ column shows the diff% next to each row
+ *   - Δ column compares with `ref_price` — what applies without a price
+ *     here (a store's price list when it has one, else the base price)
  */
-export function PriceEditor({ products, action }: Props) {
+export function PriceEditor({
+  products,
+  action,
+  refLabel = "Жишиг үнэ",
+  priceLabel,
+  note,
+  savedLabel = "✓ Үнэ хадгалагдлаа.",
+}: Props) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     async (prev, fd) => {
       const result = await action(prev, fd);
@@ -112,7 +131,7 @@ export function PriceEditor({ products, action }: Props) {
     // pct is signed (-5 = −5%). Applies only to currently visible rows.
     const next = new Map(values);
     for (const p of filtered) {
-      const base = p.base_price;
+      const base = p.ref_price;
       const newPrice = Math.max(0, Math.round(base * (1 + pct / 100)));
       next.set(p.id, newPrice);
       const el = inputRefs.current.get(p.id);
@@ -179,9 +198,9 @@ export function PriceEditor({ products, action }: Props) {
             size="sm"
             onClick={resetToDefaults}
             disabled={filtered.length === 0}
-            title="Шүүсэн мөрүүдийн override-ийг арилгах"
+            title="Шүүсэн мөрүүдийн оруулсан үнийг арилгах"
           >
-            ↺ Default рүү
+            ↺ Үнийг арилгах
           </Button>
         </div>
       </div>
@@ -194,7 +213,7 @@ export function PriceEditor({ products, action }: Props) {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Барааны нэр, SKU, бренд..."
+            placeholder="Барааны нэр, SKU, брэнд..."
             className="pl-9"
           />
         </div>
@@ -206,10 +225,8 @@ export function PriceEditor({ products, action }: Props) {
           <thead className="bg-muted/60 text-[11px] uppercase tracking-[0.08em] font-bold text-muted-foreground">
             <tr>
               <th className="text-left px-5 py-2.5">Бараа</th>
-              <th className="text-right px-3 py-2.5 w-32">Жишиг үнэ</th>
-              <th className="text-left px-3 py-2.5 w-48">
-                Энэ дэлгүүрийн үнэ
-              </th>
+              <th className="text-right px-3 py-2.5 w-32">{refLabel}</th>
+              <th className="text-left px-3 py-2.5 w-48">{priceLabel}</th>
               <th className="text-right px-3 py-2.5 w-24">Δ</th>
             </tr>
           </thead>
@@ -217,7 +234,7 @@ export function PriceEditor({ products, action }: Props) {
             {filtered.map((p) => {
               const current = values.get(p.id);
               const isOverride = current != null;
-              const diff = diffPercent(current ?? null, p.base_price);
+              const diff = diffPercent(current ?? null, p.ref_price);
               return (
                 <tr
                   key={p.id}
@@ -236,7 +253,8 @@ export function PriceEditor({ products, action }: Props) {
                     </div>
                   </td>
                   <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">
-                    {formatMnt(p.base_price)}
+                    {formatMnt(p.ref_price)}
+                    {p.ref_note && <div className="text-[10px] font-normal">{p.ref_note}</div>}
                   </td>
                   <td className="px-3 py-3">
                     <div className="relative w-36">
@@ -250,7 +268,7 @@ export function PriceEditor({ products, action }: Props) {
                         step={1}
                         name={`price_${p.id}`}
                         defaultValue={current ?? ""}
-                        placeholder={`default · ${p.base_price}`}
+                        placeholder={`${p.ref_price}`}
                         onChange={(e) => handleRowChange(p.id, e.target.value)}
                         className={`w-full h-9 rounded-lg px-3 text-[13px] font-bold tabular-nums text-right transition-all outline-none focus:ring-3 focus:ring-primary/30 ${
                           isOverride
@@ -287,7 +305,7 @@ export function PriceEditor({ products, action }: Props) {
                   className="text-center text-muted-foreground py-8"
                 >
                   {tab === "overrides" && query === ""
-                    ? "Override-той бараа алга байна."
+                    ? "Үнэ оруулсан бараа алга байна."
                     : "Бараа олдсонгүй."}
                 </td>
               </tr>
@@ -297,15 +315,10 @@ export function PriceEditor({ products, action }: Props) {
       </div>
 
       {state.error && <Callout tone="error">{state.error}</Callout>}
-      {state.ok && !pending && (
-        <Callout tone="success">✓ Үнийн жагсаалт хадгалагдлаа.</Callout>
-      )}
+      {state.ok && !pending && <Callout tone="success">{savedLabel}</Callout>}
 
       <div className="sticky bottom-4 flex items-center gap-2 justify-end">
-        <p className="text-[11px] text-muted-foreground mr-auto max-w-md leading-relaxed">
-          Тайлбар: оруулга хоосон үлдэвэл жишиг (бөөний) үнэ ашиглагдана. Өөрөөр
-          оруулсан үнэ тухайн дэлгүүрт зөвхөн хүчинтэй.
-        </p>
+        <p className="text-[11px] text-muted-foreground mr-auto max-w-md leading-relaxed">{note}</p>
         <Button type="submit" disabled={pending}>
           {pending ? "Хадгалж байна..." : "Бүх өөрчлөлтийг хадгалах"}
         </Button>

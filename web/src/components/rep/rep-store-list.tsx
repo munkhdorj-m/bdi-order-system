@@ -73,7 +73,7 @@ export function RepStoreList({ stores }: { stores: RepStore[] }) {
                 type="button"
                 onClick={() => setQ("")}
                 aria-label="Хайлтыг арилгах"
-                className="absolute right-1 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+                className="absolute right-0.5 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -122,14 +122,14 @@ export function RepStoreList({ stores }: { stores: RepStore[] }) {
                       {s.warn && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" strokeWidth={2.2} />}
                     </span>
                     {(s.district || s.contact_phone) && (
-                      <span className="mt-0.5 flex items-center gap-1 truncate text-[11.5px] text-muted-foreground">
+                      <span className="mt-0.5 flex items-center gap-1 truncate text-[12px] text-muted-foreground">
                         {s.contact_phone && <Phone className="h-3 w-3 shrink-0" strokeWidth={2.2} />}
                         <span className="truncate">{[s.contact_phone, s.district].filter(Boolean).join(" · ")}</span>
                       </span>
                     )}
                     <span
                       className={cn(
-                        "mt-0.5 flex items-center gap-1 text-[11.5px]",
+                        "mt-0.5 flex items-center gap-1 text-[12px]",
                         s.warn ? "font-semibold text-amber-700 dark:text-amber-300" : "text-muted-foreground",
                       )}
                     >

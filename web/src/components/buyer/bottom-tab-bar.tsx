@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -10,25 +10,29 @@ import {
   ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useCart } from "@/lib/cart";
+import { subscribeCartGrowth, useCartLineCount, type CartScope } from "@/lib/cart";
 
-export function BuyerBottomTabBar() {
+export function BuyerBottomTabBar({ scope }: { scope: CartScope }) {
   const pathname = usePathname();
-  const cart = useCart();
   // Products in the cart (not pieces — boxes made it read 99+).
-  const cartQty = cart.length;
+  const cartLines = useCartLineCount(scope);
   const [bounce, setBounce] = useState(false);
-  const prevQtyRef = useRef(cartQty);
 
+  // Bounce the badge when a product is ADDED — not when the saved cart
+  // first appears after the page loads.
+  const { storeId, owner } = scope;
   useEffect(() => {
-    if (cartQty > prevQtyRef.current) {
+    let timer: number | undefined;
+    const stop = subscribeCartGrowth({ storeId, owner }, () => {
       setBounce(true);
-      const t = setTimeout(() => setBounce(false), 450);
-      prevQtyRef.current = cartQty;
-      return () => clearTimeout(t);
-    }
-    prevQtyRef.current = cartQty;
-  }, [cartQty]);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setBounce(false), 450);
+    });
+    return () => {
+      stop();
+      window.clearTimeout(timer);
+    };
+  }, [storeId, owner]);
 
   const tabs = [
     {
@@ -48,7 +52,7 @@ export function BuyerBottomTabBar() {
       label: "Сагс",
       icon: ShoppingCart,
       match: (p: string) => p === "/cart",
-      badge: cartQty,
+      badge: cartLines,
     },
     {
       href: "/contact",
@@ -94,7 +98,7 @@ export function BuyerBottomTabBar() {
                   {typeof t.badge === "number" && t.badge > 0 && (
                     <span
                       className={cn(
-                        "absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold tabular-nums flex items-center justify-center ring-2 ring-background bg-gold text-gold-foreground",
+                        "absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full text-[11px] font-bold tabular-nums flex items-center justify-center ring-2 ring-background bg-gold text-gold-foreground",
                         bounce && "animate-cart-bounce",
                       )}
                       aria-label={`Сагсанд ${t.badge} төрлийн бараа`}
@@ -105,7 +109,7 @@ export function BuyerBottomTabBar() {
                 </span>
                 <span
                   className={cn(
-                    "text-[10.5px] leading-none transition-colors",
+                    "text-[11.5px] leading-none transition-colors",
                     active
                       ? "text-primary font-bold"
                       : "text-muted-foreground font-medium group-hover:text-foreground",

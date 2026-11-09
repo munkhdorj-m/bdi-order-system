@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ActiveSwitch } from "@/components/ui/active-switch";
+import { cleanRegistry } from "@/lib/ebarimt";
 
 export type SupermarketFormDefaults = {
   id?: string;
@@ -29,6 +30,10 @@ export type SupermarketFormDefaults = {
   delivery_day?: number | null;
   notes?: string | null;
   active?: boolean;
+  registry_number?: string | null;
+  ebarimt_tin?: string | null;
+  ebarimt_name?: string | null;
+  external_id?: string | null;
 };
 
 export type RepOption = {
@@ -40,6 +45,8 @@ export type RepOption = {
 export type PriceListOption = {
   id: string;
   name: string;
+  /** Archived — kept in the picker only because this store still uses it. */
+  archived?: boolean;
 };
 
 type ActionState = { error?: string };
@@ -109,6 +116,12 @@ export function SupermarketForm({
   const [deliveryDay, setDeliveryDay] = useState<string>(
     defaults.delivery_day != null ? String(defaults.delivery_day) : "",
   );
+  const [registry, setRegistry] = useState(defaults.registry_number ?? "");
+  const [tin, setTin] = useState(defaults.ebarimt_tin ?? "");
+  // B2B (company) receipt only with a valid РД or ТТД; otherwise e-Barimt
+  // goes out as a consumer receipt — say so while the admin types.
+  const b2b = Boolean(cleanRegistry(registry) || cleanRegistry(tin));
+  const registryLooksWrong = registry.trim() !== "" && !cleanRegistry(registry);
 
   const typeOptions = mergeSuggestions(typeSuggestions, DEFAULT_TYPES);
   const districtOptions = mergeSuggestions(districtSuggestions, DEFAULT_DISTRICTS);
@@ -257,6 +270,7 @@ export function SupermarketForm({
                 {priceLists.map((pl) => (
                   <SelectItem key={pl.id} value={pl.id}>
                     {pl.name}
+                    {pl.archived ? " (архивласан)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -274,6 +288,64 @@ export function SupermarketForm({
               defaultValue={defaults.notes ?? ""}
             />
           </Field>
+        </CardContent>
+      </Card>
+
+      {/* Tax + Mercury ids: e-Barimt bills the store as a company only with
+          a valid РД / ТТД, and the Mercury code ties it to the ERP. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Татвар ба Mercury</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Регистрийн дугаар (РД)" htmlFor="registry_number">
+            <Input
+              id="registry_number"
+              name="registry_number"
+              value={registry}
+              onChange={(e) => setRegistry(e.target.value)}
+              placeholder="1234567 эсвэл УБ12345678"
+              autoComplete="off"
+            />
+            {registryLooksWrong && (
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                РД буруу хэлбэртэй — 7 оронтой (компани) эсвэл 2 үсэг + 8 орон.
+              </p>
+            )}
+          </Field>
+          <Field label="ТТД (е-баримт)" htmlFor="ebarimt_tin">
+            <Input
+              id="ebarimt_tin"
+              name="ebarimt_tin"
+              value={tin}
+              onChange={(e) => setTin(e.target.value)}
+              placeholder="Хоосон бол РД-ээр автоматаар олно"
+              autoComplete="off"
+            />
+          </Field>
+          <Field label="Е-баримт дээрх нэр" htmlFor="ebarimt_name">
+            <Input
+              id="ebarimt_name"
+              name="ebarimt_name"
+              defaultValue={defaults.ebarimt_name ?? ""}
+              placeholder="Татварын бүртгэлийн нэр"
+            />
+          </Field>
+          <Field label="Mercury код" htmlFor="external_id">
+            <Input
+              id="external_id"
+              name="external_id"
+              defaultValue={defaults.external_id ?? ""}
+              placeholder="Харилцагчийн код"
+              autoComplete="off"
+            />
+          </Field>
+          <p className="md:col-span-2 text-xs text-muted-foreground -mt-1">
+            {b2b
+              ? "Е-баримт байгууллагын (B2B) баримтаар гарна."
+              : "РД / ТТД байхгүй бол е-баримт хувь хүний (B2C) баримтаар гарна."}{" "}
+            РД солиход хуучин ТТД-г арилгаж, шинээр хайлгана.
+          </p>
         </CardContent>
       </Card>
 

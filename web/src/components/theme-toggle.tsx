@@ -27,8 +27,8 @@ export function ThemeToggle({ variant = "admin" }: { variant?: Variant }) {
 
   const triggerClass =
     variant === "buyer"
-      ? "relative size-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/70 active:scale-95 transition-all"
-      : "relative size-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted active:scale-95 transition-all";
+      ? "relative size-10 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/70 active:scale-95 transition-all"
+      : "relative size-10 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted active:scale-95 transition-all";
 
   return (
     <button

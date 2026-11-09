@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
-import { addToCart } from "@/lib/cart";
+import { addToCart, type CartScope } from "@/lib/cart";
 
 export type ReorderLine = {
   product_id: string;
@@ -14,22 +14,22 @@ export type ReorderLine = {
 };
 
 /**
- * "Дахин захиалах" button for the buyer order-detail page. Re-adds every
- * line from a past order back into the localStorage cart at the prices
- * captured on the original order (the snapshot is intentional — we don't
- * want today's catalog price silently overriding what the buyer reordered).
- * Then navigates to /cart so they can review + submit.
+ * "Дахин захиалах" on the store's order page: puts every paid line of a
+ * past order back into the store's cart, then opens /cart to review and
+ * send. The cart page re-syncs each line with today's catalog (price,
+ * category for deals, photo) as it opens, so old prices never stick.
  *
- * Note: the cart store dedupes by product_id and accumulates qty, so
- * reordering twice in a row doubles the quantity rather than overwriting.
- * That matches buyer intent — "I want the same again, on top of whatever's
- * already in my cart."
+ * The cart adds up quantities per product, so a reorder lands on top of
+ * whatever is already in the cart.
  */
 export function ReorderButton({
   lines,
+  scope,
   className,
 }: {
   lines: ReorderLine[];
+  /** The store's cart (`{ storeId, owner: "buyer" }`). */
+  scope: CartScope;
   className?: string;
 }) {
   const router = useRouter();
@@ -51,6 +51,7 @@ export function ReorderButton({
             unit_price: line.unit_price,
           },
           line.qty,
+          scope,
         );
       }
       toast.success(`${paid.length} бараа сагсанд орлоо`, {

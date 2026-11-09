@@ -34,6 +34,53 @@ export function pushConfigured(): boolean {
   return Boolean(PUBLIC_KEY && PRIVATE_KEY);
 }
 
+/**
+ * httpOnly cookie holding this device's push_subscriptions row id, so
+ * signing out can drop this device's subscription (and only this one).
+ */
+export const PUSH_DEVICE_COOKIE = "bdi-push-sub";
+
+/** ids per `.in()` filter — they travel in the URL (~40 bytes each). */
+const ID_BATCH = 200;
+/** Socket timeout per push, so one hung push service can't stall the batch. */
+const SEND_TIMEOUT_MS = 10_000;
+
+/**
+ * Push services a real browser subscription points at: Chrome/Edge/
+ * Samsung/Opera (FCM), Safari (Apple), Firefox (Mozilla), legacy Edge
+ * (Windows). Anything else is refused — otherwise any signed-in user could
+ * store an arbitrary URL and have our server POST to it on every alert.
+ */
+const PUSH_HOSTS = [
+  /(^|\.)fcm\.googleapis\.com$/,
+  /(^|\.)android\.googleapis\.com$/,
+  /(^|\.)push\.apple\.com$/,
+  /(^|\.)push\.services\.mozilla\.com$/,
+  /(^|\.)notify\.windows\.com$/,
+];
+
+export function isPushEndpoint(raw: string): boolean {
+  if (typeof raw !== "string" || raw.length > 1024) return false;
+  try {
+    const u = new URL(raw);
+    return (
+      u.protocol === "https:" &&
+      !u.username &&
+      !u.password &&
+      (u.port === "" || u.port === "443") &&
+      PUSH_HOSTS.some((re) => re.test(u.hostname))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 let vapidReady = false;
 function ensureVapid(): boolean {
   if (!pushConfigured()) return false;
@@ -81,16 +128,21 @@ export async function sendPushToUsers(
 
   try {
     const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("push_subscriptions")
-      .select("id, endpoint, p256dh, auth")
-      .in("user_id", userIds);
-
-    if (error) {
-      console.error("sendPushToUsers: load subs failed:", error.message);
-      return;
+    // Batched: one `.in()` with every buyer's id overflows the URL limit
+    // once there are a few hundred of them, and the whole send fails.
+    const subs: SubRow[] = [];
+    for (const batch of chunks([...new Set(userIds)], ID_BATCH)) {
+      const { data, error } = await admin
+        .from("push_subscriptions")
+        .select("id, endpoint, p256dh, auth")
+        .in("user_id", batch);
+      if (error) {
+        console.error("sendPushToUsers: load subs failed:", error.message);
+        continue;
+      }
+      // Rows saved before endpoints were checked: never POST to those.
+      subs.push(...((data ?? []) as SubRow[]).filter((s) => isPushEndpoint(s.endpoint)));
     }
-    const subs = (data ?? []) as SubRow[];
     if (subs.length === 0) return;
 
     const body = JSON.stringify({
@@ -116,6 +168,7 @@ export async function sendPushToUsers(
               // device is offline (phone in a pocket with no signal).
               TTL: 60 * 60 * 24,
               urgency: "high",
+              timeout: SEND_TIMEOUT_MS,
             },
           );
         } catch (e) {
@@ -129,8 +182,8 @@ export async function sendPushToUsers(
       }),
     );
 
-    if (dead.length > 0) {
-      await admin.from("push_subscriptions").delete().in("id", dead);
+    for (const batch of chunks(dead, ID_BATCH)) {
+      await admin.from("push_subscriptions").delete().in("id", batch);
     }
   } catch (e) {
     console.error("sendPushToUsers threw:", e);

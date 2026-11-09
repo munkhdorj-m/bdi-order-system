@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { BdiLogo } from "@/components/brand/bdi-logo";
 import { redirect } from "next/navigation";
-import { getSession, homePathForRole } from "@/lib/auth";
+import { authMessage, getSession, homePathForRole } from "@/lib/auth";
 import { Phone } from "lucide-react";
 import { InstallAppHint } from "@/components/install-app-hint";
 import { getContactLinks } from "@/lib/contact";
@@ -21,10 +21,10 @@ type SearchParams = Promise<{
  *
  * Background layering (top → bottom):
  *   1. Brand gradient (always present, no asset needed)
- *   2. Optional /login-hero.jpg overlay — drop a photo into
- *      web/public/login-hero.jpg and it blends in. A missing file just
- *      404s silently and the gradient remains.
- *   3. Light blooms + vignette so the card and headline stay readable.
+ *   2. Light blooms + vignette so the card and headline stay readable.
+ * (A /login-hero.jpg photo layer used to sit between them; the file was
+ * never added, so every visit paid for a 404. Re-add the layer together
+ * with the photo.)
  */
 export default async function LoginPage({
   searchParams,
@@ -33,7 +33,10 @@ export default async function LoginPage({
 }) {
   const session = await getSession();
   if (session) redirect(homePathForRole(session.profile));
-  const { error, success, phone } = await searchParams;
+  const { error: errorCode, success: successCode, phone } = await searchParams;
+  // Only our own messages are shown — never free text from the URL.
+  const error = authMessage(errorCode);
+  const success = authMessage(successCode);
 
   // Only the phone goes on the login screen (centered, below). Full
   // contact + social list is on the in-app Холбоо барих tab.
@@ -41,12 +44,6 @@ export default async function LoginPage({
 
   return (
     <main className="relative flex-1 min-h-screen flex flex-col items-center justify-center overflow-hidden px-5 py-10 text-white bg-brand-gradient">
-      {/* Optional photo layer — kept subtle so the brand color dominates. */}
-      <div
-        className="absolute inset-0 bg-cover bg-center opacity-40 mix-blend-overlay"
-        style={{ backgroundImage: "url('/login-hero.jpg')" }}
-        aria-hidden
-      />
       {/* Light blooms — the gradient reads as lit, not flat. */}
       <div
         className="absolute -top-32 -right-24 size-96 rounded-full bg-white/15 blur-3xl pointer-events-none"
@@ -124,11 +121,7 @@ export default async function LoginPage({
 
             {success && (
               <p className="text-caption rounded-xl px-3 py-2 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-                {success === "phone-verified"
-                  ? "Утас баталгаажлаа. BDI-н ажилтан таны бүртгэлийг идэвхжүүлмэгц нэвтэрч орох боломжтой."
-                  : success === "password-reset"
-                    ? "Нууц үг шинэчлэгдлээ. Шинэ нууц үгээрээ нэвтэрнэ үү."
-                    : success}
+                {success}
               </p>
             )}
             {error && (

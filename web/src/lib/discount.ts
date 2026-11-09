@@ -119,43 +119,53 @@ export function gross(lines: CartLine[]): number {
 }
 
 /**
- * Per-product (or per-category, or all-products) discounts. Each rule
- * runs against the cart and contributes an aggregated `amount` to the
- * steps list. Computed independently against the line's gross — that's
- * the "compound" stacking model: if two product rules happen to match
- * the same line they're each applied at their stated pct rather than
- * one-after-the-other on the same line.
+ * The best per-product deal for one product (product, category or
+ * all-products rules), or null. ONE deal per product — deals don't add
+ * up — and the catalog card, the product page, the cart and the order all
+ * use this same choice, so the price shown is the price charged.
+ */
+export function bestProductRule(
+  productId: string,
+  categoryId: string | null | undefined,
+  rules: DiscountRule[],
+): { pct: number; rule: DiscountRule } | null {
+  let best: { pct: number; rule: DiscountRule } | null = null;
+  for (const r of rules) {
+    if (r.kind !== "product") continue;
+    const pct = num(r.pct);
+    if (pct === null || pct <= 0) continue;
+    // Both filters must pass; null means "no filter on this dimension".
+    const pMatch = !r.product_id || r.product_id === productId;
+    const cMatch = !r.category_id || r.category_id === (categoryId ?? null);
+    if (!pMatch || !cMatch) continue;
+    if (!best || pct > best.pct) best = { pct: Math.min(pct, 100), rule: r };
+  }
+  return best;
+}
+
+/**
+ * Per-product deals over the whole cart: each line gets its best deal
+ * (bestProductRule); the amounts are summed per deal for the breakdown.
  */
 function applyProductRules(
   lines: CartLine[],
   rules: DiscountRule[],
 ): { steps: DiscountStep[]; reduced: number } {
+  const byRule = new Map<string, { rule: DiscountRule; pct: number; amt: number }>();
+  for (const l of lines) {
+    const best = bestProductRule(l.product_id, l.category_id, rules);
+    if (!best) continue;
+    const row = byRule.get(best.rule.id) ?? { rule: best.rule, pct: best.pct, amt: 0 };
+    row.amt += l.qty * l.unit_price * (best.pct / 100);
+    byRule.set(best.rule.id, row);
+  }
   const steps: DiscountStep[] = [];
   let reduced = 0;
-  for (const r of rules) {
-    if (r.kind !== "product") continue;
-    const pct = num(r.pct);
-    if (pct === null || pct <= 0) continue;
-    let amt = 0;
-    for (const l of lines) {
-      const matchesProduct =
-        !r.product_id || r.product_id === l.product_id;
-      const matchesCategory =
-        !r.category_id || r.category_id === l.category_id;
-      // Both filters must pass; nulls mean "no filter on this dimension".
-      if (matchesProduct && matchesCategory) {
-        amt += l.qty * l.unit_price * (pct / 100);
-      }
-    }
-    amt = Math.round(amt);
-    if (amt > 0) {
-      steps.push({
-        kind: "product",
-        label: `${r.name} (${pct}%)`,
-        amount: amt,
-      });
-      reduced += amt;
-    }
+  for (const { rule, pct, amt } of byRule.values()) {
+    const rounded = Math.round(amt);
+    if (rounded <= 0) continue;
+    steps.push({ kind: "product", label: `${rule.name} (${pct}%)`, amount: rounded });
+    reduced += rounded;
   }
   return { steps, reduced };
 }
@@ -215,17 +225,11 @@ function applyCash(amount: number): { discount: number; next: number } {
 /**
  * Compute the full discount breakdown.
  *
- * Order: product → cash. Each step runs against the running total of
- * the previous step. Cash always runs last because it represents the
- * final tender, not a catalog price. Threshold-bonus rules are
- * evaluated AFTER per-product but BEFORE cash, against the
- * post-product subtotal — that way getting 10% off doesn't accidentally
- * bump you below a threshold you'd otherwise hit.
- *
- * Actually we evaluate threshold against the gross — that's what the
- * buyer expects ("I spent 100K so I get the bonus"). Let me keep it
- * simple: threshold is checked against `running` AFTER product
- * discounts, so the displayed "Нийт төлөх" is the qualifying number.
+ * Order: product deals → gift thresholds → cash.
+ *   1. Each line gets its best product deal (bestProductRule).
+ *   2. Gift thresholds are checked against the total AFTER product deals
+ *      (what the cart shows as the amount so far), not the gross.
+ *   3. Cash (2%) comes last: it's the way of paying, not a catalog price.
  */
 export function computeDiscount(
   lines: CartLine[],
@@ -266,9 +270,8 @@ export function computeDiscount(
 }
 
 /**
- * For a single product, find the best per-product discount that
- * applies and return the effective price. Used by the catalog card to
- * render a "was X / now Y" sale badge.
+ * A product's price after its best deal — the catalog card's "was X /
+ * now Y" badge. Same choice as the cart (bestProductRule).
  */
 export function priceWithProductDiscount(
   productId: string,
@@ -276,16 +279,7 @@ export function priceWithProductDiscount(
   unitPrice: number,
   rules: DiscountRule[],
 ): { net: number; pct: number; rule: DiscountRule } | null {
-  let best: { pct: number; rule: DiscountRule } | null = null;
-  for (const r of rules) {
-    if (r.kind !== "product") continue;
-    const pct = num(r.pct);
-    if (pct === null || pct <= 0) continue;
-    const pMatch = !r.product_id || r.product_id === productId;
-    const cMatch = !r.category_id || r.category_id === categoryId;
-    if (!pMatch || !cMatch) continue;
-    if (!best || pct > best.pct) best = { pct, rule: r };
-  }
+  const best = bestProductRule(productId, categoryId, rules);
   if (!best) return null;
   return {
     net: Math.round(unitPrice * (1 - best.pct / 100)),

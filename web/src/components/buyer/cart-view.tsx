@@ -1,81 +1,95 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   Banknote,
   ChevronRight,
   CreditCard,
+  Gift,
   Loader2,
   Minus,
   Plus,
   ShoppingCart,
+  Sparkles,
   Trash2,
   Truck,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   useCart,
   updateQty,
   removeFromCart,
+  removeManyFromCart,
+  restoreCartItem,
   totalAmount,
   totalQty,
   clearCart,
   formatMnt,
   type CartItem,
+  type CartProductInfo,
+  type CartScope,
 } from "@/lib/cart";
-import { toast } from "sonner";
-import { placeOrder } from "@/app/(buyer)/cart/actions";
+import { placeOrder, type PlaceOrderResult } from "@/app/(buyer)/cart/actions";
 import { useCartPriceSync } from "@/components/catalog/use-cart-price-sync";
 import { useCheckoutId } from "@/lib/checkout-id";
+import { useMounted } from "@/lib/use-mounted";
 import { ProductPlaceholder, categoryVisual } from "@/lib/category-visual";
 import { Button } from "@/components/ui/button";
-import { computeDiscount, type DiscountRule } from "@/lib/discount";
+import { MobileListSkeleton } from "@/components/page-skeletons";
+import { bestProductRule, computeDiscount, CASH_DISCOUNT_PCT, type DiscountRule } from "@/lib/discount";
 import type { PaymentMethod } from "@/lib/payment-method";
-import { Gift, Sparkles } from "lucide-react";
+
+const CASH_PCT_LABEL = `${Math.round(CASH_DISCOUNT_PCT * 100)}%`;
 
 /**
- * Client cart view — owns local UI state (cart, notes, submit).
- * Receives delivery info as a prop so the server can resolve the
- * district → weekday default + per-store override without having to
- * marshal it through cart-state.
+ * Client cart view — owns local UI state (cart, notes, submit). The
+ * server page hands over the delivery label, the store's deals and
+ * today's catalog (price, category, photo, stock per product): the cart is
+ * re-synced with it on open, and sold-out lines are marked before sending.
  */
 export function CartView({
+  storeId,
   deliveryLabel,
   storeName,
   rules = [],
   productInfoById = {},
-  prices,
+  catalog,
 }: {
+  /** The store's supermarket id — its cart is kept under it on the phone. */
+  storeId: string;
   deliveryLabel: string | null;
   storeName: string | null;
   rules?: DiscountRule[];
-  /** Today's price per product for this store — re-prices a saved cart. */
-  prices?: Record<string, number>;
-  /** Bonus-product lookup. Server pre-fetches name + image_url for any
-   *  product referenced by a threshold_bonus rule so the cart's free-item
-   *  rows can render the actual product thumbnail. */
+  /** Today's catalog for this store (missing = could not be loaded). */
+  catalog?: Record<string, CartProductInfo>;
+  /** Bonus-product lookup: name + photo of each deal's free item. */
   productInfoById?: Record<string, { name: string; image_url: string | null }>;
 }) {
-  const liveCart = useCart();
-  useCartPriceSync(prices);
+  const scope = useMemo<CartScope>(() => ({ storeId, owner: "buyer" }), [storeId]);
+  const mounted = useMounted();
+  const liveCart = useCart(scope);
+  useCartPriceSync(catalog, scope);
   const [notes, setNotes] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("credit");
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [snapshot, setSnapshot] = useState<CartItem[] | null>(null);
+  // Lines the server refused because they're sold out right now.
+  const [soldOutIds, setSoldOutIds] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
-  const checkoutId = useCheckoutId();
+  const checkoutId = useCheckoutId(scope);
   const router = useRouter();
 
   const cart = pending || submitted ? (snapshot ?? liveCart) : liveCart;
   const total = totalAmount(cart);
   const qty = totalQty(cart);
 
-  // Live discount breakdown — recomputes as the user toggles payment
-  // method or edits qty. Mirrors the server-side calculation that runs
-  // inside placeOrder so the cart number == the order number.
+  // Live discount breakdown — the same engine the server runs inside
+  // placeOrder, so the cart number == the order number.
   const breakdown = computeDiscount(
     cart.map((c) => ({
       product_id: c.product_id,
@@ -87,22 +101,44 @@ export function CartView({
     rules,
   );
 
-  // Threshold-bonus "next reward" hint — find the nearest threshold the
-  // buyer hasn't crossed yet, so we can surface "180,000₮ авбал бэлэг
-  // авна!" upsell card right before the totals.
-  const subtotalAfterProduct = total - (breakdown.steps.find(
-    (s) => s.kind === "product",
-  )?.amount ?? 0);
+  // Gift thresholds are checked after ALL product deals (not just the
+  // first), exactly like the engine does.
+  const productDeals = breakdown.steps
+    .filter((s) => s.kind === "product")
+    .reduce((sum, s) => sum + s.amount, 0);
+  const subtotalAfterProduct = breakdown.gross - productDeals;
   const nextThreshold = rules
     .filter(
       (r) =>
         r.kind === "threshold_bonus" &&
-        r.step_amount != null &&
-        r.step_amount > subtotalAfterProduct,
+        Number(r.step_amount) > 0 &&
+        Number(r.step_amount) > subtotalAfterProduct,
     )
-    .sort((a, b) => (a.step_amount ?? 0) - (b.step_amount ?? 0))[0];
+    .sort((a, b) => Number(a.step_amount) - Number(b.step_amount))[0];
+
+  // Sold out: per today's catalog (stock ≤ 0) or per the server's answer.
+  const isSoldOut = (id: string) => {
+    const stock = catalog?.[id]?.stock;
+    return soldOutIds.includes(id) || (stock !== undefined && stock <= 0);
+  };
+  const blockedIds = cart.filter((i) => isSoldOut(i.product_id)).map((i) => i.product_id);
+
+  function removeLine(item: CartItem, index: number) {
+    removeFromCart(item.product_id, scope);
+    toast(`«${item.name}» сагснаас хасагдлаа`, {
+      action: { label: "Буцаах", onClick: () => restoreCartItem(item, index, scope) },
+    });
+  }
+
+  function removeBlocked() {
+    removeManyFromCart(blockedIds, scope);
+    setSoldOutIds([]);
+    setError(null);
+    toast.success(`${blockedIds.length} дууссан бараа хасагдлаа`);
+  }
 
   function handleSubmit() {
+    if (blockedIds.length > 0) return;
     setError(null);
     setSnapshot([...liveCart]);
     const items = liveCart.map((i) => ({ product_id: i.product_id, qty: i.qty }));
@@ -110,7 +146,7 @@ export function CartView({
     // Same cart re-sent → same id → the server won't make a second order.
     const requestId = checkoutId(JSON.stringify([items, note, paymentMethod]));
     startTransition(async () => {
-      let result: Awaited<ReturnType<typeof placeOrder>>;
+      let result: PlaceOrderResult;
       try {
         result = await placeOrder({ items, notes: note, payment_method: paymentMethod, requestId });
       } catch {
@@ -118,6 +154,12 @@ export function CartView({
         result = { error: "Холболт тасарлаа. Дахин илгээнэ үү — захиалга давхардахгүй." };
       }
       if (result.error) {
+        if (result.problems?.length) {
+          // No longer sold: dropped. Sold out: marked, the store decides.
+          const gone = result.problems.filter((p) => p.reason === "unavailable").map((p) => p.product_id);
+          if (gone.length > 0) removeManyFromCart(gone, scope);
+          setSoldOutIds(result.problems.filter((p) => p.reason === "sold_out").map((p) => p.product_id));
+        }
         // Visible even though the bottom bar covers the page's error box.
         setError(result.error);
         toast.error(result.error);
@@ -125,11 +167,15 @@ export function CartView({
         return;
       }
       setSubmitted(true);
-      clearCart();
+      clearCart(scope);
       // replace: Back from the new order shouldn't land on an empty cart.
       if (result.orderId) router.replace(`/orders/${result.orderId}?new=1`);
     });
   }
+
+  // The cart lives on the phone: until it has been read, show the page's
+  // shape instead of a false "Сагс хоосон байна".
+  if (!mounted) return <MobileListSkeleton rows={3} />;
 
   if (liveCart.length === 0 && !submitted && !pending) {
     return (
@@ -141,10 +187,7 @@ export function CartView({
         <p className="text-sm text-muted-foreground mb-6">
           Каталогоос бараа сонгож сагсандаа нэмнэ үү.
         </p>
-        <Button
-          asChild
-          className="rounded-xl gradient-primary shadow-md shadow-primary/20"
-        >
+        <Button asChild size="lg">
           <Link href="/catalog">Каталог руу</Link>
         </Button>
       </div>
@@ -152,149 +195,132 @@ export function CartView({
   }
 
   return (
-    <div className="px-3 sm:px-4 py-4 max-w-2xl mx-auto pb-44 lg:pb-36">
+    <div className="px-3 sm:px-4 py-4 max-w-2xl mx-auto pb-48 lg:pb-40">
       <div className="flex items-baseline justify-between">
         <h1 className="text-[20px] font-bold tracking-tight">Миний сагс</h1>
-        <span className="text-[12.5px] text-muted-foreground tabular-nums">
+        <span className="text-[13px] text-muted-foreground tabular-nums">
           {qty} ширхэг бараа
         </span>
       </div>
 
-      {/* Delivery card — shows the resolved weekday for the buyer's store.
-          When delivery_day is null (Налайх/Багануур/Багахангай → on-demand)
-          we fall back to a neutral "товлоомжтой" note. */}
+      {/* Delivery card — the next run for this store. No weekday
+          (Налайх/Багануур/Багахангай deliver on demand) → a neutral note. */}
       <div className="mt-3 rounded-2xl ring-1 ring-border bg-accent/40 p-3 flex items-center gap-3">
-        <div className="size-9 rounded-xl bg-card ring-1 ring-border flex items-center justify-center text-primary">
+        <div className="size-10 rounded-xl bg-card ring-1 ring-border flex items-center justify-center text-primary shrink-0">
           <Truck className="h-4 w-4" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-muted-foreground">
-            Хүргэлт
-          </div>
-          <div className="text-[12.5px] font-semibold">
+          <div className="text-[12px] font-semibold text-muted-foreground">Хүргэлт</div>
+          <div className="text-[13.5px] font-semibold">
             {deliveryLabel
               ? `Дараагийн хүргэлт · ${deliveryLabel}`
               : "Тохиролцоогоор · бэлэн болоход мэдэгдэх болно"}
           </div>
           {storeName && (
-            <div className="text-[10.5px] text-muted-foreground truncate">
-              {storeName}
-            </div>
+            <div className="text-[12px] text-muted-foreground truncate">{storeName}</div>
           )}
         </div>
       </div>
 
+      {blockedIds.length > 0 && (
+        <div className="mt-3 rounded-2xl bg-rose-50 ring-1 ring-rose-200 p-3 flex items-center gap-3 dark:bg-rose-950/40 dark:ring-rose-900/60">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
+          <p className="flex-1 min-w-0 text-[13px] font-medium text-rose-900 dark:text-rose-100">
+            {blockedIds.length} бараа дууссан байна. Хасаад захиалгаа илгээнэ үү.
+          </p>
+          <Button type="button" size="sm" variant="destructive" className="h-10 shrink-0" onClick={removeBlocked}>
+            Хасах
+          </Button>
+        </div>
+      )}
+
       {/* Cart line cards */}
       <div className="mt-3 flex flex-col gap-2">
-        {cart.map((item) => {
-          // Aggregate EVERY per-product rule that matches this line so
-          // the badge + strikethrough reflect the same total discount
-          // the engine applies in the breakdown below. Previously we
-          // showed only the first matching rule, which made
-          // `lineNet × qty ≠ cart total` whenever two rules stacked
-          // (e.g. a category 6% + a per-product 3% leaving the line
-          // claiming -6% while the breakdown subtracted both).
-          const matchedRules = rules.filter((r) => {
-            if (r.kind !== "product") return false;
-            const pct = Number(r.pct);
-            if (!Number.isFinite(pct) || pct <= 0) return false;
-            const pMatch = !r.product_id || r.product_id === item.product_id;
-            const cMatch =
-              !r.category_id || r.category_id === (item.category_id ?? null);
-            return pMatch && cMatch;
-          });
-          const totalPct = matchedRules.reduce(
-            (sum, r) => sum + (Number(r.pct) || 0),
-            0,
-          );
-          const hasSale = totalPct > 0;
-          const lineNet = hasSale
-            ? Math.round(item.unit_price * (1 - totalPct / 100))
-            : item.unit_price;
+        {cart.map((item, index) => {
+          // The line's one best deal — the same choice the engine makes
+          // (deals don't add up), so badge × qty matches the breakdown.
+          const best = bestProductRule(item.product_id, item.category_id ?? null, rules);
+          const lineNet = best ? Math.round(item.unit_price * (1 - best.pct / 100)) : item.unit_price;
+          const lineTotal = best
+            ? Math.round(item.unit_price * item.qty * (1 - best.pct / 100))
+            : item.unit_price * item.qty;
+          const soldOut = isSoldOut(item.product_id);
           return (
-          <div
-            key={item.product_id}
-            className="flex gap-3 p-3 rounded-2xl bg-card ring-1 ring-border"
-          >
-            <div className="size-20 rounded-2xl overflow-hidden relative shrink-0 ring-1 ring-border/40 bg-gradient-to-b from-muted/50 to-muted">
-              {item.image_url ? (
-                <Image
-                  src={item.image_url}
-                  alt={item.name}
-                  fill
-                  sizes="80px"
-                  quality={85}
-                  unoptimized
-                  className="object-cover"
-                />
-              ) : (
-                <ProductPlaceholder visual={categoryVisual({ name: "", icon: item.category_icon })} />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              {item.brand && (
-                <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-primary">
-                  {item.brand}
-                </div>
-              )}
-              <Link
-                href={`/catalog/${item.product_id}`}
-                className="text-[13px] font-semibold leading-snug line-clamp-2 hover:underline"
-              >
-                {item.name}
-              </Link>
-              <div className="mt-1.5 text-[11.5px] tabular-nums flex items-baseline gap-1.5 flex-wrap">
-                {hasSale ? (
-                  <>
-                    <span className="text-muted-foreground line-through">
-                      {formatMnt(item.unit_price)}
-                    </span>
-                    <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                      {formatMnt(lineNet)}
-                    </span>
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500 text-white">
-                      −{Math.round(totalPct * 10) / 10}%
-                    </span>
-                    <span className="text-muted-foreground">
-                      × {item.qty} ={" "}
-                    </span>
-                    <span className="font-bold text-foreground">
-                      {formatMnt(lineNet * item.qty)}
-                    </span>
-                  </>
+            <div
+              key={item.product_id}
+              className={`flex gap-3 p-3 rounded-2xl bg-card ring-1 ${soldOut ? "ring-rose-300 dark:ring-rose-800" : "ring-border"}`}
+            >
+              <div className="size-20 rounded-2xl overflow-hidden relative shrink-0 ring-1 ring-border/40 bg-gradient-to-b from-muted/50 to-muted">
+                {item.image_url ? (
+                  <Image
+                    src={item.image_url}
+                    alt={item.name}
+                    fill
+                    sizes="80px"
+                    quality={85}
+                    className={`object-cover ${soldOut ? "grayscale opacity-60" : ""}`}
+                  />
                 ) : (
-                  <span className="text-muted-foreground">
-                    {formatMnt(item.unit_price)} × {item.qty} ={" "}
-                    <span className="font-bold text-foreground">
-                      {formatMnt(item.unit_price * item.qty)}
-                    </span>
-                  </span>
+                  <ProductPlaceholder visual={categoryVisual({ name: "", icon: item.category_icon })} dim={soldOut} />
                 )}
               </div>
-              <div className="mt-2 flex items-center gap-2">
-                <CartLineQtyStepper
-                  productId={item.product_id}
-                  qty={item.qty}
-                />
-                <button
-                  type="button"
-                  onClick={() => removeFromCart(item.product_id)}
-                  aria-label="Барааг хасах"
-                  className="ml-auto size-7 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+              <div className="flex-1 min-w-0">
+                {item.brand && (
+                  <div className="text-[11px] uppercase tracking-[0.08em] font-bold text-primary">
+                    {item.brand}
+                  </div>
+                )}
+                <Link
+                  href={`/catalog/${item.product_id}`}
+                  className="text-[13.5px] font-semibold leading-snug line-clamp-2 hover:underline"
                 >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                  {item.name}
+                </Link>
+                {soldOut && (
+                  <div className="mt-1 inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[12px] font-bold text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                    Дууссан
+                  </div>
+                )}
+                <div className="mt-1.5 text-[12.5px] tabular-nums flex items-baseline gap-1.5 flex-wrap">
+                  {best ? (
+                    <>
+                      <span className="text-muted-foreground line-through">
+                        {formatMnt(item.unit_price)}
+                      </span>
+                      <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                        {formatMnt(lineNet)}
+                      </span>
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] font-bold bg-emerald-600 text-white">
+                        −{best.pct}%
+                      </span>
+                      <span className="text-muted-foreground">× {item.qty} =</span>
+                      <span className="font-bold text-foreground">{formatMnt(lineTotal)}</span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">
+                      {formatMnt(item.unit_price)} × {item.qty} ={" "}
+                      <span className="font-bold text-foreground">{formatMnt(lineTotal)}</span>
+                    </span>
+                  )}
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <CartLineQtyStepper productId={item.product_id} name={item.name} qty={item.qty} scope={scope} />
+                  <button
+                    type="button"
+                    onClick={() => removeLine(item, index)}
+                    aria-label={`${item.name} — сагснаас хасах`}
+                    className="ml-auto size-10 flex items-center justify-center rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                  >
+                    <Trash2 className="h-[18px] w-[18px]" />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
           );
         })}
 
-        {/* Bonus lines — free items earned via threshold rules. Styled
-            distinct from regular cart rows so they're recognizable as
-            "you didn't pay for these". When the bonus product has an
-            image we show it as the thumbnail; otherwise fall back to
-            the Gift icon block so the row still reads as a freebie. */}
+        {/* Bonus lines — free items earned via threshold rules, in the
+            shopping colour so they read as "you didn't pay for these". */}
         {breakdown.bonuses.map((b) => {
           const info = productInfoById[b.product_id];
           const displayName = info?.name ?? "Бэлэг бараа";
@@ -302,49 +328,35 @@ export function CartView({
           return (
             <div
               key={b.source_discount_id}
-              className="flex items-center gap-3 p-3 rounded-2xl bg-amber-50 ring-1 ring-amber-300/60 dark:bg-amber-950/30 dark:ring-amber-800/60"
+              className="flex items-center gap-3 p-3 rounded-2xl bg-gold/10 ring-1 ring-gold/50"
             >
-              <div className="relative size-16 rounded-2xl overflow-hidden shrink-0 ring-1 ring-amber-300/60 dark:ring-amber-700/60 bg-amber-100 dark:bg-amber-900/60">
+              <div className="relative size-16 rounded-2xl overflow-hidden shrink-0 ring-1 ring-gold/50 bg-gold/20">
                 {imageUrl ? (
-                  // `unoptimized` matches what /catalog uses for product
-                  // images. Without it, Next's image optimizer can fail
-                  // silently for Supabase storage URLs and the thumbnail
-                  // never appears.
                   <Image
                     src={imageUrl}
                     alt={displayName}
                     fill
                     sizes="64px"
                     quality={85}
-                    unoptimized
                     className="object-cover"
                   />
                 ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Gift
-                      className="h-7 w-7 text-amber-700 dark:text-amber-300"
-                      strokeWidth={2}
-                    />
+                  <div className="absolute inset-0 flex items-center justify-center text-gold-foreground dark:text-gold">
+                    <Gift className="h-7 w-7" strokeWidth={2} />
                   </div>
                 )}
-                {/* Tiny gift sticker corner — present even on the image
-                    variant so the row keeps reading as a freebie. */}
-                <div className="absolute -bottom-1 -right-1 size-5 rounded-full bg-emerald-500 text-white flex items-center justify-center ring-2 ring-amber-50 dark:ring-amber-950/30">
+                <div className="absolute -bottom-1 -right-1 size-5 rounded-full bg-emerald-500 text-white flex items-center justify-center ring-2 ring-card">
                   <Gift className="h-2.5 w-2.5" strokeWidth={2.6} />
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[10px] uppercase tracking-[0.1em] font-bold text-amber-900 dark:text-amber-200">
-                  Бэлэг
-                </div>
-                <div className="text-[12.5px] font-semibold text-amber-950 dark:text-amber-100 truncate">
+                <div className="text-[12px] font-bold text-gold-foreground dark:text-gold">Бэлэг</div>
+                <div className="text-[13px] font-semibold truncate">
                   {displayName} · {b.qty} ширхэг
                 </div>
-                <div className="text-[10.5px] text-amber-800/80 dark:text-amber-200/70 truncate">
-                  {b.label}
-                </div>
+                <div className="text-[12px] text-muted-foreground truncate">{b.label}</div>
               </div>
-              <span className="text-[11px] font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+              <span className="text-[12px] font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
                 ҮНЭГҮЙ
               </span>
             </div>
@@ -352,75 +364,49 @@ export function CartView({
         })}
       </div>
 
-      {/* Upsell card — closest threshold the buyer hasn't crossed yet.
-          Plain math: how much more they need to spend to unlock a bonus
-          product. The whole point of FOMO is the user sees this BEFORE
-          they checkout. */}
-      {nextThreshold && nextThreshold.step_amount && (() => {
+      {/* Upsell — the closest gift threshold not reached yet: how much
+          more to spend, shown BEFORE checkout. */}
+      {nextThreshold && (() => {
+        const step = Number(nextThreshold.step_amount);
         const nextInfo = productInfoById[nextThreshold.product_id ?? ""];
         const nextName = nextInfo?.name ?? "бараа";
         const nextImg = nextInfo?.image_url ?? null;
         return (
-        <div className="mt-3 rounded-2xl bg-gradient-to-br from-violet-50 via-fuchsia-50 to-rose-50 ring-1 ring-violet-200 p-3 flex items-center gap-3 dark:from-violet-950/40 dark:via-fuchsia-950/40 dark:to-rose-950/40 dark:ring-violet-800/60">
-          {/* Mini thumbnail of the reward product when we have one — gives
-              the upsell card a concrete "you'll get THIS" preview. */}
-          <div className="relative size-14 rounded-2xl overflow-hidden shrink-0 ring-1 ring-violet-200 dark:ring-violet-800/60 bg-violet-100 dark:bg-violet-950/60">
-            {nextImg ? (
-              <Image
-                src={nextImg}
-                alt={nextName}
-                fill
-                sizes="56px"
-                quality={85}
-                unoptimized
-                className="object-cover"
-              />
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center text-violet-700 dark:text-violet-300">
-                <Sparkles className="h-5 w-5" />
+          <div className="mt-3 rounded-2xl bg-gold/10 ring-1 ring-gold/50 p-3 flex items-center gap-3">
+            <div className="relative size-14 rounded-2xl overflow-hidden shrink-0 ring-1 ring-gold/50 bg-gold/20">
+              {nextImg ? (
+                <Image src={nextImg} alt={nextName} fill sizes="56px" quality={85} className="object-cover" />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-gold-foreground dark:text-gold">
+                  <Gift className="h-5 w-5" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13.5px] font-semibold leading-tight">
+                Дахиад{" "}
+                <span className="tabular-nums font-bold text-gold-foreground dark:text-gold">
+                  {formatMnt(step - subtotalAfterProduct)}
+                </span>{" "}
+                нэмбэл бэлэг!
               </div>
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[12.5px] font-semibold leading-tight">
-              Дахиад{" "}
-              <span className="tabular-nums font-bold text-violet-700 dark:text-violet-300">
-                {formatMnt(nextThreshold.step_amount - subtotalAfterProduct)}
-              </span>{" "}
-              нэмбэл бэлэг!
-            </div>
-            <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
-              {nextThreshold.name} · {nextName} ·{" "}
-              {nextThreshold.bonus_n ?? 1} ширхэг
-            </div>
-            {/* Progress bar — how close they are to the threshold. */}
-            <div className="mt-1.5 h-1 rounded-full bg-violet-100 dark:bg-violet-950/60 overflow-hidden">
-              <div
-                style={{
-                  width: `${Math.min(
-                    100,
-                    Math.round(
-                      (subtotalAfterProduct /
-                        (nextThreshold.step_amount || 1)) *
-                        100,
-                    ),
-                  )}%`,
-                }}
-                className="h-full bg-violet-500 rounded-full"
-              />
+              <div className="text-[12px] text-muted-foreground mt-0.5 truncate">
+                {nextThreshold.name} · {nextName} · {nextThreshold.bonus_n ?? 1} ширхэг
+              </div>
+              <div className="mt-1.5 h-1.5 rounded-full bg-gold/20 overflow-hidden">
+                <div
+                  style={{ width: `${Math.min(100, Math.round((subtotalAfterProduct / (step || 1)) * 100))}%` }}
+                  className="h-full bg-gold rounded-full"
+                />
+              </div>
             </div>
           </div>
-        </div>
         );
       })()}
 
-      {/* Payment method picker — two side-by-side cards. Selecting Бэлэн
-          auto-applies the 2% cash discount which surfaces in the sticky
-          totals bar below. */}
+      {/* Payment method — cash takes the cash discount off the total. */}
       <div className="mt-5">
-        <div className="text-[11px] uppercase tracking-[0.1em] font-bold text-muted-foreground mb-2">
-          Төлбөрийн арга
-        </div>
+        <div className="text-[12px] font-bold text-muted-foreground mb-2">Төлбөрийн арга</div>
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
@@ -428,15 +414,15 @@ export function CartView({
             aria-pressed={paymentMethod === "credit"}
             className={`rounded-2xl ring-1 p-3 text-left transition-all ${
               paymentMethod === "credit"
-                ? "ring-primary bg-[color-mix(in_oklch,var(--primary)_6%,var(--card))] shadow-sm"
+                ? "ring-2 ring-primary bg-[color-mix(in_oklch,var(--primary)_6%,var(--card))] shadow-sm"
                 : "ring-border bg-card hover:bg-muted/40"
             }`}
           >
             <CreditCard
               className={`h-4 w-4 mb-1.5 ${paymentMethod === "credit" ? "text-primary" : "text-muted-foreground"}`}
             />
-            <div className="text-[13px] font-bold">Зээл</div>
-            <div className="text-[10.5px] text-muted-foreground leading-tight mt-0.5">
+            <div className="text-[14px] font-bold">Зээл</div>
+            <div className="text-[12px] text-muted-foreground leading-tight mt-0.5">
               Дараа төлбөртэйгээр
             </div>
           </button>
@@ -446,18 +432,18 @@ export function CartView({
             aria-pressed={paymentMethod === "cash"}
             className={`relative rounded-2xl ring-1 p-3 text-left transition-all ${
               paymentMethod === "cash"
-                ? "ring-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/30 shadow-sm"
+                ? "ring-2 ring-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/30 shadow-sm"
                 : "ring-border bg-card hover:bg-muted/40"
             }`}
           >
-            <span className="absolute top-2 right-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500 text-white">
-              -2%
+            <span className="absolute top-2 right-2 text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-600 text-white">
+              −{CASH_PCT_LABEL}
             </span>
             <Banknote
               className={`h-4 w-4 mb-1.5 ${paymentMethod === "cash" ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}
             />
-            <div className="text-[13px] font-bold">Бэлэн</div>
-            <div className="text-[10.5px] text-muted-foreground leading-tight mt-0.5">
+            <div className="text-[14px] font-bold">Бэлэн</div>
+            <div className="text-[12px] text-muted-foreground leading-tight mt-0.5">
               Хүргэлтийн үед төлнө
             </div>
           </button>
@@ -466,10 +452,7 @@ export function CartView({
 
       {/* Notes block */}
       <div className="mt-5">
-        <label
-          htmlFor="notes"
-          className="block text-[11px] uppercase tracking-[0.1em] font-bold text-muted-foreground mb-2"
-        >
+        <label htmlFor="notes" className="block text-[12px] font-bold text-muted-foreground mb-2">
           Тэмдэглэл (заавал биш)
         </label>
         <textarea
@@ -478,7 +461,7 @@ export function CartView({
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
           placeholder="Жш: Маргааш 10 цаг хүртэл хүргэх боломжтой бол хүргэнэ үү"
-          className="w-full rounded-2xl bg-muted/60 ring-1 ring-border px-4 py-3 text-[13px] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-card transition-all"
+          className="w-full rounded-2xl bg-muted/60 ring-1 ring-border px-4 py-3 text-[14px] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-card transition-all"
         />
       </div>
 
@@ -488,21 +471,18 @@ export function CartView({
         </div>
       )}
 
-      {/* Sticky submit bar — when there are discount steps we render a
-          loud breakdown so the buyer can SEE the savings before they
-          checkout. Each step gets its own row in emerald with "−X₮", a
-          "ХЯМДРАЛ" pill above the total, and the strikethrough gross
-          adjacent to the final net. */}
+      {/* Sticky submit bar — the savings itemised above the total, so the
+          store sees them before it sends. */}
       <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] lg:bottom-14 left-0 right-0 glass-strong border-t border-border/30 px-3 pt-3 pb-3 z-10 shadow-lg shadow-black/5">
         <div className="max-w-2xl mx-auto">
           {breakdown.steps.length > 0 ? (
             <div className="mb-2 rounded-2xl bg-gradient-to-r from-emerald-50 to-card ring-1 ring-emerald-200 px-3 py-2.5 space-y-1 dark:from-emerald-950/30 dark:to-card dark:ring-emerald-800/60">
               <div className="flex items-center justify-between">
-                <div className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.1em] font-bold text-emerald-700 dark:text-emerald-300">
-                  <Sparkles className="h-3 w-3" />
+                <div className="inline-flex items-center gap-1 text-[12px] font-bold text-emerald-700 dark:text-emerald-300">
+                  <Sparkles className="h-3.5 w-3.5" />
                   Хямдрал
                 </div>
-                <div className="text-[11px] text-muted-foreground">
+                <div className="text-[12px] text-muted-foreground">
                   Та{" "}
                   <span className="font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
                     {formatMnt(breakdown.totalDiscount)}
@@ -513,20 +493,16 @@ export function CartView({
               {breakdown.steps.map((s, i) => (
                 <div
                   key={`${s.kind}-${i}`}
-                  className="flex items-baseline justify-between text-[11.5px] text-emerald-700 dark:text-emerald-400"
+                  className="flex items-baseline justify-between text-[12.5px] text-emerald-700 dark:text-emerald-400"
                 >
                   <span className="truncate pr-2">{s.label}</span>
-                  <span className="tabular-nums shrink-0 font-semibold">
-                    −{formatMnt(s.amount)}
-                  </span>
+                  <span className="tabular-nums shrink-0 font-semibold">−{formatMnt(s.amount)}</span>
                 </div>
               ))}
               <div className="flex items-baseline justify-between pt-1.5 border-t border-emerald-200/60 dark:border-emerald-800/40">
                 <div className="flex flex-col">
-                  <span className="text-[10px] uppercase tracking-[0.1em] font-bold text-muted-foreground">
-                    Нийт төлөх
-                  </span>
-                  <span className="text-[11px] tabular-nums line-through text-muted-foreground/70">
+                  <span className="text-[12px] font-bold text-muted-foreground">Нийт төлөх</span>
+                  <span className="text-[12px] tabular-nums line-through text-muted-foreground/70">
                     {formatMnt(total)}
                   </span>
                 </div>
@@ -537,33 +513,35 @@ export function CartView({
             </div>
           ) : (
             <div className="flex items-baseline justify-between mb-2 px-1">
-              <span className="text-[11px] uppercase tracking-[0.1em] font-bold text-muted-foreground">
-                Нийт
-              </span>
+              <span className="text-[12px] font-bold text-muted-foreground">Нийт</span>
               <span className="font-display text-[20px] font-semibold tabular-nums tracking-tight">
                 {formatMnt(total)}
               </span>
             </div>
           )}
-          <button
+          <Button
             type="button"
+            variant="gold"
+            size="lg"
             onClick={handleSubmit}
-            disabled={pending || cart.length === 0}
+            disabled={pending || cart.length === 0 || blockedIds.length > 0}
             aria-busy={pending}
-            className="w-full h-12 rounded-2xl bg-primary text-primary-foreground font-bold text-[14px] flex items-center justify-center gap-2 shadow-md shadow-[color-mix(in_oklch,var(--primary)_25%,transparent)] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all"
+            className="w-full rounded-2xl"
           >
             {pending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Илгээж байна...
               </>
+            ) : blockedIds.length > 0 ? (
+              "Дууссан барааг хасаад илгээнэ үү"
             ) : (
               <>
                 Захиалга илгээх
                 <ChevronRight className="h-4 w-4 opacity-80" />
               </>
             )}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -571,26 +549,20 @@ export function CartView({
 }
 
 /**
- * Per-row quantity stepper for cart lines. Same UX shape as the
- * catalog card stepper: -/+ buttons plus an inline-editable input
- * between them.
- *
- * Each row owns its own typing draft (the cart `qty` is the source of
- * truth — we sync the draft to it whenever the cart re-renders). On
- * blur/Enter we commit; Escape reverts.
- *
- * Typing `0` and committing removes the row (matches the behavior of
- * pressing - until it would go below 1, which is otherwise blocked
- * because the - button is `disabled` at qty=1). This is the
- * pragmatic way to clear a single line without making the trash
- * button the only path.
+ * Per-row quantity stepper: −/+ (40px) with the number typeable between
+ * them. Each row keeps its own typing draft (the cart's qty stays the
+ * source of truth); Enter/blur commits, Escape reverts, 0 removes the row.
  */
 function CartLineQtyStepper({
   productId,
+  name,
   qty,
+  scope,
 }: {
   productId: string;
+  name: string;
   qty: number;
+  scope: CartScope;
 }) {
   const [draft, setDraft] = useState<string>(String(qty));
   // Sync external qty changes (the +/- buttons, other tabs) into the
@@ -603,12 +575,8 @@ function CartLineQtyStepper({
 
   function commit() {
     const trimmed = draft.trim();
-    if (trimmed === "") {
-      setDraft(String(qty));
-      return;
-    }
     const n = Number(trimmed);
-    if (!Number.isFinite(n) || n < 0) {
+    if (trimmed === "" || !Number.isFinite(n) || n < 0) {
       setDraft(String(qty));
       return;
     }
@@ -617,29 +585,26 @@ function CartLineQtyStepper({
       setDraft(String(qty));
       return;
     }
-    updateQty(productId, floored);
+    updateQty(productId, floored, scope);
   }
 
   return (
-    <div className="inline-flex items-center rounded-full bg-muted ring-1 ring-border">
+    <div className="inline-flex items-center rounded-xl bg-muted ring-1 ring-border">
       <button
         type="button"
-        onClick={() => updateQty(productId, qty - 1)}
+        onClick={() => updateQty(productId, qty - 1, scope)}
         disabled={qty <= 1}
-        aria-label="Хасах"
-        className="size-7 flex items-center justify-center hover:bg-[oklch(0.94_0.005_264)] rounded-l-full disabled:opacity-40 active:scale-90 transition-transform"
+        aria-label={`${name} — нэгээр хасах`}
+        className="size-10 flex items-center justify-center rounded-l-xl hover:bg-card disabled:opacity-40 active:scale-90 transition-transform"
       >
-        <Minus className="h-3.5 w-3.5" strokeWidth={2.4} />
+        <Minus className="h-4 w-4" strokeWidth={2.4} />
       </button>
       <input
         type="text"
         inputMode="numeric"
         pattern="[0-9]*"
         value={draft}
-        onChange={(e) => {
-          const cleaned = e.target.value.replace(/[^0-9]/g, "");
-          setDraft(cleaned);
-        }}
+        onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
         onFocus={(e) => e.target.select()}
         onBlur={commit}
         onKeyDown={(e) => {
@@ -651,21 +616,20 @@ function CartLineQtyStepper({
             (e.target as HTMLInputElement).blur();
           }
         }}
-        aria-label="Тоо ширхэг"
-        // Fixed width — the pill is `inline-flex` so it sizes to
-        // content; without an explicit width the input inherits HTML's
-        // default size=20 (~150px) and blows the pill out across the row.
+        aria-label={`${name} — тоо ширхэг`}
+        // Fixed width — without one the input takes HTML's default
+        // size=20 (~150px) and blows the pill out across the row.
         size={1}
-        maxLength={4}
-        className="w-10 px-1 text-[12.5px] font-bold tabular-nums text-center bg-transparent border-0 outline-none focus:bg-background/60 transition-colors"
+        maxLength={5}
+        className="w-14 h-10 px-1 text-[15px] font-bold tabular-nums text-center bg-transparent border-0 outline-none focus:bg-background/60 transition-colors"
       />
       <button
         type="button"
-        onClick={() => updateQty(productId, qty + 1)}
-        aria-label="Нэмэх"
-        className="size-7 flex items-center justify-center hover:bg-[oklch(0.94_0.005_264)] rounded-r-full active:scale-90 transition-transform"
+        onClick={() => updateQty(productId, qty + 1, scope)}
+        aria-label={`${name} — нэгээр нэмэх`}
+        className="size-10 flex items-center justify-center rounded-r-xl hover:bg-card active:scale-90 transition-transform"
       >
-        <Plus className="h-3.5 w-3.5" strokeWidth={2.4} />
+        <Plus className="h-4 w-4" strokeWidth={2.4} />
       </button>
     </div>
   );

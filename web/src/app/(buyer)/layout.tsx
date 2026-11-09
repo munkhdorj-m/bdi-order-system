@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { requireSession, homePathForRole } from "@/lib/auth";
+import { hasActiveRole, homePathForRole, requireSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { BuyerShell } from "@/components/buyer/shell";
 import {
@@ -18,7 +18,7 @@ export default async function BuyerLayout({
   const session = await requireSession();
 
   if (
-    session.profile.role !== "buyer" ||
+    !hasActiveRole(session.profile, "buyer") ||
     !session.profile.supermarket_id
   ) {
     redirect(homePathForRole(session.profile));
@@ -87,6 +87,7 @@ export default async function BuyerLayout({
   return (
     <BuyerShell
       storeName={store?.name ?? ""}
+      storeId={session.profile.supermarket_id}
       phone={session.profile.phone}
       bell={<NotificationsBell notifications={items} unreadCount={unread} />}
       dealsChip={

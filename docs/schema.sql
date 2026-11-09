@@ -389,7 +389,8 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
-  select role from profiles where id = auth.uid();
+  -- Inactive users get no role rights (fix 40).
+  select role from profiles where id = auth.uid() and active;
 $$;
 
 create or replace function current_supermarket()

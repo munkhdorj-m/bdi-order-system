@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Search, SearchX, X } from "lucide-react";
+import Form from "next/form";
+import { RotateCcw, Search, SearchX, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCategories, type CategoryRow } from "@/lib/categories";
 import {
@@ -19,12 +20,7 @@ import type { CartScope } from "@/lib/cart";
 import { CatalogNav, type CatalogNavItem } from "./catalog-nav";
 import { CartBar } from "./cart-bar";
 import { sectionDomId } from "./section-id";
-import {
-  CartStepper,
-  InCartBadge,
-  PackLine,
-  ProductCardShell,
-} from "./cart-controls";
+import { ProductCardShell } from "./cart-controls";
 
 /**
  * The store-facing catalog, shared by the store's own app (/catalog), a
@@ -145,9 +141,19 @@ export async function StoreCatalog({
   );
 
   if (productsRes.error) {
+    // The raw database message means nothing to a shop; log it, offer a retry.
+    console.error("[store-catalog] products failed:", productsRes.error.message);
     return (
-      <div className="px-4 py-16 text-center text-sm text-destructive">
-        Бараа ачаалж чадсангүй: {productsRes.error.message}
+      <div className="px-4 py-16 flex flex-col items-center text-center">
+        <p className="text-[15px] font-semibold">Бараа ачаалж чадсангүй</p>
+        <p className="mt-1 text-[13px] text-muted-foreground">Интернэт холболтоо шалгаад дахин оролдоно уу.</p>
+        <Link
+          href={term ? `${basePath}?q=${encodeURIComponent(term)}` : basePath}
+          className="mt-5 inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-4 text-[14px] font-semibold text-primary-foreground"
+        >
+          <RotateCcw className="h-4 w-4" />
+          Дахин оролдох
+        </Link>
       </div>
     );
   }
@@ -168,7 +174,7 @@ export async function StoreCatalog({
             </p>
             <Link
               href={basePath}
-              className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-card ring-1 ring-border text-[13px] font-semibold hover:bg-accent/60 transition-colors"
+              className="shrink-0 inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl bg-card ring-1 ring-border text-[13px] font-semibold hover:bg-accent/60 transition-colors"
             >
               <X className="h-4 w-4" /> Бүх бараа
             </Link>
@@ -252,7 +258,7 @@ export async function StoreCatalog({
                     <h2 id={`${sectionDomId(s.id)}-title`} className="font-display text-[16px] font-semibold leading-tight truncate">
                       {s.name}
                     </h2>
-                    <p className="text-[11.5px] text-muted-foreground leading-tight">
+                    <p className="text-[12px] text-muted-foreground leading-tight">
                       {s.usual ? "Таны өмнө захиалсан бараа" : `${s.items.length} бараа`}
                     </p>
                   </div>
@@ -309,16 +315,20 @@ async function loadUsualProductIds(storeId: string): Promise<string[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("orders")
-    .select("created_at, order_items(product_id)")
+    .select("created_at, order_items(product_id, unit_price)")
     .eq("supermarket_id", storeId)
     .neq("status", "cancelled")
     .order("created_at", { ascending: false })
     .limit(30);
   const stats = new Map<string, { n: number; rank: number }>();
   (data ?? []).forEach((o, rank) => {
-    const items = (o as { order_items: { product_id: string | null }[] | null }).order_items ?? [];
+    const items =
+      (o as { order_items: { product_id: string | null; unit_price: number | null }[] | null })
+        .order_items ?? [];
     const seen = new Set<string>();
     for (const it of items) {
+      // 0₮ lines are deal gifts — received, not bought.
+      if (!(Number(it.unit_price) > 0)) continue;
       if (!it.product_id || seen.has(it.product_id)) continue;
       seen.add(it.product_id);
       const s = stats.get(it.product_id);
@@ -383,8 +393,22 @@ function ProductCard({
 
   return (
     <ProductCardShell
-      productId={p.product_id}
+      product={{
+        product_id: p.product_id,
+        name: p.name,
+        brand: p.brand,
+        image_url: p.image_url,
+        // The list price, not the sale price: the cart re-applies
+        // discounts itself and itemises them.
+        unit_price: p.effective_price,
+        category_id: p.category_id,
+        category_icon: visual.key,
+      }}
+      boxCount={p.box_count}
       scope={ctx.cartScope}
+      // Stores can't order what's out of stock; a rep can (stock on the
+      // website isn't kept exact yet), so they only see the label.
+      disabled={outOfStock && ctx.mode !== "rep"}
       style={{ animationDelay: `${Math.min(index, 10) * 25}ms` }}
     >
       <Link
@@ -392,15 +416,17 @@ function ProductCard({
         className="flex flex-col flex-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-2xl"
       >
         <div className={`aspect-[4/3.4] relative overflow-hidden ${p.image_url ? "bg-muted/40" : visual.tone.wash}`}>
-          <InCartBadge productId={p.product_id} scope={ctx.cartScope} />
           {p.image_url ? (
             <Image
               src={p.image_url}
               alt={p.name}
               fill
               sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1280px) 25vw, 200px"
-              unoptimized
-              priority={priority}
+              // Resized thumbnails (WebP, q85): a ~170px card shouldn't pull
+              // the full upload over mobile data. The product page keeps
+              // the full-quality original.
+              quality={85}
+              preload={priority}
               loading={priority ? "eager" : "lazy"}
               className={`object-cover transition-transform duration-500 ease-out md:group-hover:scale-[1.04] ${outOfStock ? "grayscale opacity-60" : ""}`}
             />
@@ -409,19 +435,19 @@ function ProductCard({
           )}
           <div className="absolute left-2 top-2 flex flex-col items-start gap-1">
             {sale && (
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500 text-white shadow-sm">
+              <span className="px-1.5 py-0.5 rounded-md text-[12px] font-bold bg-emerald-600 text-white shadow-sm">
                 −{sale.pct}%
               </span>
             )}
             {specialPrice && (
-              <span className="px-1.5 py-0.5 rounded-full text-[9.5px] font-bold bg-white text-primary ring-1 ring-primary/25 dark:bg-card">
+              <span className="px-1.5 py-0.5 rounded-full text-[11px] font-bold bg-white text-primary ring-1 ring-primary/25 dark:bg-card">
                 Тусгай үнэ
               </span>
             )}
           </div>
           {outOfStock && (
             <div className="absolute inset-x-0 bottom-2 flex justify-center">
-              <span className="px-2.5 py-1 rounded-full bg-foreground/80 text-background text-[10.5px] font-bold backdrop-blur-sm">
+              <span className="px-2.5 py-1 rounded-full bg-foreground/80 text-background text-[12px] font-bold backdrop-blur-sm">
                 Дууссан
               </span>
             </div>
@@ -430,55 +456,34 @@ function ProductCard({
 
         <div className="px-3 pt-2.5 pb-2 flex flex-col flex-1 gap-1">
           {showCategory && category && (
-            <div className={`flex items-center gap-1 text-[10.5px] font-semibold ${visual.tone.text}`}>
+            <div className={`flex items-center gap-1 text-[11.5px] font-semibold ${visual.tone.text}`}>
               <CategoryIconTile visual={visual} size="xs" />
               <span className="truncate">{category.name}</span>
             </div>
           )}
           {p.brand && (
-            <div className="text-[10px] uppercase tracking-[0.08em] font-bold text-primary line-clamp-1">
+            <div className="text-[11px] uppercase tracking-[0.08em] font-bold text-primary line-clamp-1">
               {p.brand}
             </div>
           )}
-          <div className="text-[13px] font-semibold leading-snug line-clamp-2 min-h-[2.3rem]">{p.name}</div>
+          <div className="text-[13.5px] font-semibold leading-snug line-clamp-2 min-h-[2.4rem]">{p.name}</div>
           <div className="mt-auto flex items-baseline gap-1 flex-wrap">
             {sale ? (
               <>
-                <span className="font-display text-[15.5px] font-semibold tabular-nums tracking-tight text-emerald-700 dark:text-emerald-400">
+                <span className="font-display text-[16px] font-bold tabular-nums tracking-tight text-emerald-700 dark:text-emerald-400">
                   {formatMnt(sale.net)}
                 </span>
-                <span className="text-[11px] tabular-nums line-through text-muted-foreground/70">
+                <span className="text-[12px] tabular-nums line-through text-muted-foreground/70">
                   {formatMnt(p.effective_price)}
                 </span>
               </>
             ) : (
-              <span className="font-display text-[15.5px] font-semibold tabular-nums tracking-tight">{formatMnt(p.effective_price)}</span>
+              <span className="font-display text-[16px] font-bold tabular-nums tracking-tight">{formatMnt(p.effective_price)}</span>
             )}
-            <span className="text-[11px] text-muted-foreground">/{unit}</span>
+            <span className="text-[12px] text-muted-foreground">/{unit}</span>
           </div>
-          <PackLine productId={p.product_id} boxCount={p.box_count} scope={ctx.cartScope} />
         </div>
       </Link>
-      <div className="px-3 pb-3">
-        <CartStepper
-          product={{
-            product_id: p.product_id,
-            name: p.name,
-            brand: p.brand,
-            image_url: p.image_url,
-            // The list price, not the sale price: the cart re-applies
-            // discounts itself and itemises them.
-            unit_price: p.effective_price,
-            category_id: p.category_id,
-            category_icon: visual.key,
-          }}
-          boxCount={p.box_count}
-          scope={ctx.cartScope}
-          // Stores can't order what's out of stock; a rep can (stock on the
-          // website isn't kept exact yet), so they only see the label.
-          disabled={outOfStock && ctx.mode !== "rep"}
-        />
-      </div>
     </ProductCardShell>
   );
 }
@@ -493,12 +498,15 @@ function SearchForm({
   variant: "mobile" | "desktop";
 }) {
   const mobile = variant === "mobile";
+  // next/form: the search opens in-app (no full page reload over mobile
+  // data) and the results' loading skeleton is prefetched.
   return (
-    <form method="get" action={basePath} className="relative" role="search">
+    <Form action={basePath} className="relative" role="search">
       <Search
         className={`absolute top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none ${mobile ? "left-4 h-[18px] w-[18px]" : "left-3 h-4 w-4"}`}
       />
       <input
+        key={q}
         type="search"
         name="q"
         defaultValue={q}
@@ -512,7 +520,7 @@ function SearchForm({
             : "w-full h-10 rounded-xl bg-muted/60 border border-transparent pl-9 pr-3 text-sm placeholder:text-muted-foreground/80 focus:outline-none focus:bg-card focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
         }
       />
-    </form>
+    </Form>
   );
 }
 
@@ -523,7 +531,7 @@ function EmptyResults({ term, basePath }: { term: string; basePath: string }) {
         <SearchX className="h-7 w-7 text-muted-foreground" strokeWidth={1.6} />
       </div>
       <p className="text-base font-semibold">“{term}” олдсонгүй</p>
-      <p className="text-xs text-muted-foreground mt-1.5 max-w-xs">
+      <p className="text-[13px] text-muted-foreground mt-1.5 max-w-xs">
         Өөр үгээр хайж үзнэ үү, эсвэл ангиллаар нь харна уу.
       </p>
       <Link

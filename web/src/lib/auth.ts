@@ -75,13 +75,27 @@ export async function requireSession(): Promise<SessionContext> {
 export async function adminGuardError(): Promise<string | null> {
   const session = await getSession();
   if (!session) return "Нэвтэрнэ үү.";
-  if (session.profile.role !== "admin") {
-    return "Зөвхөн админ хийх боломжтой.";
+  if (!hasActiveRole(session.profile, "admin")) {
+    return "Зөвхөн идэвхтэй админ хийх боломжтой.";
   }
   return null;
 }
 
+/**
+ * In this role AND switched on. Every area (admin, rep, store) and every
+ * guard uses this — a user an admin set to "Идэвхгүй" must lose access at
+ * once, whatever their role.
+ */
+export function hasActiveRole(profile: Profile, role: UserRole): boolean {
+  return profile.active === true && profile.role === role;
+}
+
 export function homePathForRole(profile: Profile): string {
+  // A store user without a store is a sign-up waiting for approval —
+  // giving them a store is what approves (and switches on) the account.
+  // Checked before `active`, or every new sign-up would be told their
+  // account had been switched off.
+  if (profile.role === "buyer" && !profile.supermarket_id) return "/pending";
   if (!profile.active) return "/inactive";
   switch (profile.role) {
     case "admin":
@@ -89,113 +103,147 @@ export function homePathForRole(profile: Profile): string {
     case "rep":
       return "/rep";
     case "buyer":
-      return profile.supermarket_id ? "/catalog" : "/pending";
+      return "/catalog";
   }
 }
 
-/**
- * Public site URL used for verify.mn callback links and any external
- * absolute URLs. Falls back to localhost for dev. Set
- * NEXT_PUBLIC_SITE_URL in deployed environments.
+/* ============================================================
+ * Passwords
+ * ============================================================ */
+
+export const MIN_PASSWORD = 8;
+/** bcrypt (Supabase Auth) reads only 72 bytes; a Cyrillic letter is 2. */
+export const MAX_PASSWORD_BYTES = 72;
+
+/** Why a new password is refused, as an AUTH_MESSAGES code — or null if it's fine. */
+export function passwordErrorCode(
+  password: string,
+): "password-short" | "password-long" | null {
+  if (password.length < MIN_PASSWORD) return "password-short";
+  if (new TextEncoder().encode(password).length > MAX_PASSWORD_BYTES) {
+    return "password-long";
+  }
+  return null;
+}
+
+/* ============================================================
+ * Messages on the login / sign-up / reset pages
+ * ============================================================
+ * Those pages show a message from the URL (?error=… / ?success=…). Only
+ * these codes are ever rendered — never the raw query text, which would let
+ * anyone put their own words (a fake phone number to call…) on the real
+ * BDI login page via a link.
  */
-export function siteUrl(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+export const AUTH_MESSAGES = {
+  credentials: "Утас эсвэл нууц үг буруу байна.",
+  "phone-unconfirmed": "Утасны дугаараа баталгаажуулна уу.",
+  "rate-limit": "Хэт олон удаа оролдсон тул түр хүлээгээд дахин оролдоно уу.",
+  "weak-password": "Нууц үг шаардлага хангахгүй байна.",
+  "same-password": "Шинэ нууц үг өмнөхөөс өөр байх ёстой.",
+  "phone-taken": "Энэ утасны дугаар аль хэдийн ашиглагдаж байна.",
+  "register-failed": "Бүртгэл үүсгэхэд алдаа гарлаа. Дахин оролдоно уу.",
+  "phone-invalid": "Утасны дугаар буруу байна (жишээ нь: 99112233).",
+  "signup-disabled":
+    "Шинэ бүртгэл хүлээж аваагүй байна. BDI-н ажилтантай холбогдоно уу.",
+  "missing-credentials": "Бүх талбарыг бөглөнө үү.",
+  "name-required": "Овог нэрээ оруулна уу.",
+  "password-short": `Нууц үг хамгийн багадаа ${MIN_PASSWORD} тэмдэгт байх ёстой.`,
+  "password-long": "Нууц үг хэт урт байна.",
+  "password-mismatch": "Нууц үг таарахгүй байна.",
+  "sms-start-failed": "SMS баталгаажуулалт эхлүүлж чадсангүй. Дахин оролдоно уу.",
+  "too-many-sms":
+    "Хэт олон удаа оролдлоо. 30 минутын дараа дахин оролдоно уу.",
+  // Exact text VerifyMnPoller puts in the URL when a session runs out.
+  "session-expired": "Сессийн хугацаа дууссан. Дахин эхлүүлнэ үү.",
+  "draft-expired": "Хугацаа дууссан байна. Дахин эхлүүлнэ үү.",
+  "session-missing":
+    "Сесс олдсонгүй эсвэл аль хэдийн ашиглагдсан. Дахин эхлүүлнэ үү.",
+  "not-verified": "Утас баталгаажаагүй байна.",
+  "already-registered": "Энэ утас аль хэдийн бүртгэлтэй байна. Нэвтэрнэ үү.",
+  "no-account":
+    "Энэ дугаараар бүртгэл олдсонгүй. Шинээр бүртгүүлэх эсвэл BDI-тэй холбогдоно уу.",
+  "no-profile": "Бүртгэл олдсонгүй. BDI-тэй холбогдоно уу.",
+  generic: "Алдаа гарлаа. Дахин оролдоно уу.",
+  // ?success=…
+  "phone-verified":
+    "Утас баталгаажлаа. BDI-н ажилтан таны бүртгэлийг идэвхжүүлмэгц нэвтэрч орох боломжтой.",
+  "password-reset": "Нууц үг шинэчлэгдлээ. Шинэ нууц үгээрээ нэвтэрнэ үү.",
+} as const;
+
+export type AuthMessageCode = keyof typeof AUTH_MESSAGES;
+
+const KNOWN_TEXTS = new Set<string>(Object.values(AUTH_MESSAGES));
+
+/**
+ * The text for a ?error= / ?success= value, or null. Accepts a code, or
+ * one of our own texts verbatim (the shared verify poller sends the
+ * "session expired" text itself) — anything else shows nothing.
+ */
+export function authMessage(param: string | undefined): string | null {
+  if (!param) return null;
+  if (Object.hasOwn(AUTH_MESSAGES, param)) {
+    return AUTH_MESSAGES[param as AuthMessageCode];
+  }
+  return KNOWN_TEXTS.has(param) ? param : null;
 }
 
 /**
- * Localize Supabase auth errors to Mongolian + collapse enumeration vectors.
- *
- * - `context: "register"` deliberately maps "user already exists" to a
- *   generic message so attackers can't probe the registered-phone list.
- * - `context: "login"` keeps Supabase's already-generic "Invalid login
- *   credentials" (same message for wrong phone OR wrong password — already
- *   safe), but localizes it.
- * - Unknown errors fall through to a generic message rather than echoing
- *   raw Supabase strings into URL query params.
+ * A Supabase Auth error → message code. Unknown errors become "generic":
+ * raw Supabase text never reaches the user or the URL.
+ * `context: "register"` folds "already exists" into a generic failure so
+ * the form can't be used to probe which phones are registered.
  */
-type AuthErrorContext = "login" | "register" | "callback";
-
-export function mapAuthError(
-  error: { message?: string; code?: string } | string,
-  context: AuthErrorContext = "login",
-): string {
-  const msg = typeof error === "string" ? error : (error?.message ?? "");
-  const code = typeof error === "string" ? "" : (error?.code ?? "");
-  const key = `${code} ${msg}`.toLowerCase();
+export function authErrorCode(
+  error: { message?: string; code?: string } | null | undefined,
+  context: "login" | "register" = "login",
+): AuthMessageCode {
+  const key = `${error?.code ?? ""} ${error?.message ?? ""}`.toLowerCase();
 
   // Order matters — more specific patterns come first.
-  if (
-    key.includes("invalid login credentials") ||
-    key.includes("invalid_credentials")
-  ) {
-    return "Утас эсвэл нууц үг буруу байна.";
+  if (key.includes("invalid login credentials") || key.includes("invalid_credentials")) {
+    return "credentials";
   }
-  if (key.includes("phone not confirmed")) {
-    return "Утасны дугаараа баталгаажуулна уу.";
-  }
-  if (key.includes("rate limit") || key.includes("too many")) {
-    return "Хэт олон удаа оролдсон тул түр хүлээгээд дахин оролдоно уу.";
-  }
+  if (key.includes("phone not confirmed")) return "phone-unconfirmed";
+  if (key.includes("rate limit") || key.includes("too many")) return "rate-limit";
   if (
     key.includes("password should be at least") ||
     key.includes("password_too_short") ||
     key.includes("weak_password")
   ) {
-    return "Нууц үг шаардлага хангахгүй байна.";
+    return "weak-password";
   }
-  if (key.includes("new password should be different")) {
-    return "Шинэ нууц үг өмнөхөөс өөр байх ёстой.";
+  if (key.includes("new password should be different") || key.includes("same_password")) {
+    return "same-password";
   }
   if (
-    key.includes("user already registered") ||
-    key.includes("user_exists") ||
     key.includes("already registered") ||
+    key.includes("user_exists") ||
+    key.includes("phone_exists") ||
     key.includes("already in use") ||
     key.includes("duplicate key value") ||
-    key.includes("profiles_pkey") ||
     key.includes("unique_violation")
   ) {
-    // Register context: collapse to generic to prevent account enumeration.
-    // Other contexts shouldn't normally hit this branch.
-    if (context === "register") {
-      return "Бүртгэл үүсгэхэд алдаа гарлаа. Дахин оролдоно уу.";
-    }
-    return "Энэ утасны дугаар аль хэдийн ашиглагдаж байна.";
+    return context === "register" ? "register-failed" : "phone-taken";
   }
   if (
     key.includes("database error saving") ||
     key.includes("error saving new user") ||
     key.includes("unexpected_failure")
   ) {
-    // Trigger or RLS on profiles is rejecting the insert. Server logs have
-    // the real cause; the user sees a friendly message.
-    return "Бүртгэл үүсгэхэд алдаа гарлаа. Дахин оролдоно уу.";
+    // A trigger or rule on profiles refused the row; the server log has it.
+    return "register-failed";
   }
-  if (key.includes("phone") && key.includes("invalid")) {
-    return "Утасны дугаар буруу байна.";
-  }
+  if (key.includes("phone") && key.includes("invalid")) return "phone-invalid";
   if (key.includes("signups not allowed") || key.includes("signup_disabled")) {
-    return "Шинэ бүртгэл хүлээж аваагүй байна. BDI-н ажилтантай холбогдоно уу.";
+    return "signup-disabled";
   }
-  if (key === "missing-credentials" || key === "missing-fields") {
-    return "Бүх талбарыг бөглөнө үү.";
-  }
-  if (key === "missing-phone") {
-    return "Утасны дугаараа оруулна уу.";
-  }
-  if (key === "missing-password") {
-    return "Нууц үгээ оруулна уу.";
-  }
-  if (key === "passwords-dont-match") {
-    return "Нууц үг таарахгүй байна.";
-  }
-  if (key === "password-too-short") {
-    return "Нууц үг доод тал нь 8 тэмдэгт байна.";
-  }
-  if (key === "missing-code") {
-    return "Холбоос буруу эсвэл хугацаа дууссан байна.";
-  }
+  return "generic";
+}
 
-  // Fallback — never echo raw Supabase messages to the user.
-  return "Алдаа гарлаа. Дахин оролдоно уу.";
+/** Same mapping, as text — for screens that show the message directly. */
+export function mapAuthError(
+  error: { message?: string; code?: string } | null | undefined,
+  context: "login" | "register" = "login",
+): string {
+  return AUTH_MESSAGES[authErrorCode(error, context)];
 }

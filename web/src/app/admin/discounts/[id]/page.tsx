@@ -2,12 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { ConfirmSubmitButton } from "@/components/ui/confirm";
-import { DiscountForm } from "@/components/admin/discount-form";
+import { DiscountForm, type ProductOption } from "@/components/admin/discount-form";
+import { countPerPriceList } from "../../price-lists/counts";
 import { deleteDiscount, updateDiscount } from "../actions";
-
-// Mark as server file so the inline action below is recognized.
-// (page.tsx is a server component by default; no extra directive needed.)
 
 type Params = Promise<{ id: string }>;
 
@@ -18,13 +17,7 @@ export default async function EditDiscountPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const [
-    { data: discount },
-    { data: products },
-    { data: categories },
-    { data: priceListRows },
-    { data: storeListRows },
-  ] = await Promise.all([
+  const [{ data: discount }, products, { data: categories }, { data: priceListRows }] = await Promise.all([
     supabase
       .from("discounts")
       .select(
@@ -32,31 +25,22 @@ export default async function EditDiscountPage({
       )
       .eq("id", id)
       .single(),
-    supabase
-      .from("products")
-      .select("id, name, sku")
-      .eq("active", true)
-      .order("name")
-      .limit(10000),
+    fetchAll<ProductOption>(() =>
+      supabase.from("products").select("id, name, sku").eq("active", true).order("name").order("id"),
+    ),
     supabase.from("categories").select("id, name").order("sort_order"),
     supabase.from("price_lists").select("id, name").order("name"),
-    supabase
-      .from("supermarkets")
-      .select("price_list_id")
-      .not("price_list_id", "is", null),
   ]);
 
   if (!discount) notFound();
 
-  const countByList = new Map<string, number>();
-  for (const row of storeListRows ?? []) {
-    const plId = row.price_list_id as string;
-    countByList.set(plId, (countByList.get(plId) ?? 0) + 1);
-  }
-  const priceLists = (priceListRows ?? []).map((pl) => ({
-    id: pl.id as string,
-    name: pl.name as string,
-    storeCount: countByList.get(pl.id as string) ?? 0,
+  // Counted in the database — reading every store stopped at 1,000 rows.
+  const lists = (priceListRows ?? []) as { id: string; name: string }[];
+  const countByList = await countPerPriceList(supabase, "supermarkets", lists.map((l) => l.id));
+  const priceLists = lists.map((pl) => ({
+    id: pl.id,
+    name: pl.name,
+    storeCount: countByList.get(pl.id) ?? 0,
   }));
 
   const action = updateDiscount.bind(null, id);
@@ -83,7 +67,7 @@ export default async function EditDiscountPage({
 
       <DiscountForm
         defaults={discount}
-        products={products ?? []}
+        products={products}
         categories={categories ?? []}
         priceLists={priceLists}
         action={action}

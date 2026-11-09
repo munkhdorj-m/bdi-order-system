@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { findAuthUserIdByPhone } from "@/lib/supabase/auth-users";
 import { adminGuardError, getSession, mapAuthError } from "@/lib/auth";
 import { notify } from "@/lib/notify";
 import { normalizeMnPhone } from "@/lib/sms/verify-mn";
@@ -45,19 +47,47 @@ export async function updateUser(
   const supermarketRaw = parseString(formData.get("supermarket_id"));
   const supermarket_id = role === "buyer" ? supermarketRaw : null;
 
+  const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("profiles")
+    .select("role, supermarket_id, active")
+    .eq("id", id)
+    .maybeSingle();
+  if (!before) return { error: "Хэрэглэгч олдсонгүй." };
+
+  // A new sign-up waits as a store user without a store. Giving them a
+  // store IS the approval: switch them on and tell them, in one save.
+  const approving =
+    before.role === "buyer" && !before.supermarket_id && role === "buyer" && !!supermarket_id;
+  const isSelf = session.userId === id;
+
   const payload = {
     role,
     full_name: parseString(formData.get("full_name")),
     supermarket_id,
-    active: formData.get("active") === "on",
+    // You can't switch yourself off (the switch is locked for you anyway).
+    active: isSelf || approving || formData.get("active") === "on",
   };
 
-  const supabase = await createClient();
   const { error } = await supabase
     .from("profiles")
     .update(payload)
     .eq("id", id);
   if (error) return { error: error.message };
+
+  if (approving) {
+    // Tell them after the response — a slow push service mustn't hold up the save.
+    after(() =>
+      notify({
+        user_id: id,
+        kind: "user_approved",
+        title: "Таны бүртгэл баталгаажлаа",
+        body: "Та одоо каталог үзэж, захиалга өгөх боломжтой боллоо.",
+        href: "/catalog",
+      }),
+    );
+    revalidatePath("/admin");
+  }
 
   revalidatePath("/admin/users");
   revalidatePath(`/admin/users/${id}`);
@@ -65,76 +95,6 @@ export async function updateUser(
 }
 
 type Result = { ok?: boolean; error?: string };
-
-/**
- * Approve a pending user — flip their profiles.active to true so they can
- * sign in. New sign-ups land with active=false thanks to fix 17 so admins
- * gate every account before it gains catalog access.
- */
-export async function approveUser(userId: string): Promise<Result> {
-  if (!userId) return { error: "Хэрэглэгчийн ID байхгүй." };
-
-  const guardErr = await adminGuardError();
-  if (guardErr) return { error: guardErr };
-
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("profiles")
-    .update({ active: true })
-    .eq("id", userId)
-    .select("id, active");
-
-  if (error) return { error: error.message };
-  if (!data || data.length === 0) {
-    return { error: "Хэрэглэгч олдсонгүй." };
-  }
-
-  // Notify the user that they're now active. Fire-and-forget.
-  await notify({
-    user_id: userId,
-    kind: "user_approved",
-    title: "Таны бүртгэл баталгаажлаа",
-    body: "Та одоо нэвтрэн каталог үзэх боломжтой боллоо.",
-    href: "/catalog",
-  });
-
-  revalidatePath("/admin/users");
-  revalidatePath(`/admin/users/${userId}`);
-  revalidatePath("/admin");
-  return { ok: true };
-}
-
-/**
- * Revoke a user — sets active=false. Useful when admins need to suspend
- * an account without deleting it. Counterpart to approveUser.
- */
-export async function revokeUser(userId: string): Promise<Result> {
-  if (!userId) return { error: "Хэрэглэгчийн ID байхгүй." };
-
-  const guardErr = await adminGuardError();
-  if (guardErr) return { error: guardErr };
-
-  const session = await getSession();
-  if (session?.userId === userId) {
-    return { error: "Өөрийн эрхээ цуцалж болохгүй." };
-  }
-
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("profiles")
-    .update({ active: false })
-    .eq("id", userId)
-    .select("id, active");
-
-  if (error) return { error: error.message };
-  if (!data || data.length === 0) {
-    return { error: "Хэрэглэгч олдсонгүй." };
-  }
-
-  revalidatePath("/admin/users");
-  revalidatePath(`/admin/users/${userId}`);
-  return { ok: true };
-}
 
 /**
  * Hard-delete a user account. Removes from auth.users, which cascades
@@ -148,7 +108,7 @@ export async function revokeUser(userId: string): Promise<Result> {
  *   - target has placed orders (orders.placed_by FK has no ON DELETE,
  *     so the DB would reject the delete with a foreign-key violation —
  *     we catch it up-front with a friendly Mongolian message and steer
- *     admin toward `revokeUser` (suspend) instead).
+ *     the admin toward switching the account off instead).
  *
  * supermarkets.assigned_rep_id is `ON DELETE SET NULL` so deleting a
  * rep just unassigns them from their stores — no extra cleanup needed.
@@ -168,13 +128,15 @@ export async function deleteUser(userId: string): Promise<Result> {
 
   // Guard: if this user is currently the only active admin, refuse —
   // deleting them would leave the system with no one who can manage it.
+  // (An inactive admin doesn't count: removing one never lowers the
+  // number of active admins.)
   const { data: target } = await admin
     .from("profiles")
-    .select("role, full_name, phone")
+    .select("role, full_name, phone, active")
     .eq("id", userId)
     .single();
   if (!target) return { error: "Хэрэглэгч олдсонгүй." };
-  if (target.role === "admin") {
+  if (target.role === "admin" && target.active) {
     const { count: adminCount } = await admin
       .from("profiles")
       .select("*", { count: "exact", head: true })
@@ -328,16 +290,16 @@ export async function createUserAccount(
         "Энэ утасны дугаар аль хэдийн бүртгэлтэй байна. Өөр дугаар сонгоно уу.",
     };
   }
-  // Belt-and-suspenders: scan auth.users via listUsers. Catches the
-  // case where auth.users has the row but no profile (orphan).
-  const { data: list } = await admin.auth.admin.listUsers({
-    page: 1,
-    perPage: 1000,
-  });
-  const phoneSet = new Set(phoneCandidates);
-  const dupAuth = list?.users.find(
-    (u) => u.phone && phoneSet.has(u.phone),
-  );
+  // Belt-and-suspenders: look in auth.users too (every page — reading only
+  // the first 1,000 missed later accounts). Catches the case where
+  // auth.users has the row but no profile (orphan).
+  let dupAuth: string | null;
+  try {
+    dupAuth = await findAuthUserIdByPhone(admin, normalizedPhone);
+  } catch (e) {
+    console.error("[admin/users/create] auth lookup failed:", e);
+    return { error: "Алдаа гарлаа. Дахин оролдоно уу." };
+  }
   if (dupAuth) {
     return {
       error:

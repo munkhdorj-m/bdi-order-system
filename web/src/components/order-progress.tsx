@@ -1,5 +1,6 @@
 import { Check, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDayMonthTime } from "@/lib/datetime";
 import {
   STATUS_ICON,
   STATUS_LABELS,
@@ -15,15 +16,9 @@ type Props = {
   timestamps?: Partial<Record<OrderStatus, string | null>>;
 };
 
+// "11.08 13:05" (Intl's mn-MN would print "XI/08 13:05").
 function formatDateTime(iso: string | null | undefined) {
-  if (!iso) return null;
-  return new Date(iso).toLocaleString("mn-MN", {
-    timeZone: "Asia/Ulaanbaatar",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return iso ? formatDayMonthTime(iso) : null;
 }
 
 export function OrderProgress({ status, timestamps = {} }: Props) {

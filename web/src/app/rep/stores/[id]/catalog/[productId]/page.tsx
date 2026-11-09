@@ -19,6 +19,7 @@ type PriceRow = {
   effective_price: number;
   unit: string | null;
   box_count: number | null;
+  stock: number | null;
   description: string | null;
 };
 
@@ -30,26 +31,24 @@ export default async function RepProductDetailPage({
   const { id, productId } = await params;
   const supabase = await createClient();
 
-  const [{ data: store }, { data: priced }, { data: extras }, categories] =
+  const [{ data: store }, { data: priced }, categories] =
     await Promise.all([
-      supabase.from("supermarkets").select("name").eq("id", id).single(),
+      supabase.from("supermarkets").select("name").eq("id", id).maybeSingle(),
+      // The view carries the description too — no second products query.
       supabase
         .from("supermarket_prices")
         .select(
-          "product_id, sku, name, brand, image_url, category_id, effective_price, unit, box_count",
+          "product_id, sku, name, brand, image_url, category_id, effective_price, unit, box_count, stock, description",
         )
         .eq("supermarket_id", id)
         .eq("product_id", productId)
-        .single(),
-      supabase.from("products").select("description").eq("id", productId).single(),
+        .maybeSingle(),
       getCategories(),
     ]);
 
   if (!store || !priced) notFound();
-  const p = {
-    ...(priced as PriceRow),
-    description: extras?.description ?? null,
-  };
+  const p = priced as PriceRow;
+  const outOfStock = (Number(p.stock) || 0) <= 0;
   const category = categories.find((c) => c.id === p.category_id) ?? null;
   const visual = categoryVisual(category);
 
@@ -73,7 +72,7 @@ export default async function RepProductDetailPage({
               sizes="(max-width: 768px) 100vw, 768px"
               quality={95}
               className="object-cover"
-              priority
+              preload
             />
           ) : (
             <div className={`absolute inset-0 flex items-center justify-center ${visual.tone.wash}`}>
@@ -87,7 +86,7 @@ export default async function RepProductDetailPage({
         <div className="px-4 py-5 space-y-4">
           <div>
             {category && (
-              <div className={`mb-2 inline-flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2.5 text-[11.5px] font-semibold ring-1 ring-border ${visual.tone.text}`}>
+              <div className={`mb-2 inline-flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2.5 text-[12.5px] font-semibold ring-1 ring-border ${visual.tone.text}`}>
                 <CategoryIconTile visual={visual} size="xs" />
                 {category.name}
               </div>
@@ -112,11 +111,16 @@ export default async function RepProductDetailPage({
             )}
           </div>
 
-          {p.box_count && (
-            <div className="text-sm text-muted-foreground">
-              Хайрцагт {p.box_count} ширхэг
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            {/* A rep may still order it (website stock isn't exact yet),
+                but should know before promising the shop. */}
+            {outOfStock && (
+              <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-[13px] font-bold text-rose-800 dark:bg-rose-950/50 dark:text-rose-300">
+                Үлдэгдэлгүй
+              </span>
+            )}
+            {p.box_count ? <span>Хайрцагт {p.box_count} ширхэг</span> : null}
+          </div>
 
           <AddToCartForm
             scope={{ storeId: id }}

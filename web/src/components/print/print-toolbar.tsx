@@ -36,7 +36,7 @@ export function PrintToolbar({
         <button
           type="button"
           onClick={() => window.print()}
-          className="inline-flex items-center gap-1.5 rounded-md bg-indigo-700 px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-indigo-800"
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[13px] font-semibold text-white hover:brightness-110"
         >
           <Printer className="h-4 w-4" />
           Хэвлэх

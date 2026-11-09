@@ -26,7 +26,8 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/",
     scope: "/",
     display: "standalone",
-    orientation: "portrait",
+    // No orientation lock: admins use the installed app on tablets and
+    // desktops in landscape (dispatch board, order tables).
     // Brand blue (BRAND.blue in lib/brand.ts): the splash screen and the
     // icon's edges are the same colour, and the status bar matches the
     // app's blue top bar.

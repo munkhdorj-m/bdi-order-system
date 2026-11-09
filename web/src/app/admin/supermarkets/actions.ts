@@ -30,6 +30,11 @@ function buildPayload(formData: FormData) {
     }
     delivery_day = n;
   }
+  // Tax ids for e-Barimt: no spaces, Cyrillic letters upper-case ("УБ12345678").
+  const taxId = (key: string) => {
+    const v = parseString(formData.get(key));
+    return v ? v.replace(/\s+/g, "").toUpperCase() : null;
+  };
   return {
     payload: {
       name,
@@ -42,8 +47,20 @@ function buildPayload(formData: FormData) {
       delivery_day,
       notes: parseString(formData.get("notes")),
       active: formData.get("active") === "on",
+      registry_number: taxId("registry_number"),
+      ebarimt_tin: taxId("ebarimt_tin"),
+      ebarimt_name: parseString(formData.get("ebarimt_name")),
+      external_id: parseString(formData.get("external_id")),
     },
   };
+}
+
+/** Friendlier text for the unique Mercury code. */
+function saveError(message: string): string {
+  if (/external_id/i.test(message) && /duplicate|unique/i.test(message)) {
+    return "Ийм Mercury код өөр дэлгүүрт бүртгэлтэй байна.";
+  }
+  return message;
 }
 
 export async function createSupermarket(
@@ -58,7 +75,7 @@ export async function createSupermarket(
 
   const supabase = await createClient();
   const { error } = await supabase.from("supermarkets").insert(built.payload);
-  if (error) return { error: error.message };
+  if (error) return { error: saveError(error.message) };
 
   revalidatePath("/admin/supermarkets");
   redirect("/admin/supermarkets");
@@ -76,11 +93,30 @@ export async function updateSupermarket(
   if ("error" in built) return { error: built.error };
 
   const supabase = await createClient();
+  const payload = { ...built.payload };
+  // The e-Barimt agent looks the ТТД up from the РД once and keeps it. If
+  // the РД changes and the ТТД wasn't edited too, clear it (and the name
+  // it came with) so the agent looks it up again instead of billing the
+  // old company.
+  const { data: before } = await supabase
+    .from("supermarkets")
+    .select("registry_number, ebarimt_tin")
+    .eq("id", id)
+    .maybeSingle();
+  if (
+    before &&
+    (before.registry_number ?? null) !== payload.registry_number &&
+    (before.ebarimt_tin ?? null) === payload.ebarimt_tin
+  ) {
+    payload.ebarimt_tin = null;
+    payload.ebarimt_name = null;
+  }
+
   const { error } = await supabase
     .from("supermarkets")
-    .update(built.payload)
+    .update(payload)
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: saveError(error.message) };
 
   revalidatePath("/admin/supermarkets");
   revalidatePath(`/admin/supermarkets/${id}`);

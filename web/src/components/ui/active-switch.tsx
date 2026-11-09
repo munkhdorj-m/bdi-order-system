@@ -44,6 +44,13 @@ export function ActiveSwitch({
   disabledHint?: string;
 }) {
   const [active, setActive] = useState<boolean>(defaultChecked);
+  // When the page refreshes with a new saved value (switched off elsewhere),
+  // show that — otherwise saving the open form would quietly undo it.
+  const [savedValue, setSavedValue] = useState(defaultChecked);
+  if (savedValue !== defaultChecked) {
+    setSavedValue(defaultChecked);
+    setActive(defaultChecked);
+  }
 
   return (
     <div

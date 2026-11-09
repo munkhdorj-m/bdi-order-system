@@ -172,13 +172,14 @@ function CategoryRow({
 
   return (
     <li className={cn("flex flex-wrap items-center gap-3 px-3 py-3 sm:flex-nowrap", pending && "opacity-60")}>
-      <div className="flex flex-col">
+      {/* 40px tap targets on phones, compact on a desktop. */}
+      <div className="flex sm:flex-col">
         <button
           type="button"
           onClick={() => run(() => moveCategory(c.id, "up"))}
           disabled={pending || index === 0}
           aria-label={`${c.name} — дээш`}
-          className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
+          className="flex size-10 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 sm:size-7"
         >
           <ArrowUp className="h-4 w-4" />
         </button>
@@ -187,7 +188,7 @@ function CategoryRow({
           onClick={() => run(() => moveCategory(c.id, "down"))}
           disabled={pending || index === total - 1}
           aria-label={`${c.name} — доош`}
-          className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
+          className="flex size-10 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 sm:size-7"
         >
           <ArrowDown className="h-4 w-4" />
         </button>

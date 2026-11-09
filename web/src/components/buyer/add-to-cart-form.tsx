@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Minus, Package, Plus, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
-import { addToCart, useCart, type CartItem, type CartScope } from "@/lib/cart";
+import { addToCart, useCartQty, type CartItem, type CartScope } from "@/lib/cart";
 import { formatMnt } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -55,7 +55,7 @@ export function AddToCartForm({
   }
   const router = useRouter();
   // Already in the cart? Say so, so nobody adds it twice by accident.
-  const inCart = useCart(scope).find((i) => i.product_id === product.product_id)?.qty ?? 0;
+  const inCart = useCartQty(product.product_id, scope);
 
   const piecesPerUnit = unit === "box" ? piecesPerBox : 1;
   const totalPieces = qtyInUnit * piecesPerUnit;
@@ -142,7 +142,7 @@ export function AddToCartForm({
             onClick={() => switchUnit("piece")}
             aria-pressed={unit === "piece"}
             className={cn(
-              "relative z-10 flex-1 py-1.5 rounded-full text-[12px] font-semibold transition-colors",
+              "relative z-10 flex-1 h-10 rounded-full text-[13px] font-semibold transition-colors",
               unit === "piece" ? "text-foreground" : "text-muted-foreground",
             )}
           >
@@ -153,13 +153,13 @@ export function AddToCartForm({
             onClick={() => switchUnit("box")}
             aria-pressed={unit === "box"}
             className={cn(
-              "relative z-10 flex-1 py-1.5 rounded-full text-[12px] font-semibold transition-colors flex items-center justify-center gap-1.5",
+              "relative z-10 flex-1 h-10 rounded-full text-[13px] font-semibold transition-colors flex items-center justify-center gap-1.5",
               unit === "box" ? "text-foreground" : "text-muted-foreground",
             )}
           >
             <Package className="h-3.5 w-3.5" />
             Хайрцаг
-            <span className="text-[10.5px] font-normal text-muted-foreground">
+            <span className="text-[12px] font-normal text-muted-foreground">
               · {piecesPerBox}ш
             </span>
           </button>

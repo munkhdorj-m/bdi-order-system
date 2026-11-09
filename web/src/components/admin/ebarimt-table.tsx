@@ -3,12 +3,19 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, RotateCcw, Send, Undo2, X } from "lucide-react";
+import { Loader2, RefreshCw, RotateCcw, Send, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm";
 import { cancelRequest, queueReceipts, requestReturn, type QueueResult } from "@/app/admin/ebarimt/actions";
-import { EBARIMT_STATUS_COLOR, EBARIMT_STATUS_LABELS, LIVE_STATUSES, type EbarimtStatus } from "@/lib/ebarimt";
+import {
+  EBARIMT_QUEUE_BATCH,
+  EBARIMT_STATUS_COLOR,
+  EBARIMT_STATUS_LABELS,
+  LIVE_STATUSES,
+  type EbarimtStatus,
+} from "@/lib/ebarimt";
 import { formatDateTimeUb } from "@/lib/dispatch";
 import { formatMnt } from "@/lib/format";
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/payment-method";
@@ -38,32 +45,90 @@ export type EbarimtRow = {
 
 const IN_PROGRESS: EbarimtStatus[] = ["queued", "sending", "return_queued", "returning"];
 
-export function EbarimtTable({ rows, sentTotal }: { rows: EbarimtRow[]; sentTotal: number }) {
+/** First refresh after this; doubles each time up to MAX_POLL_MS. */
+const FIRST_POLL_MS = 4000;
+const MAX_POLL_MS = 60000;
+
+type Pending = { ids: string[]; amount: number; label: string } | null;
+
+export function EbarimtTable({
+  rows,
+  sentTotal,
+  agentOnline,
+}: {
+  rows: EbarimtRow[];
+  sentTotal: number;
+  /** The e-Barimt computer reported in recently — only then poll quickly. */
+  agentOnline: boolean;
+}) {
   const router = useRouter();
   const [busy, start] = useTransition();
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [confirmReturn, setConfirmReturn] = useState<string | null>(null);
+  const [confirmSend, setConfirmSend] = useState<Pending>(null);
+  const [progress, setProgress] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<QueueResult | null>(null);
 
   const sendable = rows.filter((r) => !r.receipt || !LIVE_STATUSES.includes(r.receipt.status));
+  // "Send all" leaves out receipts someone deliberately took back
+  // (Буцаасан) — those go again only when picked one by one.
+  const sendAll = sendable.filter((r) => r.receipt?.status !== "returned");
   const pickedSendable = sendable.filter((r) => picked.has(r.orderId));
-  const working = rows.some((r) => r.receipt && IN_PROGRESS.includes(r.receipt.status));
+  // What the agent still has to do; a change restarts the quick polling.
+  const workingKey = rows
+    .filter((r) => r.receipt && IN_PROGRESS.includes(r.receipt.status))
+    .map((r) => `${r.receipt!.id}:${r.receipt!.status}`)
+    .join("|");
+  const working = workingKey !== "";
 
-  // While the agent has work in hand, keep the page fresh.
+  // While the agent has work in hand, refresh — quickly at first, then less
+  // often, never while the tab is hidden, and only every minute when the
+  // agent computer is offline (nothing will change until it's back).
   useEffect(() => {
-    if (!working) return;
-    const t = setInterval(() => router.refresh(), 4000);
-    return () => clearInterval(t);
-  }, [working, router]);
+    if (!workingKey) return;
+    let delay = agentOnline ? FIRST_POLL_MS : MAX_POLL_MS;
+    let timer = 0;
+    const tick = () => {
+      if (document.visibilityState === "visible") router.refresh();
+      delay = Math.min(delay * 2, MAX_POLL_MS);
+      timer = window.setTimeout(tick, delay);
+    };
+    timer = window.setTimeout(tick, delay);
+    return () => window.clearTimeout(timer);
+  }, [workingKey, agentOnline, router]);
 
+  function askSend(list: EbarimtRow[], label: string) {
+    if (list.length === 0) return toast.error("Илгээх захиалга сонгоно уу.");
+    setConfirmSend({ ids: list.map((r) => r.orderId), amount: list.reduce((s, r) => s + r.amount, 0), label });
+  }
+
+  /** Queue in batches the server accepts, adding up what came back. */
   function send(orderIds: string[]) {
     if (orderIds.length === 0) return toast.error("Илгээх захиалга сонгоно уу.");
     start(async () => {
-      const r = await queueReceipts(orderIds);
-      setLastResult(r);
-      if (r.error) toast.error(r.error);
-      if (r.queued > 0) toast.success(`${r.queued} баримт дараалалд орлоо`);
-      if (r.skipped.length > 0) toast.warning(`${r.skipped.length} захиалга алгаслаа — доор шалтгааныг харна уу`);
+      const total: QueueResult = { queued: 0, skipped: [], warnings: [] };
+      const errors: string[] = [];
+      for (let i = 0; i < orderIds.length; i += EBARIMT_QUEUE_BATCH) {
+        if (orderIds.length > EBARIMT_QUEUE_BATCH) {
+          setProgress(`${Math.min(i + EBARIMT_QUEUE_BATCH, orderIds.length)} / ${orderIds.length}`);
+        }
+        const r = await queueReceipts(orderIds.slice(i, i + EBARIMT_QUEUE_BATCH));
+        total.queued += r.queued;
+        total.skipped.push(...r.skipped);
+        total.warnings.push(...r.warnings);
+        if (r.error) {
+          errors.push(r.error);
+          const left = orderIds.length - i - EBARIMT_QUEUE_BATCH;
+          if (left > 0) total.skipped.push({ order: `${left} захиалга`, reason: "Алдааны улмаас илгээгдээгүй." });
+          break;
+        }
+      }
+      setProgress(null);
+      setConfirmSend(null);
+      setLastResult(total);
+      if (errors.length > 0) toast.error(errors[0]);
+      if (total.queued > 0) toast.success(`${total.queued} баримт дараалалд орлоо`);
+      if (total.skipped.length > 0) toast.warning(`${total.skipped.length} захиалга алгаслаа — доор шалтгааныг харна уу`);
       setPicked(new Set());
       router.refresh();
     });
@@ -86,17 +151,32 @@ export function EbarimtTable({ rows, sentTotal }: { rows: EbarimtRow[]; sentTota
           {rows.length} захиалга · илгээсэн дүн <b className="text-foreground">{formatMnt(sentTotal)}</b>
           {working && (
             <span className="ml-2 inline-flex items-center gap-1 text-sky-700 dark:text-sky-300">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> илгээгдэхийг хүлээж байна
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              {agentOnline ? "илгээгдэхийг хүлээж байна" : "компьютер офлайн — дараалалд хүлээж байна"}
             </span>
           )}
+          {progress && <span className="ml-2 font-semibold text-foreground">Илгээж байна {progress}…</span>}
         </div>
         <div className="ml-auto flex flex-wrap gap-2">
+          {working && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => router.refresh()}
+              title="Төлөвийг шинэчлэх"
+              aria-label="Төлөвийг шинэчлэх"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          )}
           <Button
             type="button"
             size="sm"
             variant="outline"
             disabled={busy || pickedSendable.length === 0}
-            onClick={() => send(pickedSendable.map((r) => r.orderId))}
+            onClick={() => askSend(pickedSendable, "Сонгосон")}
           >
             <Send className="h-4 w-4" />
             Сонгосныг илгээх ({pickedSendable.length})
@@ -104,14 +184,33 @@ export function EbarimtTable({ rows, sentTotal }: { rows: EbarimtRow[]; sentTota
           <Button
             type="button"
             size="sm"
-            disabled={busy || sendable.length === 0}
-            onClick={() => send(sendable.map((r) => r.orderId))}
+            disabled={busy || sendAll.length === 0}
+            onClick={() => askSend(sendAll, "Илгээгээгүй бүх")}
+            title="Буцаасан баримтыг оруулахгүй"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Илгээгээгүй бүгдийг ({sendable.length})
+            Илгээгээгүй бүгдийг ({sendAll.length})
           </Button>
         </div>
       </Card>
+
+      <ConfirmDialog
+        open={confirmSend !== null}
+        onOpenChange={(o) => {
+          if (!o && !busy) setConfirmSend(null);
+        }}
+        title={`${confirmSend?.label ?? ""} ${confirmSend?.ids.length ?? 0} захиалгын е-баримт илгээх үү?`}
+        description={
+          <>
+            Нийт {formatMnt(confirmSend?.amount ?? 0)}. Баримт татварын системд бүртгэгдэнэ — буцаахдаа нэг бүрчлэн
+            «Буцаах» дарна.
+            {progress && <span className="mt-1 block font-semibold">Илгээж байна {progress}…</span>}
+          </>
+        }
+        confirmLabel="Илгээх"
+        pending={busy}
+        onConfirm={() => confirmSend && send(confirmSend.ids)}
+      />
 
       {lastResult && (lastResult.skipped.length > 0 || lastResult.warnings.length > 0) && (
         <Card className="space-y-1 p-3 text-[12.5px]">
@@ -140,14 +239,16 @@ export function EbarimtTable({ rows, sentTotal }: { rows: EbarimtRow[]; sentTota
           <table className="w-full text-[12.5px]">
             <thead className="bg-muted/50 text-muted-foreground">
               <tr>
-                <th className="w-8 px-3 py-2">
-                  <input
-                    type="checkbox"
-                    className="size-4 accent-[var(--primary)]"
-                    checked={sendable.length > 0 && pickedSendable.length === sendable.length}
-                    onChange={(e) => setPicked(e.target.checked ? new Set(sendable.map((r) => r.orderId)) : new Set())}
-                    aria-label="Бүгдийг сонгох"
-                  />
+                <th className="w-12 px-1 py-1">
+                  <label className="flex size-10 cursor-pointer items-center justify-center">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-[var(--primary)]"
+                      checked={sendable.length > 0 && pickedSendable.length === sendable.length}
+                      onChange={(e) => setPicked(e.target.checked ? new Set(sendable.map((r) => r.orderId)) : new Set())}
+                      aria-label="Бүгдийг сонгох"
+                    />
+                  </label>
                 </th>
                 <th className="px-2 py-2 text-left font-medium">Захиалга</th>
                 <th className="px-2 py-2 text-left font-medium">Худалдан авагч</th>
@@ -164,22 +265,24 @@ export function EbarimtTable({ rows, sentTotal }: { rows: EbarimtRow[]; sentTota
                 const canSend = !r.receipt || !LIVE_STATUSES.includes(r.receipt.status);
                 return (
                   <tr key={r.orderId} className="align-top">
-                    <td className="px-3 py-2">
+                    <td className="px-1 py-0.5">
                       {canSend && (
-                        <input
-                          type="checkbox"
-                          className="size-4 accent-[var(--primary)]"
-                          checked={picked.has(r.orderId)}
-                          onChange={(e) =>
-                            setPicked((prev) => {
-                              const next = new Set(prev);
-                              if (e.target.checked) next.add(r.orderId);
-                              else next.delete(r.orderId);
-                              return next;
-                            })
-                          }
-                          aria-label={`${r.orderNumber} сонгох`}
-                        />
+                        <label className="flex size-10 cursor-pointer items-center justify-center">
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-[var(--primary)]"
+                            checked={picked.has(r.orderId)}
+                            onChange={(e) =>
+                              setPicked((prev) => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(r.orderId);
+                                else next.delete(r.orderId);
+                                return next;
+                              })
+                            }
+                            aria-label={`${r.orderNumber} сонгох`}
+                          />
+                        </label>
                       )}
                     </td>
                     <td className="px-2 py-2">

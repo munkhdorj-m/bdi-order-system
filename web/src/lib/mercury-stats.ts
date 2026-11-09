@@ -1,5 +1,5 @@
 import "server-only";
-import { getSession } from "@/lib/auth";
+import { getSession, hasActiveRole } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MERCURY_ENTITIES } from "@/lib/mercury";
 
@@ -35,7 +35,7 @@ type Db = ReturnType<typeof createAdminClient>;
 
 async function requireAdmin(): Promise<void> {
   const session = await getSession();
-  if (session?.profile.role !== "admin") {
+  if (!session || !hasActiveRole(session.profile, "admin")) {
     throw new Error("Зөвхөн админ харах боломжтой.");
   }
 }

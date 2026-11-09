@@ -203,7 +203,7 @@ export function CatalogNav({
                     <CategoryIconTile visual={visualOf(it)} size="lg" active={isActive} />
                     <Count n={it.count} />
                   </span>
-                  <span className={cn("line-clamp-2 text-[11px] leading-[1.15]", isActive ? "font-bold" : "font-medium text-foreground/85")}>
+                  <span className={cn("line-clamp-2 text-[12px] leading-[1.15]", isActive ? "font-bold" : "font-medium text-foreground/85")}>
                     {it.name}
                   </span>
                 </button>
@@ -249,7 +249,7 @@ export function CatalogNav({
 
 function Count({ n }: { n: number }) {
   return (
-    <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-background ring-1 ring-border text-[9.5px] font-bold tabular-nums text-muted-foreground flex items-center justify-center">
+    <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-background ring-1 ring-border text-[10.5px] font-bold tabular-nums text-muted-foreground flex items-center justify-center">
       {n}
     </span>
   );
@@ -293,7 +293,7 @@ function RailButton({
       </span>
       <span
         className={cn(
-          "text-[10.5px] leading-[1.15] text-center line-clamp-2 transition-colors",
+          "text-[11.5px] leading-[1.15] text-center line-clamp-2 transition-colors",
           active ? "text-foreground font-bold" : "text-muted-foreground font-medium",
         )}
       >
