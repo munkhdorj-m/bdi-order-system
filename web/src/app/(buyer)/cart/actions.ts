@@ -12,7 +12,7 @@ import {
 import { isBuyerPaymentMethod, type PaymentMethod } from "@/lib/payment-method";
 import { formatMnt } from "@/lib/format";
 import { listAdminIds, notifyMany } from "@/lib/notify";
-import { writeOrder, type NewOrderItem } from "@/lib/orders/write";
+import { duplicateInfo, writeOrder, type DuplicateOrder, type NewOrderItem } from "@/lib/orders/write";
 
 export type PlaceOrderInput = {
   items: { product_id: string; qty: number }[];
@@ -36,6 +36,8 @@ export type PlaceOrderResult = {
   error?: string;
   /** Every line that blocked the order (not just the first). */
   problems?: CartProblem[];
+  /** Set when this checkout id already had an order: nothing new was written. */
+  duplicate?: DuplicateOrder;
 };
 
 export async function placeOrder(
@@ -215,7 +217,7 @@ export async function placeOrder(
   revalidatePath("/admin/orders");
   revalidatePath("/admin");
   if (written.duplicate) {
-    return { orderId: orderRow.id, orderNumber: orderRow.order_number };
+    return { orderId: orderRow.id, orderNumber: orderRow.order_number, duplicate: duplicateInfo(written) };
   }
 
   // Look up the store name for the in-app admin notification (best-effort).

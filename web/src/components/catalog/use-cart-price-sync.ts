@@ -15,7 +15,9 @@ export function useCartPriceSync(
 ) {
   const { storeId, owner } = scope;
   useEffect(() => {
-    if (!catalog) return;
+    // No catalog, or an empty one, means it couldn't be loaded — a store
+    // with nothing for sale isn't a thing. Don't empty the cart over it.
+    if (!catalog || Object.keys(catalog).length === 0) return;
     const s: CartScope = { storeId, owner };
     // A store's cart from before carts were kept per shop.
     if (owner === "buyer") adoptLegacyCart(s);

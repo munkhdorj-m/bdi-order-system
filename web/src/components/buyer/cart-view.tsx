@@ -35,7 +35,9 @@ import {
 } from "@/lib/cart";
 import { placeOrder, type PlaceOrderResult } from "@/app/(buyer)/cart/actions";
 import { useCartPriceSync } from "@/components/catalog/use-cart-price-sync";
-import { useCheckoutId } from "@/lib/checkout-id";
+import { RESEND_WINDOW_MS, useCheckoutId } from "@/lib/checkout-id";
+import { formatDayMonthTime } from "@/lib/datetime";
+import { ConfirmDialog } from "@/components/ui/confirm";
 import { useMounted } from "@/lib/use-mounted";
 import { ProductPlaceholder, categoryVisual } from "@/lib/category-visual";
 import { Button } from "@/components/ui/button";
@@ -80,6 +82,8 @@ export function CartView({
   const [snapshot, setSnapshot] = useState<CartItem[] | null>(null);
   // Lines the server refused because they're sold out right now.
   const [soldOutIds, setSoldOutIds] = useState<string[]>([]);
+  // An identical order sent a while ago: ask before calling this one "sent".
+  const [earlier, setEarlier] = useState<{ orderNumber: string; createdAt: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const checkoutId = useCheckoutId(scope);
   const router = useRouter();
@@ -137,21 +141,39 @@ export function CartView({
     toast.success(`${blockedIds.length} дууссан бараа хасагдлаа`);
   }
 
-  function handleSubmit() {
+  /** `asNew`: the store confirmed this is a new order, not a re-send. */
+  function handleSubmit(asNew = false) {
     if (blockedIds.length > 0) return;
     setError(null);
+    setEarlier(null);
     setSnapshot([...liveCart]);
     const items = liveCart.map((i) => ({ product_id: i.product_id, qty: i.qty }));
     const note = notes.trim() || null;
     // Same cart re-sent → same id → the server won't make a second order.
-    const requestId = checkoutId(JSON.stringify([items, note, paymentMethod]));
+    const signature = JSON.stringify([items, note, paymentMethod]);
     startTransition(async () => {
-      let result: PlaceOrderResult;
-      try {
-        result = await placeOrder({ items, notes: note, payment_method: paymentMethod, requestId });
-      } catch {
-        // Dropped connection. Re-sending is safe: it can't make a second order.
-        result = { error: "Холболт тасарлаа. Дахин илгээнэ үү — захиалга давхардахгүй." };
+      const send = async (fresh: boolean): Promise<PlaceOrderResult> => {
+        try {
+          return await placeOrder({
+            items,
+            notes: note,
+            payment_method: paymentMethod,
+            requestId: checkoutId(signature, { fresh }),
+          });
+        } catch {
+          // Dropped connection. Re-sending is safe: it can't make a second order.
+          return { error: "Холболт тасарлаа. Дахин илгээнэ үү — захиалга давхардахгүй." };
+        }
+      };
+      let result = await send(asNew);
+      // The matching earlier order was cancelled since: this is a new order.
+      if (!result.error && result.duplicate?.status === "cancelled") result = await send(true);
+      if (!result.error && result.duplicate && result.duplicate.ageMs > RESEND_WINDOW_MS) {
+        // The same cart as an order from a while ago — a repeat order, or a
+        // slip? Nothing new was written; let the store decide.
+        setEarlier({ orderNumber: result.orderNumber ?? "", createdAt: result.duplicate.createdAt });
+        setSnapshot(null);
+        return;
       }
       if (result.error) {
         if (result.problems?.length) {
@@ -523,7 +545,7 @@ export function CartView({
             type="button"
             variant="gold"
             size="lg"
-            onClick={handleSubmit}
+            onClick={() => handleSubmit()}
             disabled={pending || cart.length === 0 || blockedIds.length > 0}
             aria-busy={pending}
             className="w-full rounded-2xl"
@@ -544,6 +566,21 @@ export function CartView({
           </Button>
         </div>
       </div>
+      <ConfirmDialog
+        open={earlier !== null}
+        onOpenChange={(open) => {
+          if (!open) setEarlier(null);
+        }}
+        title="Ижил захиалга өмнө нь илгээгдсэн байна"
+        description={
+          earlier
+            ? `«${earlier.orderNumber}» захиалга (${formatDayMonthTime(earlier.createdAt)}) яг ийм бараатай илгээгдсэн байна. Дахин илгээвэл хоёр дахь, ШИНЭ захиалга үүснэ. Өмнөх нь хангалттай бол «Болих» дарна уу.`
+            : undefined
+        }
+        confirmLabel="Шинээр илгээх"
+        pending={pending}
+        onConfirm={() => handleSubmit(true)}
+      />
     </div>
   );
 }

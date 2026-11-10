@@ -1,3 +1,6 @@
+-- >>> INCLUDED IN docs/fixes/42-all-pending-in-one.sql — run THAT file instead.
+-- >>> (Kept for the record; running this one on its own is still safe.)
+
 -- ============================================================
 -- Fix 40: a switched-off user ("Идэвхгүй") loses their role rights
 -- ============================================================

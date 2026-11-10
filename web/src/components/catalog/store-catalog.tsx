@@ -1,7 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import Form from "next/form";
-import { RotateCcw, Search, SearchX, X } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCategories, type CategoryRow } from "@/lib/categories";
 import {
@@ -21,6 +20,14 @@ import { CatalogNav, type CatalogNavItem } from "./catalog-nav";
 import { CartBar } from "./cart-bar";
 import { sectionDomId } from "./section-id";
 import { ProductCardShell } from "./cart-controls";
+import {
+  CatalogSearchInput,
+  CatalogSearchProvider,
+  CatalogSearchStatus,
+  USUAL_SECTION_ID,
+  type CatalogIndexEntry,
+} from "./catalog-search";
+import { searchNormalize } from "@/lib/translit";
 
 /**
  * The store-facing catalog, shared by the store's own app (/catalog), a
@@ -33,7 +40,8 @@ import { ProductCardShell } from "./cart-controls";
  *   - then every category as its own section with its picture;
  *   - the category rail / sidebar jumps between sections without a reload.
  *
- * Searching switches to a flat, best-match-first list.
+ * Search is instant: every product is on the page, so typing just hides
+ * what doesn't match (catalog-search.tsx) — no request, Latin or Cyrillic.
  */
 
 export type CatalogMode = "buyer" | "rep" | "preview";
@@ -102,19 +110,12 @@ export async function StoreCatalog({
   const bottomPad = cartHref ? "pb-28" : "pb-6";
   const supabase = await createClient();
   const term = (q ?? "").trim();
-  const searching = term.length > 0;
 
   const [productsRes, cats, rules, usualIds] = await Promise.all([
-    searching
-      ? supabase.rpc("search_products", {
-          p_supermarket_id: storeId,
-          p_query: term,
-          p_category: null,
-        })
-      : supabase.from("supermarket_prices").select(PRODUCT_COLUMNS).eq("supermarket_id", storeId),
+    supabase.from("supermarket_prices").select(PRODUCT_COLUMNS).eq("supermarket_id", storeId),
     getCategories(),
     mode === "buyer" ? loadSaleRules(storeId) : Promise.resolve([] as DiscountRule[]),
-    searching ? Promise.resolve([] as string[]) : loadUsualProductIds(storeId),
+    loadUsualProductIds(storeId),
   ]);
 
   const rows = ((productsRes.data as unknown as CatalogProduct[] | null) ?? []).map((p) => ({
@@ -136,9 +137,7 @@ export async function StoreCatalog({
     catById,
   };
 
-  const searchForm = (variant: "mobile" | "desktop") => (
-    <SearchForm basePath={basePath} q={term} variant={variant} />
-  );
+  const searchForm = (variant: "mobile" | "desktop") => <CatalogSearchInput variant={variant} />;
 
   if (productsRes.error) {
     // The raw database message means nothing to a shop; log it, offer a retry.
@@ -158,42 +157,6 @@ export async function StoreCatalog({
     );
   }
 
-  /* ---------------- Search results: flat, ranked. ---------------- */
-  if (searching) {
-    return (
-      <div className={`px-3 sm:px-4 lg:px-6 xl:px-8 pt-3 ${bottomPad} lg:flex lg:gap-6`}>
-        <div className="lg:hidden mb-3">{searchForm("mobile")}</div>
-        <aside className="hidden lg:block lg:w-64 shrink-0">
-          <div className="sticky top-[calc(3.5rem+1rem)]">{searchForm("desktop")}</div>
-        </aside>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <p className="text-[13px] min-w-0 truncate">
-              <span className="font-bold tabular-nums">{rows.length}</span>
-              <span className="text-muted-foreground"> илэрц · “{term}”</span>
-            </p>
-            <Link
-              href={basePath}
-              className="shrink-0 inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl bg-card ring-1 ring-border text-[13px] font-semibold hover:bg-accent/60 transition-colors"
-            >
-              <X className="h-4 w-4" /> Бүх бараа
-            </Link>
-          </div>
-          {rows.length === 0 ? (
-            <EmptyResults term={term} basePath={basePath} />
-          ) : (
-            <ProductGrid>
-              {rows.map((p, i) => (
-                <ProductCard key={p.product_id} p={p} index={i} priority={i < 4} ctx={ctx} showCategory />
-              ))}
-            </ProductGrid>
-          )}
-        </div>
-        {cartBar}
-      </div>
-    );
-  }
-
   /* ---------------- Browsing: sections by category. ---------------- */
   const groups = new Map<string, CatalogProduct[]>();
   for (const p of rows) {
@@ -208,7 +171,7 @@ export async function StoreCatalog({
 
   const sections: Section[] = [
     ...(usual.length > 0
-      ? [{ id: "usual", name: "Өмнө авсан", icon: null, usual: true, items: usual }]
+      ? [{ id: USUAL_SECTION_ID, name: "Өмнө авсан", icon: null, usual: true, items: usual }]
       : []),
     ...cats
       .filter((c) => groups.has(c.id))
@@ -226,9 +189,22 @@ export async function StoreCatalog({
     usual: s.usual,
   }));
 
+  // What the instant search looks through: name, brand, code and category
+  // of each product, normalised so Latin and Cyrillic typing both match.
+  const searchIndex: CatalogIndexEntry[] = sections
+    .filter((sec) => !sec.usual)
+    .flatMap((sec) =>
+      sec.items.map((p) => ({
+        id: p.product_id,
+        hay: searchNormalize([p.name, p.brand, p.sku, sec.name].filter(Boolean).join(" ")),
+        section: sec.id,
+      })),
+    );
+
   let cardIndex = 0;
 
   return (
+    <CatalogSearchProvider index={searchIndex} initialQuery={term} basePath={basePath}>
     <div className={`px-3 sm:px-4 lg:px-6 xl:px-8 pt-3 ${bottomPad}`}>
       {cartBar}
       <div className="lg:hidden mb-1">{searchForm("mobile")}</div>
@@ -240,6 +216,7 @@ export async function StoreCatalog({
           stickyTopClass={stickyTopClass}
         />
         <div className="flex-1 min-w-0 space-y-7">
+          <CatalogSearchStatus />
           {sections.length === 0 && (
             <div className="py-20 text-center text-sm text-muted-foreground">Бараа алга байна.</div>
           )}
@@ -249,6 +226,7 @@ export async function StoreCatalog({
               <section
                 key={s.id}
                 id={sectionDomId(s.id)}
+                data-section={s.id}
                 aria-labelledby={`${sectionDomId(s.id)}-title`}
                 className="scroll-mt-[9.5rem] lg:scroll-mt-20"
               >
@@ -258,7 +236,7 @@ export async function StoreCatalog({
                     <h2 id={`${sectionDomId(s.id)}-title`} className="font-display text-[16px] font-semibold leading-tight truncate">
                       {s.name}
                     </h2>
-                    <p className="text-[12px] text-muted-foreground leading-tight">
+                    <p data-section-count className="text-[12px] text-muted-foreground leading-tight">
                       {s.usual ? "Таны өмнө захиалсан бараа" : `${s.items.length} бараа`}
                     </p>
                   </div>
@@ -284,6 +262,7 @@ export async function StoreCatalog({
         </div>
       </div>
     </div>
+    </CatalogSearchProvider>
   );
 }
 
@@ -485,62 +464,6 @@ function ProductCard({
         </div>
       </Link>
     </ProductCardShell>
-  );
-}
-
-function SearchForm({
-  basePath,
-  q,
-  variant,
-}: {
-  basePath: string;
-  q: string;
-  variant: "mobile" | "desktop";
-}) {
-  const mobile = variant === "mobile";
-  // next/form: the search opens in-app (no full page reload over mobile
-  // data) and the results' loading skeleton is prefetched.
-  return (
-    <Form action={basePath} className="relative" role="search">
-      <Search
-        className={`absolute top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none ${mobile ? "left-4 h-[18px] w-[18px]" : "left-3 h-4 w-4"}`}
-      />
-      <input
-        key={q}
-        type="search"
-        name="q"
-        defaultValue={q}
-        placeholder="Бараа хайх: нэр, брэнд, баркод..."
-        autoComplete="off"
-        enterKeyHint="search"
-        aria-label="Бараа хайх"
-        className={
-          mobile
-            ? "w-full h-11 rounded-2xl bg-card ring-1 ring-border shadow-sm pl-11 pr-4 text-[15px] placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/50"
-            : "w-full h-10 rounded-xl bg-muted/60 border border-transparent pl-9 pr-3 text-sm placeholder:text-muted-foreground/80 focus:outline-none focus:bg-card focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
-        }
-      />
-    </Form>
-  );
-}
-
-function EmptyResults({ term, basePath }: { term: string; basePath: string }) {
-  return (
-    <div className="py-16 flex flex-col items-center text-center">
-      <div className="size-16 rounded-2xl bg-muted flex items-center justify-center mb-4 ring-1 ring-border">
-        <SearchX className="h-7 w-7 text-muted-foreground" strokeWidth={1.6} />
-      </div>
-      <p className="text-base font-semibold">“{term}” олдсонгүй</p>
-      <p className="text-[13px] text-muted-foreground mt-1.5 max-w-xs">
-        Өөр үгээр хайж үзнэ үү, эсвэл ангиллаар нь харна уу.
-      </p>
-      <Link
-        href={basePath}
-        className="inline-flex items-center mt-5 h-11 px-4 rounded-xl text-sm font-semibold bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all"
-      >
-        Бүх бараа харах
-      </Link>
-    </div>
   );
 }
 

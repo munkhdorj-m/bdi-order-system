@@ -28,7 +28,13 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   images: {
     // Allow higher qualities than the default of just [75].
-    qualities: [75, 85, 90, 95],
+    qualities: [75, 85, 95],
+    // Product thumbnails top out near 200 CSS px (x3 on dense phones) and
+    // nothing in the app shows an optimised photo wider than ~1200px. The
+    // defaults (16 widths up to 3840) put a 10-16 entry srcset on every
+    // product card; these 8 widths halve that markup.
+    deviceSizes: [640, 828, 1200],
+    imageSizes: [64, 96, 128, 256, 384],
     // Skip AVIF: it's smaller but produces blocky artifacts on product
     // packaging photos with text/labels. WebP is friendlier to those.
     formats: ["image/webp"],

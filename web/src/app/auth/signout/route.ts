@@ -24,6 +24,9 @@ export async function POST(request: NextRequest) {
     store.delete(PUSH_DEVICE_COOKIE);
   }
 
-  await supabase.auth.signOut();
+  // "local": end THIS device's session only. The default ("global") ends
+  // the account's sessions everywhere — a shop's second phone, the office
+  // desktop — which signed people out for no reason they could see.
+  await supabase.auth.signOut({ scope: "local" });
   return NextResponse.redirect(new URL("/login", request.url), { status: 303 });
 }

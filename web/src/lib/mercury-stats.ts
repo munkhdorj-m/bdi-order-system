@@ -1,4 +1,5 @@
 import "server-only";
+import { unstable_cache } from "next/cache";
 import { getSession, hasActiveRole } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MERCURY_ENTITIES } from "@/lib/mercury";
@@ -93,20 +94,36 @@ export async function mercuryEntityStats(entity: string): Promise<MercuryEntityS
   return statsFor(createAdminClient(), entity);
 }
 
-/** Numbers for every record type that has rows, keyed by entity. */
-export async function allMercuryEntityStats(): Promise<Map<string, MercuryEntityStats>> {
-  await requireAdmin();
-  const db = createAdminClient();
-  const entities = Object.keys(MERCURY_ENTITIES);
-  const results: MercuryEntityStats[] = [];
-  // A few record types at a time keeps ~70 small queries gentle on a small database.
-  let next = 0;
-  async function worker() {
-    while (next < entities.length) {
-      const entity = entities[next++];
-      results.push(await statsFor(db, entity));
+/**
+ * ~70 small queries — far too many to repeat on every page view, and the
+ * numbers only change when a sync runs. So the result is shared between
+ * requests: per sync run (pass the latest run's id as `syncKey`) and for at
+ * most 10 minutes.
+ */
+const loadAllStats = unstable_cache(
+  async (syncKey: string): Promise<MercuryEntityStats[]> => {
+    void syncKey; // part of the cache key only
+    const db = createAdminClient();
+    const entities = Object.keys(MERCURY_ENTITIES);
+    const results: MercuryEntityStats[] = [];
+    // A few record types at a time keeps the queries gentle on a small database.
+    let next = 0;
+    async function worker() {
+      while (next < entities.length) {
+        const entity = entities[next++];
+        results.push(await statsFor(db, entity));
+      }
     }
-  }
-  await Promise.all(Array.from({ length: 6 }, worker));
-  return new Map(results.filter((s) => s.rows > 0).map((s) => [s.entity, s]));
+    await Promise.all(Array.from({ length: 6 }, worker));
+    return results.filter((s) => s.rows > 0);
+  },
+  ["mercury-entity-stats-v1"],
+  { revalidate: 600 },
+);
+
+/** Numbers for every record type that has rows, keyed by entity. */
+export async function allMercuryEntityStats(syncKey = ""): Promise<Map<string, MercuryEntityStats>> {
+  await requireAdmin();
+  const list = await loadAllStats(syncKey);
+  return new Map(list.map((s) => [s.entity, s]));
 }

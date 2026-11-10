@@ -14,9 +14,9 @@ npm run dev          # http://localhost:3000
 Checks before pushing:
 
 ```bash
-npx tsc --noEmit -p .
+npm run typecheck    # source only (ignores Next's generated files)
 npm run lint
-npm run build
+npm run build        # stop `npm run dev` first: both write under .next/
 ```
 
 ## Environment (`.env.local`, never committed)
@@ -58,6 +58,12 @@ scripts/             Mercury mirror/import, e-Barimt agent
 - **1,000-row limit.** Supabase returns at most 1,000 rows per request,
   silently. Use `fetchAll` (`src/lib/supabase/fetch-all.ts`) for anything
   that can grow.
+- **Shared, cached lists.** The full store list (pickers, suggestions) is
+  read once and shared between requests (`src/lib/stores.ts`, tag
+  `stores`); any action that changes a store calls `updateTag(STORES_TAG)`.
+- **Search is in the browser.** The catalog filters the products already
+  on the page (`src/components/catalog/catalog-search.tsx`), Latin or
+  Cyrillic; there is no search request.
 - **Time zone.** Business days are Ulaanbaatar days (UTC+8). Use the
   helpers in `src/lib/dispatch.ts` and `src/lib/datetime.ts`, never
   `toISOString().slice(0, 10)`.
@@ -71,4 +77,11 @@ scripts/             Mercury mirror/import, e-Barimt agent
 
 SQL lives in `../docs/fixes/NN-*.sql`, run by hand in the Supabase SQL
 editor in number order. Each file says whether to run it before or after
-deploying the matching code.
+deploying the matching code. `42-all-pending-in-one.sql` bundles 39-41
+plus the access-rule speed-up and tests itself before it commits.
+
+Try a SQL change locally first: `../docs/sql-tests` rebuilds the schema in
+PGlite (in-process Postgres) and checks what each kind of user can see and
+do (`cd ../docs/sql-tests && npm install && npm test`). The same run puts
+the order writer (`src/lib/orders/write.ts`) through re-sent, half-sent and
+simultaneous checkouts — run it after touching that file.

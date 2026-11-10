@@ -1,23 +1,25 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search, X } from "lucide-react";
 import {
   Sheet,
   SheetContent,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { CATALOG_SEARCH_EVENT } from "@/components/catalog/catalog-search";
 
 /**
  * Mobile-only search affordance. Lives in the buyer top nav but hidden on
  * `sm:` and up — desktop uses the inline search field on the catalog page
- * itself. Tap → top-side Sheet with a real text input + submit. Goes to
- * `/catalog?q=<term>`, which searches every category.
+ * itself. Tap → top-side Sheet with a real text input + submit. On the
+ * catalog it filters the page at once; elsewhere it opens `/catalog?q=`.
  */
 export function CatalogSearchTrigger() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
   const search = useSearchParams();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -35,8 +37,12 @@ export function CatalogSearchTrigger() {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const q = String(form.get("q") ?? "").trim();
-    // Search covers every category; results come back best match first.
-    router.push(q ? `/catalog?q=${encodeURIComponent(q)}` : "/catalog");
+    if (pathname === "/catalog") {
+      // The catalog is open: it filters itself at once, nothing to load.
+      window.dispatchEvent(new CustomEvent(CATALOG_SEARCH_EVENT, { detail: q }));
+    } else {
+      router.push(q ? `/catalog?q=${encodeURIComponent(q)}` : "/catalog");
+    }
     setOpen(false);
   }
 
@@ -70,7 +76,7 @@ export function CatalogSearchTrigger() {
               type="search"
               name="q"
               defaultValue={currentQ}
-              placeholder="Бараа, брэнд, SKU хайх..."
+              placeholder="Бараа хайх: нэр, брэнд, код..."
               autoComplete="off"
               className="flex-1 bg-transparent pl-10 pr-3 text-[15px] placeholder:text-muted-foreground/80 focus:outline-none"
             />

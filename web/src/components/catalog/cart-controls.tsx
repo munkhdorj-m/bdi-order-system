@@ -44,6 +44,7 @@ export function ProductCardShell({
   const qty = useCartQty(product.product_id, scope);
   return (
     <div
+      data-pid={product.product_id}
       data-in-cart={qty > 0 || undefined}
       style={style}
       className={cn(

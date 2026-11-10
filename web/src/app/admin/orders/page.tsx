@@ -6,14 +6,6 @@ import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { OrderStatusPill } from "@/components/admin/order-status-pill";
 import { QuickAdvanceButton } from "@/components/admin/quick-advance-button";
 import {
@@ -28,7 +20,7 @@ import {
 } from "@/lib/order-status";
 import { formatMnt } from "@/lib/format";
 import { addDays, isIsoDay, todayUb, ubDayStart } from "@/lib/dispatch";
-import { formatDayMonthTime } from "@/lib/datetime";
+import { formatDayLabel, formatDayMonthTime } from "@/lib/datetime";
 
 type SearchParams = Promise<{
   status?: string;
@@ -38,6 +30,8 @@ type SearchParams = Promise<{
   to?: string;
   /** Only this store's orders (linked from the store page). */
   store?: string;
+  /** How many orders to show (grows by PAGE_SIZE with "Цааш үзэх"). */
+  n?: string;
 }>;
 
 type OrderRow = {
@@ -57,17 +51,6 @@ function amountOf(o: Pick<OrderRow, "subtotal" | "discount_total">): number {
   return Math.max(0, Number(o.subtotal ?? 0) - Number(o.discount_total ?? 0));
 }
 
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString("mn-MN", {
-    timeZone: "Asia/Ulaanbaatar",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 // "11.08 13:05" (mn-MN Intl would print "XI/08").
 function formatShortDate(iso: string) {
   return formatDayMonthTime(iso);
@@ -84,14 +67,9 @@ function dayKeyOf(iso: string): string {
     timeZone: "Asia/Ulaanbaatar",
   });
 }
+// "11-р сарын 9, Даваа"
 function dayLabelOf(iso: string): string {
-  return new Date(iso).toLocaleDateString("mn-MN", {
-    timeZone: "Asia/Ulaanbaatar",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "long",
-  });
+  return formatDayLabel(iso);
 }
 
 const STATUS_KEYS = [
@@ -260,12 +238,11 @@ export default async function AdminOrdersPage({
   ];
 
   const hasAnyFilter = Boolean(q || range || from || to);
+  const limit = Math.min(MAX_ROWS, Math.max(PAGE_SIZE, Math.floor(Number(sp.n) || PAGE_SIZE)));
 
   // Re-key Suspense so any filter change re-shows the skeleton instead of
   // holding stale rows during the re-fetch (and drops the ticked orders).
-  const streamKey = [status ?? "all", q, range ?? "", from ?? "", to ?? "", store ?? ""].join(
-    "|",
-  );
+  const streamKey = [status ?? "all", q, range ?? "", from ?? "", to ?? "", store ?? "", limit].join("|");
 
   return (
     <div className="max-w-6xl pb-20">
@@ -389,7 +366,7 @@ export default async function AdminOrdersPage({
               it keeps the status, search and store. */}
           <form
             method="get"
-            className="ml-auto flex items-center gap-1.5 text-[12px]"
+            className="flex w-full min-w-0 items-center gap-1.5 text-[12px] sm:ml-auto sm:w-auto"
           >
             {store && <input type="hidden" name="store" defaultValue={store} />}
             {status && (
@@ -400,7 +377,7 @@ export default async function AdminOrdersPage({
               type="date"
               name="from"
               defaultValue={from ?? ""}
-              className="field h-9 w-auto px-2.5 text-[13px]"
+              className="field h-10 min-w-0 flex-1 px-2.5 text-[13px] sm:h-9 sm:w-auto sm:flex-none"
               aria-label="Эхэлсэн огноо"
             />
             <span className="text-muted-foreground">—</span>
@@ -408,7 +385,7 @@ export default async function AdminOrdersPage({
               type="date"
               name="to"
               defaultValue={to ?? ""}
-              className="field h-9 w-auto px-2.5 text-[13px]"
+              className="field h-10 min-w-0 flex-1 px-2.5 text-[13px] sm:h-9 sm:w-auto sm:flex-none"
               aria-label="Дуусах огноо"
             />
             <Button type="submit" variant="outline" size="sm">
@@ -445,13 +422,29 @@ export default async function AdminOrdersPage({
           store={store}
           scope={scope}
           shownCount={shownCount}
+          limit={limit}
         />
       </Suspense>
     </div>
   );
 }
 
-const LIST_LIMIT = 500;
+/** Orders per "page"; "Цааш үзэх" adds another page, up to MAX_ROWS. */
+const PAGE_SIZE = 100;
+const MAX_ROWS = 500;
+
+/**
+ * One order = one <tr>, laid out twice by CSS: a stacked card on phones
+ * (the row becomes a small grid), a normal table row from `sm` up — so
+ * columns size themselves and line up. (Rendering a card list AND a table
+ * and hiding one of them doubled the page for every order.)
+ */
+const ROW =
+  "relative grid grid-cols-[2.75rem_minmax(0,1fr)_auto] gap-x-2 gap-y-1 border-b border-border px-1.5 py-2.5 " +
+  "transition-colors last:border-b-0 even:bg-muted/45 hover:bg-accent/70 sm:table-row sm:p-0";
+const TH =
+  "h-10 px-3 text-left align-middle text-[11px] font-bold uppercase tracking-[0.08em] whitespace-nowrap text-foreground/70";
+const TD = "block sm:table-cell sm:px-3 sm:py-2 sm:align-middle";
 
 async function OrderList({
   status,
@@ -463,6 +456,7 @@ async function OrderList({
   store,
   scope,
   shownCount,
+  limit,
 }: {
   status?: string;
   statusFilter: StatusFilter;
@@ -474,13 +468,15 @@ async function OrderList({
   scope: Scope;
   /** How many orders match in total (the active chip's count). */
   shownCount: number;
+  /** How many of them to show. */
+  limit: number;
 }) {
   const supabase = await createClient();
 
   const [results, storeRow] = await Promise.all([
     Promise.all(
       scopedQueries(supabase, LIST_SELECT, scope, { head: false, status: statusFilter }).map((query) =>
-        query.order("created_at", { ascending: false }).order("id").limit(LIST_LIMIT),
+        query.order("created_at", { ascending: false }).order("id").limit(limit),
       ),
     ),
     store
@@ -494,7 +490,7 @@ async function OrderList({
   }
   const rows = [...byId.values()]
     .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
-    .slice(0, LIST_LIMIT);
+    .slice(0, limit);
   const storeName = (storeRow.data as { name: string } | null)?.name ?? null;
 
   // Which store this list is narrowed to, with a one-tap way back.
@@ -576,9 +572,9 @@ async function OrderList({
     <OrderSelectionProvider>
       {storeBanner}
       {shownCount > rows.length && (
-        <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-[13px] text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-200 dark:ring-amber-800/60">
-          {shownCount.toLocaleString("mn-MN")} захиалгаас сүүлийн {rows.length}-г харуулж байна. Огноо эсвэл
-          төлвөөр шүүж нарийсгана уу.
+        <p className="mb-3 rounded-xl bg-accent px-3 py-2 text-[13px] text-accent-foreground ring-1 ring-primary/15">
+          {shownCount.toLocaleString("en-US")} захиалгаас сүүлийн {rows.length}-г харуулж байна. Доор «Цааш үзэх»
+          дарж нэмж харах эсвэл огноо, төлвөөр шүүнэ үү.
         </p>
       )}
       {/* Summary banner — total across whatever filters are active. */}
@@ -600,141 +596,120 @@ async function OrderList({
         </div>
       </div>
 
-      {/* Day-grouped list. Each group has its own header showing the day
-          label + count + subtotal, then the rows underneath. */}
+      {/* Day-grouped list: a heading per day (label, count, total), then
+          its orders. */}
       <div className="space-y-5">
-        {groups.map((g) => (
+        {groups.map((g, gi) => (
           <section key={g.key}>
-            <div className="flex items-center gap-2 mb-2 px-1">
+            <div className="mb-2 flex items-center gap-2 px-1">
               <SelectManyCheckbox ids={g.rows.map((r) => r.id)} label={`${g.label} — бүгдийг сонгох`} />
-              <h2 className="text-[13px] font-bold tracking-tight">
-                {g.label}
-              </h2>
-              <span className="text-[11px] text-muted-foreground tabular-nums">
-                · {g.rows.length}
+              <h2 className="text-[14px] font-bold tracking-tight">{g.label}</h2>
+              <span className="min-w-0 truncate text-[12px] text-muted-foreground tabular-nums">
+                · {g.live} захиалга
+                {g.rows.length > g.live && ` (+${g.rows.length - g.live} цуцлагдсан)`}
               </span>
-              <span className="ml-auto text-[12.5px] font-bold tabular-nums">
-                {formatMnt(g.total)}
-              </span>
+              <span className="ml-auto font-display text-[13.5px] font-bold tabular-nums">{formatMnt(g.total)}</span>
             </div>
 
-            {/* Mobile: cards. The checkbox and the action sit beside the
-                link, not inside it. */}
-            <div className="sm:hidden space-y-2">
-              {g.rows.map((o) => (
-                <div
-                  key={o.id}
-                  className={`flex items-start gap-1 rounded-lg border bg-background p-2 ${o.status === "cancelled" ? "opacity-70" : ""}`}
-                >
-                  <SelectOrderCheckbox id={o.id} label={`${o.order_number} сонгох`} />
-                  <Link href={`/admin/orders/${o.id}`} className="min-w-0 flex-1 py-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-sm font-medium">
-                        {o.order_number}
-                      </span>
-                      <OrderStatusPill status={o.status} />
-                    </div>
-                    <div className="text-sm mt-1 truncate">
-                      {o.supermarkets?.name ?? "—"}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {formatShortDate(o.created_at)}
-                    </div>
-                  </Link>
-                  <div className="flex flex-col items-end gap-2 shrink-0 py-1">
-                    <div className={`text-sm font-semibold ${o.status === "cancelled" ? "line-through text-muted-foreground" : ""}`}>
-                      {formatMnt(amountOf(o))}
-                    </div>
-                    <QuickAdvanceButton
-                      orderId={o.id}
-                      orderNumber={o.order_number}
-                      status={o.status}
-                      deliveryDate={o.delivery_date}
-                    />
-                  </div>
-                </div>
-              ))}
+            <div className="overflow-hidden rounded-2xl bg-card shadow-card ring-1 ring-border/80 dark:ring-border">
+              {/* Fixed column widths, so the columns line up from one day's
+                  table to the next; the store name takes what is left. */}
+              <table className="block w-full text-sm sm:table sm:table-fixed">
+                <colgroup className="hidden sm:table-column-group">
+                  <col className="w-11" />
+                  <col className="w-[9.75rem]" />
+                  <col />
+                  <col className="w-[11.25rem]" />
+                  <col className="w-[7.5rem]" />
+                  <col className="w-[7.25rem]" />
+                  <col className="w-[11.5rem]" />
+                </colgroup>
+                {/* Column titles once, on the first day; the columns below
+                    line up with them. */}
+                {gi === 0 && (
+                  <thead className="hidden bg-muted sm:table-header-group">
+                    <tr className="border-b border-border">
+                      <th />
+                      <th className={TH}>Дугаар</th>
+                      <th className={TH}>Дэлгүүр</th>
+                      <th className={TH}>Төлөв</th>
+                      <th className={`${TH} text-right`}>Дүн</th>
+                      <th className={TH}>Огноо</th>
+                      <th />
+                    </tr>
+                  </thead>
+                )}
+                <tbody className="block sm:table-row-group">
+                  {g.rows.map((o) => {
+                    const isCancelled = o.status === "cancelled";
+                    return (
+                      <tr key={o.id} className={`${ROW} ${isCancelled ? "opacity-70" : ""}`}>
+                        <td className={`${TD} relative z-[1] col-start-1 row-span-4 row-start-1 sm:w-11 sm:py-0.5 sm:pl-2 sm:pr-0`}>
+                          <SelectOrderCheckbox id={o.id} label={`${o.order_number} сонгох`} />
+                        </td>
+                        <td className={`${TD} col-start-2 row-start-1 whitespace-nowrap`}>
+                          {/* On phones the whole card opens the order (the
+                              link is stretched over it); in the table, only
+                              the number does. */}
+                          <Link
+                            href={`/admin/orders/${o.id}`}
+                            className="font-mono text-sm font-medium after:absolute after:inset-0 hover:underline sm:after:hidden"
+                          >
+                            {o.order_number}
+                          </Link>
+                        </td>
+                        <td className={`${TD} col-start-2 row-start-3 min-w-0`}>
+                          <Link
+                            href={buildHref({ store: o.supermarket_id })}
+                            className="block truncate hover:text-primary hover:underline"
+                            title="Энэ дэлгүүрийн бүх захиалга"
+                          >
+                            {o.supermarkets?.name ?? "—"}
+                          </Link>
+                        </td>
+                        <td className={`${TD} col-start-2 row-start-2`}>
+                          <OrderStatusPill status={o.status} />
+                        </td>
+                        <td
+                          className={`${TD} col-start-3 row-start-1 justify-self-end whitespace-nowrap font-semibold tabular-nums sm:text-right sm:font-medium ${isCancelled ? "line-through text-muted-foreground" : ""}`}
+                        >
+                          {formatMnt(amountOf(o))}
+                        </td>
+                        <td className={`${TD} col-start-2 row-start-4 whitespace-nowrap text-xs text-muted-foreground tabular-nums sm:text-[13px]`}>
+                          {formatShortDate(o.created_at)}
+                        </td>
+                        <td className={`${TD} relative z-[1] col-start-3 row-span-3 row-start-2 self-end justify-self-end sm:py-1 sm:text-right`}>
+                          <QuickAdvanceButton
+                            orderId={o.id}
+                            orderNumber={o.order_number}
+                            status={o.status}
+                            deliveryDate={o.delivery_date}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-
-            {/* Desktop: table */}
-            <Card className="hidden sm:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12" />
-                    <TableHead>Дугаар</TableHead>
-                    <TableHead>Дэлгүүр</TableHead>
-                    <TableHead>Статус</TableHead>
-                    <TableHead className="text-right">Дүн</TableHead>
-                    <TableHead>Огноо</TableHead>
-                    <TableHead className="w-32" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {g.rows.map((o) => (
-                    <TableRow key={o.id} className={o.status === "cancelled" ? "opacity-70" : undefined}>
-                      <TableCell className="py-0.5">
-                        <SelectOrderCheckbox id={o.id} label={`${o.order_number} сонгох`} />
-                      </TableCell>
-                      <TableCell>
-                        <Link
-                          href={`/admin/orders/${o.id}`}
-                          className="font-mono text-sm font-medium hover:underline"
-                        >
-                          {o.order_number}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        <Link
-                          href={buildHref({ store: o.supermarket_id })}
-                          className="hover:text-primary hover:underline"
-                          title="Энэ дэлгүүрийн бүх захиалга"
-                        >
-                          {o.supermarkets?.name ?? "—"}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <OrderStatusPill status={o.status} />
-                      </TableCell>
-                      <TableCell
-                        className={`text-right font-medium ${o.status === "cancelled" ? "line-through text-muted-foreground" : ""}`}
-                      >
-                        {formatMnt(amountOf(o))}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatDateTime(o.created_at)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <QuickAdvanceButton
-                          orderId={o.id}
-                          orderNumber={o.order_number}
-                          status={o.status}
-                          deliveryDate={o.delivery_date}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {/* Day subtotal footer row — only on desktop where the
-                      table grid makes alignment cheap. */}
-                  <TableRow className="bg-muted/40 hover:bg-muted/40">
-                    <TableCell
-                      colSpan={4}
-                      className="text-[12px] text-muted-foreground"
-                    >
-                      Өдрийн нийт · {g.live} захиалга
-                      {g.rows.length > g.live && ` (цуцлагдсан ${g.rows.length - g.live} ороогүй)`}
-                    </TableCell>
-                    <TableCell className="text-right font-bold tabular-nums">
-                      {formatMnt(g.total)}
-                    </TableCell>
-                    <TableCell colSpan={2} />
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </Card>
           </section>
         ))}
       </div>
+
+      {shownCount > rows.length && rows.length >= limit && limit < MAX_ROWS && (
+        <div className="mt-5 flex justify-center">
+          <Button asChild variant="outline">
+            <Link
+              href={`${buildHref({ status, q, range: range ?? undefined, from, to, store })}${
+                buildHref({ status, q, range: range ?? undefined, from, to, store }).includes("?") ? "&" : "?"
+              }n=${Math.min(MAX_ROWS, limit + PAGE_SIZE)}`}
+              scroll={false}
+            >
+              Цааш үзэх (өмнөх {Math.min(PAGE_SIZE, shownCount - rows.length)})
+            </Link>
+          </Button>
+        </div>
+      )}
     </OrderSelectionProvider>
   );
 }
@@ -742,37 +717,19 @@ async function OrderList({
 function OrderListSkeleton() {
   return (
     <>
-      <Skeleton className="h-3 w-20 mb-3" />
-      {/* Mobile */}
-      <div className="sm:hidden space-y-2">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div
-            key={i}
-            className="bg-background border rounded-lg p-3 space-y-2"
-          >
-            <div className="flex items-center gap-2">
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-4 w-16 rounded-full" />
-            </div>
-            <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-3 w-1/3" />
+      <Skeleton className="mb-3 h-11 w-full rounded-xl" />
+      <Skeleton className="mb-2 h-4 w-48" />
+      <div className="overflow-hidden rounded-2xl bg-card shadow-card ring-1 ring-border/80">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 border-b border-border px-3 py-3 last:border-b-0">
+            <Skeleton className="size-5 rounded" />
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-4 flex-1" />
+            <Skeleton className="hidden h-6 w-28 rounded-full sm:block" />
+            <Skeleton className="h-4 w-20" />
           </div>
         ))}
       </div>
-      {/* Desktop */}
-      <Card className="hidden sm:block p-3">
-        <div className="space-y-2">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-4">
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-4 flex-1" />
-              <Skeleton className="h-4 w-20 rounded-full" />
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-4 w-28" />
-            </div>
-          ))}
-        </div>
-      </Card>
     </>
   );
 }

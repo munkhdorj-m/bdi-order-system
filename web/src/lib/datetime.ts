@@ -49,3 +49,20 @@ export function formatTime(value: string | Date | null | undefined): string {
   if (!d) return "—";
   return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 }
+
+const WEEKDAYS_MN = ["Ням", "Даваа", "Мягмар", "Лхагва", "Пүрэв", "Баасан", "Бямба"];
+
+/**
+ * A day as people say it: "11-р сарын 9, Даваа" (the year is added only
+ * when it isn't the current one). Takes an instant or a "YYYY-MM-DD" day.
+ */
+export function formatDayLabel(value: string | Date | null | undefined): string {
+  if (!value) return "—";
+  const dayOnly = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  // A plain day has no time zone: read it as that calendar day.
+  const d = dayOnly ? new Date(`${value}T00:00:00Z`) : ub(value);
+  if (!d || Number.isNaN(d.getTime())) return "—";
+  const thisYear = new Date(Date.now() + UB_OFFSET_MS).getUTCFullYear();
+  const year = d.getUTCFullYear() === thisYear ? "" : `${d.getUTCFullYear()} оны `;
+  return `${year}${d.getUTCMonth() + 1}-р сарын ${d.getUTCDate()}, ${WEEKDAYS_MN[d.getUTCDay()]}`;
+}

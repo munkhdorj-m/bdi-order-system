@@ -146,6 +146,7 @@ export function CatalogNav({
       {/* Phones / tablets: sticky picture rail. */}
       <div
         ref={stickyRef}
+        data-catalog-cats
         className={cn(
           "lg:hidden sticky z-[5] -mx-3 sm:-mx-4 mb-3 bg-background/90 backdrop-blur-xl supports-[backdrop-filter]:bg-background/75",
           stickyTopClass,
@@ -217,7 +218,7 @@ export function CatalogNav({
       <aside className="hidden lg:block lg:w-64 shrink-0">
         <div className="sticky top-[calc(3.5rem+1rem)] flex flex-col gap-3 max-h-[calc(100vh-5rem)] overflow-y-auto scrollbar-thin pb-4">
           {searchSlot}
-          <nav aria-label="Ангилал" className="flex flex-col gap-0.5">
+          <nav aria-label="Ангилал" data-catalog-cats className="flex flex-col gap-0.5">
             <div className="text-[11px] uppercase tracking-[0.1em] font-bold text-muted-foreground mb-1 px-2">
               Ангилал
             </div>

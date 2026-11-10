@@ -1,0 +1,9 @@
+{
+  // Type-check the source only. The main tsconfig also includes Next's
+  // generated files under .next/, which a running dev server rewrites (and
+  // can leave half-written), making `tsc` fail for reasons unrelated to the
+  // code. Use: npm run typecheck
+  "extends": "./tsconfig.json",
+  "include": ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules", ".next"]
+}

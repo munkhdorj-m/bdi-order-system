@@ -1,8 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { STORES_TAG } from "@/lib/stores";
 import { adminGuardError } from "@/lib/auth";
 
 type ActionState = { error?: string };
@@ -77,6 +78,7 @@ export async function createSupermarket(
   const { error } = await supabase.from("supermarkets").insert(built.payload);
   if (error) return { error: saveError(error.message) };
 
+  updateTag(STORES_TAG);
   revalidatePath("/admin/supermarkets");
   redirect("/admin/supermarkets");
 }
@@ -118,6 +120,7 @@ export async function updateSupermarket(
     .eq("id", id);
   if (error) return { error: saveError(error.message) };
 
+  updateTag(STORES_TAG);
   revalidatePath("/admin/supermarkets");
   revalidatePath(`/admin/supermarkets/${id}`);
   redirect("/admin/supermarkets");
@@ -133,6 +136,7 @@ export async function deactivateSupermarket(id: string): Promise<void> {
     .update({ active: false })
     .eq("id", id);
   if (error) throw new Error(error.message);
+  updateTag(STORES_TAG);
   revalidatePath("/admin/supermarkets");
   revalidatePath(`/admin/supermarkets/${id}`);
 }
@@ -160,6 +164,7 @@ export async function deleteSupermarket(id: string): Promise<DeleteResult> {
     return { error: `Устгаж чадсангүй: ${error.message}` };
   }
 
+  updateTag(STORES_TAG);
   revalidatePath("/admin/supermarkets");
   redirect("/admin/supermarkets");
 }

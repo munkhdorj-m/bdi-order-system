@@ -1,0 +1,14 @@
+{
+  "name": "bdi-sql-tests",
+  "private": true,
+  "type": "module",
+  "description": "Runs SQL meant for the live database, and the site's order writer, against a local rebuild first.",
+  "scripts": {
+    "test": "node test-fix42.mjs && node test-order-writer.mjs",
+    "test:fix42": "node test-fix42.mjs",
+    "test:orders": "node test-order-writer.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.16"
+  }
+}

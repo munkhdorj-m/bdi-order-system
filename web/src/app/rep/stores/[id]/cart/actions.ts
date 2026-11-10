@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSession } from "@/lib/auth";
 import { listAdminIds, notifyMany } from "@/lib/notify";
 import { formatMnt } from "@/lib/format";
-import { writeOrder, type NewOrderItem } from "@/lib/orders/write";
+import { duplicateInfo, writeOrder, type DuplicateOrder, type NewOrderItem } from "@/lib/orders/write";
 
 type PlaceOrderInput = {
   supermarketId: string;
@@ -23,6 +23,8 @@ export type RepPlaceOrderResult = {
   error?: string;
   /** Every product no longer sold to this store, so the cart drops them all at once. */
   unavailable?: string[];
+  /** Set when this checkout id already had an order: nothing new was written. */
+  duplicate?: DuplicateOrder;
 };
 
 /** The store's own app accounts — told when a rep orders for them. */
@@ -138,7 +140,7 @@ export async function placeOrderForStore(
   revalidatePath("/admin");
   // A re-sent checkout: the office and the store were already told.
   if (written.duplicate) {
-    return { orderId: written.orderId, orderNumber: written.orderNumber };
+    return { orderId: written.orderId, orderNumber: written.orderNumber, duplicate: duplicateInfo(written) };
   }
 
   // Tell the office, like a store's own order does (push + staff Telegram),

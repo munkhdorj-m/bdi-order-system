@@ -1,4 +1,8 @@
 -- ============================================================
+-- AFTER this file, run docs/fixes/42-all-pending-in-one.sql once:
+-- it rewrites the access rules to their fast form, limits the price view to
+-- the caller's own stores and sets up the scheduled clean-up. (It is safe
+-- to re-run and tests itself.)
 -- BDI B2B Order App — Initial Database Schema (v1)
 -- Target: Supabase (PostgreSQL 15+)
 -- Run this in the Supabase SQL Editor, or save as a migration.

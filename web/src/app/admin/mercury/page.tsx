@@ -55,7 +55,11 @@ export default async function MercuryOverviewPage() {
   let error: string | null = runsError?.message ?? null;
   if (!error) {
     try {
-      byEntity = await allMercuryEntityStats();
+      // Shared between requests until the next sync run (or 10 minutes).
+      const newest = (runData as SyncRun[] | null)?.[0];
+      byEntity = await allMercuryEntityStats(
+        newest ? `${newest.started_at}|${newest.finished_at ?? ""}|${newest.status}` : "",
+      );
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }

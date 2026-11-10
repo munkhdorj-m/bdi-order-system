@@ -1,45 +1,20 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
 import { getCategories } from "@/lib/categories";
+import { getAllStores } from "@/lib/stores";
 import { todayUb } from "@/lib/dispatch";
 import { OrderCreateForm, type StorePickOption } from "@/components/admin/order-create-form";
 import { loadStoreCatalog, type CatalogRow, type StoreSummary } from "./actions";
 
 type SearchParams = Promise<{ store?: string }>;
 
-const STORE_PAGE = 1000;
-
 /**
- * Every store for the picker (the picker filters on the phone, instantly).
- * The first page also brings the total, the rest load side by side; any
- * failed page fails the whole list (shown by admin/error.tsx with a retry)
- * instead of quietly leaving stores out.
+ * Every store for the picker (the picker filters in the browser, instantly).
+ * From the shared, cached store list — see lib/stores.ts.
  */
 async function allStores(): Promise<StorePickOption[]> {
-  const supabase = await createClient();
-  const page = (from: number, count = false) =>
-    supabase
-      .from("supermarkets")
-      .select("id, name, address, registry_number, active", count ? { count: "exact" } : undefined)
-      .order("active", { ascending: false })
-      .order("name")
-      .order("id")
-      .range(from, from + STORE_PAGE - 1);
-
-  const first = await page(0, true);
-  if (first.error) throw new Error(`Дэлгүүрийн жагсаалт: ${first.error.message}`);
-  const out = [...((first.data ?? []) as StorePickOption[])];
-  const total = first.count ?? out.length;
-  const rest = await Promise.all(
-    Array.from({ length: Math.max(0, Math.ceil(total / STORE_PAGE) - 1) }, (_, i) => page((i + 1) * STORE_PAGE)),
-  );
-  for (const r of rest) {
-    if (r.error) throw new Error(`Дэлгүүрийн жагсаалт: ${r.error.message}`);
-    out.push(...((r.data ?? []) as StorePickOption[]));
-  }
-  // De-dupe in case a store was added between pages.
-  return [...new Map(out.map((s) => [s.id, s])).values()];
+  const rows = await getAllStores();
+  return rows.map(({ id, name, address, registry_number, active }) => ({ id, name, address, registry_number, active }));
 }
 
 /** Staff order entry — Mercury's "Нэмэх". `?store=<id>` preselects a store. */

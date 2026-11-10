@@ -1,3 +1,6 @@
+-- >>> INCLUDED IN docs/fixes/42-all-pending-in-one.sql — run THAT file instead.
+-- >>> (Kept for the record; running this one on its own is still safe.)
+
 -- ============================================================
 -- Fix 41: SMS-check limits, safe scheduled jobs, order numbers,
 --         small permission tightening

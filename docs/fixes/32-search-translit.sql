@@ -1,3 +1,8 @@
+-- >>> NO LONGER NEEDED (2026-11-10): the catalog now searches in the browser
+-- >>> (web/src/components/catalog/catalog-search.tsx), in Latin or Cyrillic,
+-- >>> and no longer calls search_products(). This file was never run on the
+-- >>> live database and does not have to be.
+
 -- 32: Cross-script (Cyrillic ↔ Latin) catalog search.
 --
 -- Product/brand names are stored in Mongolian Cyrillic ("Кока кола") or

@@ -21,12 +21,20 @@ export function ProductCategorySelect({
 }) {
   const [current, setCurrent] = useState(value ?? "");
   const [pending, start] = useTransition();
+  // The product list has one of these per product. Until this one is
+  // touched it holds just its current choice; the full category list is
+  // filled in on focus / press, before the menu opens. (All options for
+  // every row was ~2,900 <option>s on the products page.)
+  const [armed, setArmed] = useState(false);
+  const shown = armed ? categories : categories.filter((c) => c.id === current);
 
   return (
     <select
       value={current}
       disabled={pending}
       aria-label={`${productName} — ангилал`}
+      onPointerDown={() => setArmed(true)}
+      onFocus={() => setArmed(true)}
       onChange={(e) => {
         const next = e.target.value;
         const prev = current;
@@ -49,7 +57,7 @@ export function ProductCategorySelect({
       )}
     >
       <option value="">— Ангилалгүй —</option>
-      {categories.map((c) => (
+      {shown.map((c) => (
         <option key={c.id} value={c.id}>
           {c.name}
         </option>
