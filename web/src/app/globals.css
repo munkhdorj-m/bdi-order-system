@@ -434,3 +434,19 @@
     font-size: max(16px, 1em);
   }
 }
+
+/* Drag to scroll (components/drag-scroll.tsx). An area that scrolls
+   sideways and has more to show gets the hand; while it is being dragged
+   nothing gets selected and the hand closes. Unlayered: it must win over
+   the cursor utilities of whatever is inside. */
+[data-drag-scroll] {
+  cursor: grab;
+}
+[data-drag-scroll] :is(a, label, summary, [role="button"], [role="tab"]) {
+  cursor: pointer;
+}
+html.drag-scrolling,
+html.drag-scrolling * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}

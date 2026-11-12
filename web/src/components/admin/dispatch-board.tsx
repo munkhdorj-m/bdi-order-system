@@ -495,9 +495,11 @@ export function DispatchBoard({
         </div>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2 items-start">
+      {/* grid-cols-1 + min-w-0: without them the one column on a narrow screen grows
+          as wide as the longest address line and the right half is cut off. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 items-start">
         {/* Unassigned orders */}
-        <Card className="gap-0 p-0 overflow-hidden">
+        <Card className="min-w-0 gap-0 p-0 overflow-hidden">
           <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2.5">
             <CheckBox
               checked={visible.length > 0 && pickedVisible.length === visible.length}
@@ -619,7 +621,7 @@ export function DispatchBoard({
         </Card>
 
         {/* The day's shipments */}
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             {shipments.map((s) => (
               <Link

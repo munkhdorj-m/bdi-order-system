@@ -164,7 +164,8 @@ export default async function AdminOrderDetailPage({
             {formatDateTime(order.created_at)}
           </p>
         </div>
-        <div className="shrink-0 flex items-center gap-2 flex-wrap">
+        {/* May shrink, so on a narrow screen the buttons wrap instead of running off it. */}
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <Button asChild variant="outline" size="sm">
             <Link href={`/print/invoices?orders=${order.id}`} target="_blank">
               <Printer className="h-4 w-4" />

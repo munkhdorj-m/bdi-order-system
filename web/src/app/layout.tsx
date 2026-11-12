@@ -3,6 +3,7 @@ import { Montserrat, Onest } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { ServiceWorkerRegister } from "@/components/sw-register";
+import { DragScroll } from "@/components/drag-scroll";
 import { BRAND } from "@/lib/brand";
 import "./globals.css";
 
@@ -89,6 +90,7 @@ export default function RootLayout({
           {children}
           <Toaster position="top-center" richColors closeButton />
           <ServiceWorkerRegister />
+          <DragScroll />
         </ThemeProvider>
       </body>
     </html>

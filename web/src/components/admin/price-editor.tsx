@@ -221,13 +221,14 @@ export function PriceEditor({
 
       {/* Diff-style table */}
       <div className="rounded-2xl bg-card ring-1 ring-border overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-[12.5px]">
           <thead className="bg-muted/60 text-[11px] uppercase tracking-[0.08em] font-bold text-muted-foreground">
             <tr>
-              <th className="text-left px-5 py-2.5">Бараа</th>
-              <th className="text-right px-3 py-2.5 w-32">{refLabel}</th>
-              <th className="text-left px-3 py-2.5 w-48">{priceLabel}</th>
-              <th className="text-right px-3 py-2.5 w-24">Δ</th>
+              <th className="text-left px-3 py-2.5 sm:px-5">Бараа</th>
+              <th className="hidden text-right px-3 py-2.5 w-32 sm:table-cell">{refLabel}</th>
+              <th className="text-left px-2 py-2.5 w-28 sm:w-48 sm:px-3">{priceLabel}</th>
+              <th className="text-right px-2 py-2.5 w-14 sm:w-24 sm:px-3">Δ</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -244,20 +245,24 @@ export function PriceEditor({
                       : ""
                   }
                 >
-                  <td className="px-5 py-3">
+                  <td className="px-3 py-3 sm:px-5">
                     <div className="font-semibold leading-tight">{p.name}</div>
                     <div className="text-[11px] text-muted-foreground mt-0.5">
                       {p.brand ? `${p.brand} · ` : ""}
                       <span className="font-mono">{p.sku}</span>
                       {p.category_name && <> · {p.category_name}</>}
                     </div>
+                    {/* Phones: the reference price sits here instead of in its own column. */}
+                    <div className="mt-0.5 text-[11px] text-muted-foreground tabular-nums sm:hidden">
+                      {refLabel}: {formatMnt(p.ref_price)}
+                    </div>
                   </td>
-                  <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">
+                  <td className="hidden px-3 py-3 text-right tabular-nums text-muted-foreground sm:table-cell">
                     {formatMnt(p.ref_price)}
                     {p.ref_note && <div className="text-[10px] font-normal">{p.ref_note}</div>}
                   </td>
-                  <td className="px-3 py-3">
-                    <div className="relative w-36">
+                  <td className="px-2 py-3 sm:px-3">
+                    <div className="relative w-24 sm:w-36">
                       <input
                         ref={(el) => {
                           inputRefs.current.set(p.id, el);
@@ -278,7 +283,7 @@ export function PriceEditor({
                       />
                     </div>
                   </td>
-                  <td className="px-3 py-3 text-right">
+                  <td className="px-2 py-3 text-right sm:px-3">
                     {diff ? (
                       <span
                         className={`text-[12px] font-bold tabular-nums ${
@@ -312,6 +317,7 @@ export function PriceEditor({
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {state.error && <Callout tone="error">{state.error}</Callout>}
