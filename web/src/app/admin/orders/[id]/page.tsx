@@ -4,11 +4,15 @@ import { ChevronLeft, Phone, Printer, ReceiptText, User } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { OrderStatusPill } from "@/components/admin/order-status-pill";
 import { OrderActions } from "@/components/admin/order-actions";
+import { OrderLinesEditor } from "@/components/admin/order-lines-editor";
 import { OrderTimeline } from "@/components/buyer/order-timeline";
 import { Button } from "@/components/ui/button";
 import { type OrderStatus } from "@/lib/order-status";
 import { formatMnt } from "@/lib/format";
-import { PAYMENT_METHOD_LABELS, type PaymentMethod } from "@/lib/payment-method";
+import { type PaymentMethod } from "@/lib/payment-method";
+import { LIVE_STATUSES } from "@/lib/ebarimt";
+import { FIX_43_HINT } from "@/lib/orders/correct";
+import { diffLines } from "@/lib/orders/correction";
 
 type Params = Promise<{ id: string }>;
 
@@ -21,6 +25,7 @@ type OrderDetail = {
   payment_method: PaymentMethod | null;
   notes: string | null;
   created_at: string;
+  updated_at: string;
   confirmed_at: string | null;
   shipped_at: string | null;
   delivered_at: string | null;
@@ -41,11 +46,25 @@ type OrderDetail = {
   shipment: { id: string; shipment_no: number; delivery_date: string; status: string } | null;
   order_items: {
     id: string;
+    product_id: string;
     product_name_snapshot: string;
     qty: number;
     unit_price: number;
     line_total: number;
   }[];
+};
+
+type RecordedLine = { product_id: string; name: string; qty: number; unit_price: number };
+
+type ChangeRow = {
+  id: string;
+  changed_at: string;
+  reason: string | null;
+  total_before: number;
+  total_after: number;
+  lines_before: RecordedLine[];
+  lines_after: RecordedLine[];
+  who: { full_name: string | null; phone: string | null } | null;
 };
 
 function formatDateTime(iso: string) {
@@ -74,17 +93,47 @@ export default async function AdminOrderDetailPage({
   const { data, error } = await supabase
     .from("orders")
     .select(
-      `id, order_number, status, subtotal, discount_total, payment_method, notes, created_at, confirmed_at, shipped_at, delivered_at, delivery_date, supermarket_id,
+      `id, order_number, status, subtotal, discount_total, payment_method, notes, created_at, updated_at, confirmed_at, shipped_at, delivered_at, delivery_date, supermarket_id,
        supermarkets:supermarket_id(name, address, contact_phone, profiles:assigned_rep_id(full_name, phone)),
        buyer:placed_by(full_name, phone, role),
        shipment:shipment_id(id, shipment_no, delivery_date, status),
-       order_items(id, product_name_snapshot, qty, unit_price, line_total)`,
+       order_items(id, product_id, product_name_snapshot, qty, unit_price, line_total)`,
     )
     .eq("id", id)
     .single();
 
   if (error || !data) notFound();
   const order = data as unknown as OrderDetail;
+
+  // Corrections (fix 43) and the e-Barimt state decide whether the lines
+  // can be changed. Read apart from the order itself, so the page still
+  // opens before fix 43 has been run.
+  const [orderedRes, changesRes, receiptRes] = await Promise.all([
+    supabase.from("orders").select("ordered_total").eq("id", id).maybeSingle(),
+    supabase
+      .from("order_changes")
+      .select("id, changed_at, reason, total_before, total_after, lines_before, lines_after, who:changed_by(full_name, phone)")
+      .eq("order_id", id)
+      .order("changed_at", { ascending: false })
+      .limit(30),
+    supabase
+      .from("ebarimt_receipts")
+      .select("id", { count: "exact", head: true })
+      .eq("order_id", id)
+      .in("status", LIVE_STATUSES),
+  ]);
+  const correctionsReady = !orderedRes.error && !changesRes.error;
+  const orderedTotal =
+    correctionsReady && orderedRes.data?.ordered_total != null ? Number(orderedRes.data.ordered_total) : null;
+  const changes = (correctionsReady ? (changesRes.data ?? []) : []) as unknown as ChangeRow[];
+  const lockedReason =
+    order.status === "cancelled"
+      ? "Цуцлагдсан захиалгыг засахгүй. Эхлээд сэргээнэ үү."
+      : (receiptRes.count ?? 0) > 0
+        ? "Е-баримт илгээгдсэн эсвэл дараалалд байгаа тул барааг засах боломжгүй. Эхлээд Е-баримт хуудсаас баримтыг буцаана уу."
+        : !correctionsReady
+          ? FIX_43_HINT
+          : null;
   // The store card shows the STORE's phone; for orders entered by staff the
   // placer is the admin/rep, whose number used to show up there instead.
   const storePhone = order.supermarkets?.contact_phone ?? null;
@@ -184,97 +233,67 @@ export default async function AdminOrderDetailPage({
             </div>
           </div>
 
-          {/* Line items as a table */}
-          <div className="rounded-2xl bg-card ring-1 ring-border overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
-              <h2 className="text-[15px] font-bold tracking-tight">Бараа</h2>
-              <span className="text-[12px] text-muted-foreground">
-                {order.order_items.length} төрөл ·{" "}
-                {order.order_items.reduce((n, i) => n + Number(i.qty || 0), 0)} ширхэг
-              </span>
-            </div>
-            <table className="w-full text-[13px] [&_tbody_tr:nth-child(even)]:bg-muted/45">
-              <thead className="bg-muted text-[11px] uppercase tracking-[0.08em] font-bold text-foreground/70">
-                <tr>
-                  <th className="text-left px-5 py-2.5">Бараа</th>
-                  <th className="text-right px-3 py-2.5 w-16">Тоо</th>
-                  <th className="text-right px-3 py-2.5 w-28">Үнэ</th>
-                  <th className="text-right px-5 py-2.5 w-32">Дүн</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {order.order_items.map((item) => (
-                  <tr key={item.id}>
-                    <td className="px-5 py-3">
-                      <div className="text-[12.5px] font-semibold leading-snug">
-                        {item.product_name_snapshot}
+          {/* Lines — with "Засах" to correct quantities after the order was placed */}
+          <OrderLinesEditor
+            orderId={order.id}
+            storeId={order.supermarket_id}
+            updatedAt={order.updated_at}
+            lines={order.order_items.map((i) => ({
+              id: i.id,
+              product_id: i.product_id,
+              name: i.product_name_snapshot,
+              qty: Number(i.qty),
+              unit_price: Number(i.unit_price),
+              line_total: Number(i.line_total),
+            }))}
+            subtotal={Number(order.subtotal)}
+            discountTotal={Number(order.discount_total ?? 0)}
+            paymentMethod={order.payment_method}
+            orderedTotal={orderedTotal}
+            lockedReason={lockedReason}
+            hasDeals={placedByStore}
+          />
+
+          {/* What was corrected, by whom and why */}
+          {changes.length > 0 && (
+            <div className="rounded-2xl bg-card ring-1 ring-border overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
+                <h2 className="text-[15px] font-bold tracking-tight">Засварын түүх</h2>
+                <span className="text-[12px] text-muted-foreground">{changes.length} удаа</span>
+              </div>
+              <ul className="divide-y divide-border">
+                {changes.map((c) => {
+                  const diff = diffLines(c.lines_before ?? [], c.lines_after ?? []);
+                  return (
+                    <li key={c.id} className="px-5 py-3">
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[12.5px]">
+                        <span className="font-semibold">{c.who?.full_name || c.who?.phone || "—"}</span>
+                        <span className="text-muted-foreground tabular-nums">{formatDateTime(c.changed_at)}</span>
+                        {c.reason && (
+                          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium">{c.reason}</span>
+                        )}
+                        <span className="ml-auto tabular-nums text-muted-foreground">
+                          {formatMnt(c.total_before)} → <b className="text-foreground">{formatMnt(c.total_after)}</b>
+                        </span>
                       </div>
-                    </td>
-                    <td className="px-3 py-3 text-right tabular-nums">
-                      {item.qty}
-                    </td>
-                    <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">
-                      {formatMnt(item.unit_price)}
-                    </td>
-                    <td className="px-5 py-3 text-right font-bold tabular-nums">
-                      {formatMnt(item.line_total)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="bg-muted/40">
-                <tr>
-                  <td
-                    colSpan={3}
-                    className="px-5 py-2 text-right text-[12px] text-muted-foreground"
-                  >
-                    Дэд дүн
-                  </td>
-                  <td className="px-5 py-2 text-right text-[13px] tabular-nums text-muted-foreground">
-                    {formatMnt(order.subtotal)}
-                  </td>
-                </tr>
-                {order.discount_total && order.discount_total > 0 ? (
-                  <tr>
-                    <td
-                      colSpan={3}
-                      className="px-5 py-2 text-right text-[12px] text-emerald-700 dark:text-emerald-400"
-                    >
-                      Хямдрал
-                      {order.payment_method === "cash" && " · Бэлэн 2%"}
-                    </td>
-                    <td className="px-5 py-2 text-right text-[13px] tabular-nums text-emerald-700 dark:text-emerald-400">
-                      −{formatMnt(order.discount_total)}
-                    </td>
-                  </tr>
-                ) : null}
-                <tr>
-                  <td
-                    colSpan={3}
-                    className="px-5 py-3 text-right text-[12.5px] font-semibold"
-                  >
-                    Нийт төлөх
-                    {order.payment_method && (
-                      <span
-                        className={`ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold ring-1 ${
-                          order.payment_method === "cash"
-                            ? "bg-emerald-100 text-emerald-700 ring-emerald-300/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-800/60"
-                            : "bg-muted text-muted-foreground ring-border"
-                        }`}
-                      >
-                        {PAYMENT_METHOD_LABELS[order.payment_method] ?? order.payment_method}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-5 py-3 text-right text-[15px] font-bold tabular-nums">
-                    {formatMnt(
-                      order.subtotal - (order.discount_total ?? 0),
-                    )}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+                      {diff.length > 0 && (
+                        <ul className="mt-1.5 space-y-0.5 text-[12px] text-muted-foreground">
+                          {diff.map((d, i) => (
+                            <li key={i} className="flex gap-2">
+                              <span className="min-w-0 flex-1 truncate">{d.name}</span>
+                              <span className="shrink-0 tabular-nums">
+                                {d.from === 0 ? "нэмсэн" : d.from} → {d.to === 0 ? "хассан" : <b className="text-foreground">{d.to}</b>}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
 
           {/* Amber note card — only when buyer left a note */}
           {order.notes && (

@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { Bell, ChevronRight, ClipboardList, Store as StoreIcon } from "lucide-react";
+import { Bell, ChevronRight, ClipboardList, Store as StoreIcon, Truck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { requireSession } from "@/lib/auth";
 import { addDays, todayUb, ubDayStart } from "@/lib/dispatch";
+import { myDistributor } from "@/lib/delivery-runs";
 import { RepStoreList, type RepStore } from "@/components/rep/rep-store-list";
 import { SignOutButton } from "@/components/buyer/sign-out-button";
 
@@ -33,12 +34,16 @@ export default async function MyStoresPage() {
   const session = await requireSession();
   const supabase = await createClient();
 
-  // RLS: a rep only sees their own stores.
-  const { data: stores, error } = await supabase
-    .from("supermarkets")
-    .select("id, name, district, address, contact_phone")
-    .eq("active", true)
-    .order("name");
+  // RLS: a rep only sees their own stores. Alongside: is this login also a
+  // delivery person (then the page links to their delivery runs)?
+  const [{ data: stores, error }, { distributor }] = await Promise.all([
+    supabase
+      .from("supermarkets")
+      .select("id, name, district, address, contact_phone")
+      .eq("active", true)
+      .order("name"),
+    myDistributor(session.userId),
+  ]);
   // Shown by rep/error.tsx, whose "Дахин оролдох" loads the page again —
   // better than an empty list that looks like "no stores".
   if (error) throw new Error(`Дэлгүүрийн жагсаалт ачаалж чадсангүй: ${error.message}`);
@@ -121,6 +126,18 @@ export default async function MyStoresPage() {
             <StatTile value={monthCount} label="Энэ сарын захиалга" />
             <StatTile value={warnCount} label="7+ өдөр захиалаагүй" warn={warnCount > 0} />
           </div>
+
+          {/* The delivery person's runs (only for a login linked to a Түгээгч). */}
+          {distributor && (
+            <Link
+              href="/rep/delivery"
+              className="mt-2 flex h-11 items-center gap-2.5 rounded-xl bg-gold px-3 text-gold-foreground shadow-sm"
+            >
+              <Truck className="h-[18px] w-[18px] shrink-0" strokeWidth={2.2} />
+              <span className="flex-1 text-[14px] font-semibold">Хүргэлт</span>
+              <ChevronRight className="h-4 w-4 shrink-0 opacity-80" />
+            </Link>
+          )}
 
           {/* Every order across the rep's stores: today's, pending, by status. */}
           <Link

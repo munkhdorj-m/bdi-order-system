@@ -71,7 +71,7 @@ export default async function MercuryEntityPage({
       className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-3"
     >
       <ChevronLeft className="h-4 w-4" />
-      Mercury өгөгдөл
+      Mercury-гаас шилжих
     </Link>
   );
 

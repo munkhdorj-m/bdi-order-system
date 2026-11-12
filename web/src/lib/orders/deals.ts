@@ -17,6 +17,27 @@ function ranAt(rule: RuleRow, at: number): boolean {
 }
 
 /**
+ * The deals that applied to a store's order placed at `placedAt` — the
+ * ones running then, for the price list the store is on. Fixing a quantity
+ * after a sale ends mustn't cost the store its sale.
+ */
+export async function rulesAtOrderTime(
+  admin: ReturnType<typeof createAdminClient>,
+  storeId: string,
+  placedAt: string,
+): Promise<DiscountRule[]> {
+  const [{ data: store }, { data: ruleRows }] = await Promise.all([
+    admin.from("supermarkets").select("price_list_id").eq("id", storeId).maybeSingle(),
+    admin.from("discounts").select(RULE_COLUMNS),
+  ]);
+  const at = Date.parse(placedAt);
+  return rulesForPriceList(
+    ((ruleRows ?? []) as unknown as RuleRow[]).filter((r) => ranAt(r, at)),
+    (store?.price_list_id as string | null) ?? null,
+  );
+}
+
+/**
  * Re-work a pending order's deals after its lines changed: the discount
  * (orders.discount_total) and the free-gift lines (0₮ rows) are computed
  * again from the paid lines, exactly as checkout does.
@@ -37,22 +58,16 @@ export async function recomputeOrderDeals(orderId: string): Promise<{ error?: st
   const placer = order.placer as unknown as { role: string } | null;
   if (placer?.role !== "buyer") return {};
 
-  const [{ data: store }, { data: lines }, { data: ruleRows }] = await Promise.all([
-    admin.from("supermarkets").select("price_list_id").eq("id", order.supermarket_id).maybeSingle(),
+  const [{ data: lines }, rules] = await Promise.all([
     admin
       .from("order_items")
       .select("id, product_id, qty, unit_price, products(category_id)")
       .eq("order_id", orderId),
-    admin.from("discounts").select(RULE_COLUMNS),
+    rulesAtOrderTime(admin, order.supermarket_id as string, order.created_at as string),
   ]);
 
   const paid = (lines ?? []).filter((l) => Number(l.unit_price) > 0);
   const gifts = (lines ?? []).filter((l) => Number(l.unit_price) === 0);
-  const placedAt = Date.parse(order.created_at as string);
-  const rules = rulesForPriceList(
-    ((ruleRows ?? []) as unknown as RuleRow[]).filter((r) => ranAt(r, placedAt)),
-    (store?.price_list_id as string | null) ?? null,
-  );
   const payment: PaymentMethod = isBuyerPaymentMethod(order.payment_method) ? order.payment_method : "credit";
 
   const deal = computeDiscount(

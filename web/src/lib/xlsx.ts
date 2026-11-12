@@ -17,14 +17,22 @@ export type XlsxColumn = {
   header: string;
   /** Character width (Excel units). */
   width?: number;
-  /** "int" → 1,234   "money" → 1,234.50   default: as given. */
-  format?: "text" | "int" | "money";
+  /**
+   * "int" → 1,234   "money" → 1,234.50   "date" → a real Excel date (pass
+   * "YYYY-MM-DD")   default: as given.
+   */
+  format?: "text" | "int" | "money" | "date";
 };
 
 export type XlsxSheet = {
   name: string;
   columns: XlsxColumn[];
   rows: XlsxCell[][];
+  /**
+   * Plain header row: not bold, not frozen — for files another program
+   * imports and that should look like its own template.
+   */
+  plainHeader?: boolean;
 };
 
 const enc = new TextEncoder();
@@ -68,6 +76,15 @@ function sheetName(name: string, used: Set<string>): string {
 const STYLE_HEADER = 1;
 const STYLE_INT = 2;
 const STYLE_MONEY = 3;
+const STYLE_DATE = 4;
+
+/** "2026-11-12" → Excel's day number (days since 1899-12-30), or null. */
+export function excelDay(day: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!m) return null;
+  const t = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return Number.isFinite(t) ? Math.round(t / 86_400_000) + 25569 : null;
+}
 
 function textCell(ref: string, value: string, style = 0): string {
   return `<c r="${ref}" t="inlineStr"${style ? ` s="${style}"` : ""}><is><t xml:space="preserve">${xmlEscape(value)}</t></is></c>`;
@@ -78,7 +95,7 @@ function sheetXml(sheet: XlsxSheet): string {
     .map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${c.width ?? 14}" customWidth="1"/>`)
     .join("");
   const header = `<row r="1">${sheet.columns
-    .map((c, i) => textCell(`${colName(i)}1`, c.header, STYLE_HEADER))
+    .map((c, i) => textCell(`${colName(i)}1`, c.header, sheet.plainHeader ? 0 : STYLE_HEADER))
     .join("")}</row>`;
   const body = sheet.rows
     .map((row, ri) => {
@@ -88,6 +105,10 @@ function sheetXml(sheet: XlsxSheet): string {
           if (v === null || v === undefined || v === "") return "";
           const ref = `${colName(ci)}${r}`;
           const format = sheet.columns[ci]?.format;
+          if (format === "date" && typeof v === "string") {
+            const serial = excelDay(v);
+            if (serial !== null) return `<c r="${ref}" s="${STYLE_DATE}"><v>${serial}</v></c>`;
+          }
           if (typeof v === "number" && Number.isFinite(v) && format !== "text") {
             const style = format === "money" ? STYLE_MONEY : format === "int" ? STYLE_INT : 0;
             return `<c r="${ref}"${style ? ` s="${style}"` : ""}><v>${v}</v></c>`;
@@ -101,7 +122,9 @@ function sheetXml(sheet: XlsxSheet): string {
   return (
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
     `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
-    `<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>` +
+    (sheet.plainHeader
+      ? ""
+      : `<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`) +
     `<cols>${cols}</cols><sheetData>${header}${body}</sheetData></worksheet>`
   );
 }
@@ -113,11 +136,13 @@ const STYLES =
   `<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>` +
   `<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>` +
   `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
-  `<cellXfs count="4">` +
+  `<cellXfs count="5">` +
   `<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>` +
   `<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
   `<xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>` +
   `<xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>` +
+  // 14 = the built-in short date, as in Dayansoft's own templates.
+  `<xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>` +
   `</cellXfs>` +
   `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>` +
   `</styleSheet>`;

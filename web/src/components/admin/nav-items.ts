@@ -64,7 +64,7 @@ export const navSections: NavSection[] = [
   },
   {
     label: "Шилжилт",
-    items: [{ href: "/admin/mercury", label: "Mercury өгөгдөл", icon: Database }],
+    items: [{ href: "/admin/mercury", label: "Mercury-гаас шилжих", icon: Database }],
   },
 ];
 

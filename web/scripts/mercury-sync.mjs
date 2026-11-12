@@ -17,6 +17,8 @@
  *
  * Usage (from web/):
  *   node --env-file=.env.local scripts/mercury-sync.mjs                 everything, 2023-01-01 → today
+ *   node --env-file=.env.local scripts/mercury-sync.mjs --quick         a few minutes: every list, the last
+ *                                                                      45 days of history, new customers' cards
  *   node --env-file=.env.local scripts/mercury-sync.mjs --only product,customer
  *   node --env-file=.env.local scripts/mercury-sync.mjs --from 2026-10-01
  *   node --env-file=.env.local scripts/mercury-sync.mjs --no-db         raw files + NDJSON only
@@ -721,7 +723,8 @@ const MASTER = [
   { entity: "manufacturer", pull: list("shop/index/FactoryList") },
   { entity: "warehouse", pull: list("shop/index/AguulahList") },
   { entity: "keyword", pull: list("shop/index/KeyWordsList") },
-  { entity: "sales_plan", pull: list("shop/index/PlanningList") },
+  // Mercury sends BDI's account away from this page; not having it is expected.
+  { entity: "sales_plan", pull: list("shop/index/PlanningList"), optional: true },
   { entity: "visit_plan", pull: list("home/index/PlanningList") },
   { entity: "promotion", pull: list("shop/index/Uramshuulal") },
   { entity: "product_set", pull: list("shop/index/ProductSet") },
@@ -838,6 +841,23 @@ function firstDate(data) {
   return null;
 }
 
+/** Every key of one mirror entity (no row data — for "which do we already have?"). */
+async function mirrorKeys(db, entity) {
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db
+      .from("mercury_records")
+      .select("mercury_key")
+      .eq("entity", entity)
+      .order("mercury_key")
+      .range(from, from + 999);
+    if (error) throw new Error(`reading ${entity} keys from the mirror: ${error.message}`);
+    out.push(...data.map((r) => r.mercury_key));
+    if (data.length < 1000) break;
+  }
+  return out;
+}
+
 /** Read every row of one mirror entity (Supabase returns at most 1,000 per call). */
 async function mirrorRows(db, entity) {
   const out = [];
@@ -878,6 +898,14 @@ const DETAIL = [
     snapshot: true,
     targets: async (db) =>
       (await mirrorRows(db, "customer")).map((r) => ({ id: r.mercury_key, path: `home/index/View2Shop/${r.mercury_key}` })),
+    // --quick: only customers whose card isn't in the mirror yet (new ones).
+    // 1,285 cards take a quarter of an hour; a full run still reads them all.
+    quickTargets: async (db) => {
+      const have = new Set(await mirrorKeys(db, "customer_detail"));
+      return (await mirrorKeys(db, "customer"))
+        .filter((key) => !have.has(key))
+        .map((key) => ({ id: key, path: `home/index/View2Shop/${key}` }));
+    },
     parse: (html, t) => {
       const data = parseCustomerDetail(html);
       return data ? [{ key: t.id, data }] : [];
@@ -894,6 +922,15 @@ const DETAIL = [
           date: r.record_date,
           path: `home/index/noheadViewOrderShop2Mini/${r.mercury_key}/${r.data._ids.View2ShopNoHead}`,
         })),
+    // --quick: only orders inside the window being refreshed.
+    quickTargets: async (db, args) =>
+      (await mirrorRows(db, "order"))
+        .filter((r) => !r.data._ids?.ViewOrder && r.data._ids?.View2ShopNoHead && (r.record_date ?? "") >= args.from)
+        .map((r) => ({
+          id: r.mercury_key,
+          date: r.record_date,
+          path: `home/index/noheadViewOrderShop2Mini/${r.mercury_key}/${r.data._ids.View2ShopNoHead}`,
+        })),
     parse: (html, t) =>
       parseOrderLines(html).map((l) => ({ key: `${t.id}:${l.n}`, data: { order: t.id, ...l.data }, date: t.date })),
   },
@@ -904,6 +941,8 @@ const DETAIL = [
       (await mirrorRows(db, "customer"))
         .filter((r) => amount(r.data["Авлага"]) !== 0)
         .map((r) => ({ id: r.mercury_key, path: `home/index/View2ShopTootsoo/${r.mercury_key}` })),
+    // --quick: left for a full run (the website doesn't use these ledgers).
+    quickTargets: async () => [],
     parse: (html, t) =>
       parseLedger(html).map((l) => ({ key: `${t.id}:${l.key}`, data: { customer: t.id, ...l.data }, date: l.date })),
   },
@@ -988,24 +1027,40 @@ function today() {
   return new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Ulaanbaatar" });
 }
 
-function parseArgs(argv) {
-  const out = { from: "2023-01-01", to: today(), only: null, db: true, delayMs: 700 };
+/** How far back --quick re-reads history: long enough to catch late edits to last month. */
+export const QUICK_DAYS = 45;
+
+/** "2026-11-12" minus n days. */
+export function daysBefore(day, n) {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+export function parseArgs(argv) {
+  const out = { from: "2023-01-01", to: today(), only: null, db: true, delayMs: 700, quick: false };
+  let fromGiven = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--from") out.from = argv[++i];
+    if (a === "--from") {
+      out.from = argv[++i];
+      fromGiven = true;
+    } else if (a === "--quick") out.quick = true;
     else if (a === "--to") out.to = argv[++i];
     else if (a === "--only") out.only = new Set(argv[++i].split(",").map((s) => s.trim()));
     else if (a === "--no-db") out.db = false;
     else if (a === "--delay") out.delayMs = Number(argv[++i]);
     else if (a === "--help" || a === "-h") {
       console.log(
-        "Usage: node --env-file=.env.local scripts/mercury-sync.mjs [--from YYYY-MM-DD] [--to YYYY-MM-DD]\n" +
-          "       [--only entity,entity] [--no-db] [--delay ms]\n\nEntities: " +
+        "Usage: node --env-file=.env.local scripts/mercury-sync.mjs [--quick] [--from YYYY-MM-DD] [--to YYYY-MM-DD]\n" +
+          "       [--only entity,entity] [--no-db] [--delay ms]\n\n" +
+          `--quick  every list, the last ${QUICK_DAYS} days of history, cards of new customers only (a few minutes)\n\nEntities: ` +
           [...MASTER, ...BY_DATE, ...DETAIL].map((e) => e.entity).join(", "),
       );
       process.exit(0);
     } else fail(`Unknown argument: ${a} (try --help)`);
   }
+  if (out.quick && !fromGiven) out.from = daysBefore(out.to, QUICK_DAYS);
   for (const d of [out.from, out.to]) if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) fail(`Bad date: ${d}`);
   if (out.only) {
     const known = new Set([...MASTER, ...BY_DATE, ...DETAIL].map((e) => e.entity));
@@ -1014,9 +1069,37 @@ function parseArgs(argv) {
   return out;
 }
 
+/** The run row this process opened, so a crash or Ctrl+C can close it instead of leaving it "running". */
+let openRun = null;
+
+async function closeOpenRun(reason) {
+  if (!openRun) return;
+  const { db, runId, stats, errors } = openRun;
+  openRun = null;
+  try {
+    await db
+      .from("mercury_sync_runs")
+      .update({
+        finished_at: new Date().toISOString(),
+        status: "failed",
+        stats,
+        errors: [...errors, { entity: "*", error: String(reason).slice(0, 500) }],
+      })
+      .eq("id", runId);
+  } catch {
+    // Nothing more to do — the next run closes it as stale.
+  }
+}
+
+/** Runs still "running" after this long were killed (window closed, power cut). */
+const STALE_RUN_MS = 3 * 3600_000;
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   delayMs = args.delayMs;
+  const stats = {};
+  const errors = [];
+  const skipped = [];
   const runDir = path.join(HERE, ".mercury-data", new Date().toISOString().replace(/[:.]/g, "-"));
   await mkdir(runDir, { recursive: true });
 
@@ -1027,6 +1110,16 @@ async function main() {
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!url || !key) fail("Supabase env missing — run with --env-file=.env.local, or pass --no-db.");
     db = createClient(url, key, { auth: { persistSession: false } });
+    // Close runs that never finished, so the admin page doesn't show them as running for ever.
+    await db
+      .from("mercury_sync_runs")
+      .update({
+        status: "failed",
+        finished_at: new Date().toISOString(),
+        errors: [{ entity: "*", error: "interrupted — the run never finished" }],
+      })
+      .eq("status", "running")
+      .lt("started_at", new Date(Date.now() - STALE_RUN_MS).toISOString());
     const { data, error } = await db
       .from("mercury_sync_runs")
       .insert({ date_from: args.from, date_to: args.to })
@@ -1039,10 +1132,15 @@ async function main() {
           "  Continuing with files only.",
       );
       db = null;
-    } else runId = data.id;
+    } else {
+      runId = data.id;
+      openRun = { db, runId, stats, errors };
+    }
   }
 
-  console.log(`Mercury → BDI mirror   ${args.from} → ${args.to}   (${db ? "database + files" : "files only"})`);
+  console.log(
+    `Mercury → BDI mirror   ${args.from} → ${args.to}   (${db ? "database + files" : "files only"}${args.quick ? ", quick" : ""})`,
+  );
   console.log(`Raw copy: ${runDir}\n`);
   await login();
   console.log("✓ signed in to Mercury\n");
@@ -1055,8 +1153,6 @@ async function main() {
     },
   };
   const wanted = (e) => !args.only || args.only.has(e);
-  const stats = {};
-  const errors = [];
 
   /** Run one step; if Mercury dropped the session, sign in again and retry once. */
   async function step(fn) {
@@ -1069,13 +1165,19 @@ async function main() {
     }
   }
 
-  for (const { entity, pull } of MASTER.filter((m) => wanted(m.entity))) {
+  for (const { entity, pull, optional } of MASTER.filter((m) => wanted(m.entity))) {
     try {
       const recs = await step(() => pull(ctx, entity));
       stats[entity] = await saveRecords(db, runDir, runId, entity, recs);
       if (db && recs.length) await markMissing(db, runId, entity);
       console.log(`  ${entity.padEnd(18)} ${String(stats[entity]).padStart(7)} rows`);
     } catch (e) {
+      if (optional) {
+        // A page this account can't open: nothing to copy, and no reason to call the run a failure.
+        skipped.push({ entity, reason: e.message });
+        console.log(`  ${entity.padEnd(18)}       – not available to this account (skipped)`);
+        continue;
+      }
       errors.push({ entity, error: e.message });
       console.error(`  ✗ ${entity}: ${e.message}`);
     }
@@ -1102,8 +1204,10 @@ async function main() {
   if (details.length && !db) console.warn("  ⚠ detail pages read their ids from the mirror database — skipped with --no-db");
   for (const d of db ? details : []) {
     let targets;
+    // --quick reads a part of the records, so "not seen this run" no longer means "deleted in Mercury".
+    const partial = args.quick && typeof d.quickTargets === "function";
     try {
-      targets = await d.targets(db);
+      targets = partial ? await d.quickTargets(db, args) : await d.targets(db);
     } catch (e) {
       errors.push({ entity: d.entity, error: e.message });
       console.error(`  ✗ ${d.entity}: ${e.message}`);
@@ -1131,7 +1235,8 @@ async function main() {
       process.stdout.write(`\r  ${d.entity.padEnd(18)} ${i + 1}/${targets.length} pages, ${total} rows${failed ? `, ${failed} failed` : ""}`);
     }
     stats[d.entity] = total;
-    if (d.snapshot && total && !failed) await markMissing(db, runId, d.entity);
+    if (d.snapshot && total && !failed && !partial) await markMissing(db, runId, d.entity);
+    if (targets.length === 0) process.stdout.write(`  ${d.entity.padEnd(18)} nothing new`);
     process.stdout.write("\n");
   }
 
@@ -1141,12 +1246,22 @@ async function main() {
       .from("mercury_sync_runs")
       .update({ finished_at: new Date().toISOString(), status, stats, errors })
       .eq("id", runId);
+    openRun = null;
   }
-  await writeFile(path.join(runDir, "summary.json"), JSON.stringify({ ...args, only: args.only && [...args.only], status, stats, errors }, null, 2));
+  await writeFile(
+    path.join(runDir, "summary.json"),
+    JSON.stringify({ ...args, only: args.only && [...args.only], status, stats, errors, skipped }, null, 2),
+  );
   console.log(`\n${status === "ok" ? "✓" : "⚠"} ${status}: ${Object.values(stats).reduce((a, b) => a + b, 0)} rows across ${Object.keys(stats).length} record types, ${errors.length} errors`);
   if (errors.length) process.exitCode = 1;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
-  main().catch((e) => fail(e?.stack || String(e)));
+  process.once("SIGINT", () => {
+    closeOpenRun("interrupted (Ctrl+C)").finally(() => process.exit(130));
+  });
+  main().catch(async (e) => {
+    await closeOpenRun(e?.message ?? e);
+    fail(e?.stack || String(e));
+  });
 }

@@ -18,6 +18,9 @@ import { notifyOrderStatus } from "@/lib/orders/status-notify";
  *   unassignOrders   take them off again
  *   closeShipment    loaded & gone: run closed, its orders → shipped
  *   reopenShipment   undo a close (refused once e-Barimt was sent)
+ *   markDelivered / markShipmentDelivered
+ *                    the store has the goods: shipped → delivered
+ *   returnToQueue    not delivered after all: back to the unplanned list
  *
  * Everything needs fix 37.
  */
@@ -331,6 +334,161 @@ export async function reopenShipment(shipmentId: string): Promise<Result> {
   if (openErr) return { error: openErr.message };
   refresh();
   return { count: reopened?.length ?? 0 };
+}
+
+/**
+ * Delivered: the store has the goods. Only orders that are out for
+ * delivery ("shipped"); anything else in the selection is skipped and said.
+ */
+export async function markDelivered(orderIds: string[]): Promise<Result> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+  const ids = uniqueIds(orderIds);
+  if (ids.length === 0) return { error: "Захиалга сонгоно уу." };
+  if (ids.length > MAX_IDS) return { error: TOO_MANY };
+
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  const done: string[] = [];
+  for (const chunk of chunked(ids, ID_CHUNK)) {
+    const { data, error } = await supabase
+      .from("orders")
+      .update({ status: "delivered", delivered_at: now })
+      .in("id", chunk)
+      .eq("status", "shipped")
+      .select("id");
+    if (error) {
+      if (done.length > 0) refresh();
+      return { count: done.length, error: error.message };
+    }
+    done.push(...(data ?? []).map((o) => o.id as string));
+  }
+  if (done.length > 0) {
+    after(() => notifyOrderStatus(done, "delivered"));
+    refresh();
+  }
+  if (done.length < ids.length) {
+    return {
+      count: done.length,
+      error:
+        done.length === 0
+          ? "Сонгосон захиалга хүргэлтэнд гараагүй (эсвэл аль хэдийн хүргэгдсэн) байна."
+          : `${ids.length - done.length} захиалга хүргэлтэнд гараагүй тул алгаслаа.`,
+    };
+  }
+  return { count: done.length };
+}
+
+/** How long a "delivered" ticked by mistake can be taken back from the board. */
+const UNDO_DELIVERED_MS = 10 * 60 * 1000;
+
+/**
+ * Take back a "delivered" that was ticked by mistake a moment ago: the
+ * order is out for delivery again. Only within a few minutes — after that
+ * it is history (correct the lines on the order page instead).
+ */
+export async function undoDelivered(orderIds: string[]): Promise<Result> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+  const ids = uniqueIds(orderIds);
+  if (ids.length === 0) return { error: "Захиалга сонгоно уу." };
+  if (ids.length > MAX_IDS) return { error: TOO_MANY };
+
+  const supabase = await createClient();
+  const since = new Date(Date.now() - UNDO_DELIVERED_MS).toISOString();
+  let count = 0;
+  for (const chunk of chunked(ids, ID_CHUNK)) {
+    const { data, error } = await supabase
+      .from("orders")
+      .update({ status: "shipped", delivered_at: null })
+      .in("id", chunk)
+      .eq("status", "delivered")
+      .gte("delivered_at", since)
+      .select("id");
+    if (error) {
+      if (count > 0) refresh();
+      return { count, error: error.message };
+    }
+    count += data?.length ?? 0;
+  }
+  if (count > 0) refresh();
+  if (count === 0) return { error: "Буцаах хугацаа өнгөрсөн байна." };
+  return { count };
+}
+
+/** Every order of a closed run that is still out for delivery → delivered. */
+export async function markShipmentDelivered(shipmentId: string): Promise<Result> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+
+  const supabase = await createClient();
+  const loaded = await loadShipment(supabase, shipmentId);
+  if (loaded.error) return { error: loaded.error };
+  if (loaded.shipment!.status !== "closed") return { error: "Эхлээд ачилтаа хаана уу." };
+
+  const { data, error } = await supabase
+    .from("orders")
+    .update({ status: "delivered", delivered_at: new Date().toISOString() })
+    .eq("shipment_id", shipmentId)
+    .eq("status", "shipped")
+    .select("id");
+  if (error) return { error: error.message };
+  const done = (data ?? []).map((o) => o.id as string);
+  if (done.length === 0) return { error: "Хүргэлтэнд яваа захиалга алга." };
+  after(() => notifyOrderStatus(done, "delivered"));
+  refresh();
+  return { count: done.length };
+}
+
+/**
+ * Not delivered after all (shop closed, nobody there): the order goes back
+ * to the unplanned list to be put on another run. Refused once its
+ * e-Barimt is sent or waiting — return the receipt first.
+ */
+export async function returnToQueue(orderIds: string[]): Promise<Result> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+  const ids = uniqueIds(orderIds);
+  if (ids.length === 0) return { error: "Захиалга сонгоно уу." };
+  if (ids.length > MAX_IDS) return { error: TOO_MANY };
+
+  const supabase = await createClient();
+  const withReceipt = new Set<string>();
+  for (const chunk of chunked(ids, ID_CHUNK)) {
+    const { data, error } = await supabase
+      .from("ebarimt_receipts")
+      .select("order_id")
+      .in("order_id", chunk)
+      .in("status", LIVE_STATUSES);
+    if (error) return { error: error.message };
+    for (const r of data ?? []) withReceipt.add(r.order_id as string);
+  }
+  const movable = ids.filter((id) => !withReceipt.has(id));
+
+  let count = 0;
+  for (const chunk of chunked(movable, ID_CHUNK)) {
+    const { data, error } = await supabase
+      .from("orders")
+      // The planned day stays: the board then lists it up front, marked as planned for an earlier day.
+      .update({ status: "confirmed", shipped_at: null, shipment_id: null })
+      .in("id", chunk)
+      .eq("status", "shipped")
+      .select("id");
+    if (error) {
+      if (count > 0) refresh();
+      return { count, error: error.message };
+    }
+    count += data?.length ?? 0;
+  }
+  if (count > 0) refresh();
+  if (withReceipt.size > 0) {
+    return {
+      count,
+      error: `${withReceipt.size} захиалгад е-баримт илгээгдсэн тул буцаасангүй. Эхлээд Е-баримт хуудсаас баримтыг буцаана уу.`,
+    };
+  }
+  if (count === 0) return { error: "Зөвхөн хүргэлтэнд яваа захиалгыг буцаана." };
+  return { count };
 }
 
 export async function deleteShipment(shipmentId: string): Promise<Result> {

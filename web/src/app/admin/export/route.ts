@@ -6,6 +6,7 @@ import { amountDue, loadDocOrders, type DocFilter, type DocOrder } from "@/lib/o
 import { formatDateTimeUb, isIsoDay, splitBoxes, todayUb, ubDayOf } from "@/lib/dispatch";
 import { PAYMENT_METHOD_PRINT } from "@/lib/payment-method";
 import { ACTIVE_STATUSES, STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
+import { buildDayansoftBatch } from "@/lib/dayansoft";
 
 /**
  * Excel export of orders — Mercury's "MS-Excel рүү хөрвүүлэх".
@@ -19,6 +20,12 @@ import { ACTIVE_STATUSES, STATUS_LABELS, type OrderStatus } from "@/lib/order-st
  *
  * Three tabs: orders, every order line (what the ERP / accountant needs),
  * and product totals.
+ *
+ *   ?format=dayansoft&dfrom=…&dto=…   (or &shipment=<id>)
+ *       [&account=…][&partner=registry|mercury][&item=internal|barcode]
+ *                                  the sales that went out in a range of
+ *                                  delivery days, in Dayansoft ERP's own
+ *                                  batch-import layout (lib/dayansoft.ts)
  */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -39,6 +46,41 @@ export async function GET(req: NextRequest) {
   const to = sp.get("to");
   const status = sp.get("status");
   const store = sp.get("store");
+
+  if (sp.get("format") === "dayansoft") {
+    const dfrom = sp.get("dfrom");
+    const dto = sp.get("dto");
+    let sold: DocFilter;
+    let name: string;
+    if (shipment && UUID_RE.test(shipment)) {
+      sold = { shipmentId: shipment };
+      name = "Dayansoft-ачилт";
+    } else if (isIsoDay(dfrom) && isIsoDay(dto)) {
+      const [a, b] = dfrom <= dto ? [dfrom, dto] : [dto, dfrom];
+      sold = { soldFrom: a, soldTo: b };
+      name = a === b ? `Dayansoft-борлуулалт-${a}` : `Dayansoft-борлуулалт-${a}_${b}`;
+    } else {
+      return new NextResponse("Эхлэх, дуусах өдрөө сонгоно уу.", { status: 400 });
+    }
+    let sales: DocOrder[];
+    try {
+      sales = await loadDocOrders(await createClient(), sold);
+    } catch (e) {
+      return new NextResponse(`Алдаа: ${e instanceof Error ? e.message : String(e)}`, { status: 500 });
+    }
+    // A run's list also holds orders that never left; only real sales are booked.
+    sales = sales.filter((o) => o.status === "shipped" || o.status === "delivered");
+    if (shipment && sales[0]?.shipment) {
+      name = `Dayansoft-ачилт-${sales[0].shipment.shipment_no}-${sales[0].shipment.delivery_date}`;
+    }
+    const batch = buildDayansoftBatch(sales, {
+      account: (sp.get("account") ?? "").slice(0, 40),
+      partnerCode: sp.get("partner") === "mercury" ? "mercury" : "registry",
+      itemCode: sp.get("item") === "barcode" ? "barcode" : "internal",
+    });
+    const file = buildXlsx([batch.sheet]);
+    return new NextResponse(new Uint8Array(file).buffer as ArrayBuffer, { headers: xlsxHeaders(`${name}.xlsx`) });
+  }
 
   let filter: DocFilter;
   let label: string;

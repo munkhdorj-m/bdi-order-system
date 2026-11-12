@@ -36,15 +36,16 @@ npm run build        # stop `npm run dev` first: both write under .next/
 
 ```
 src/app/(buyer)/     store app: catalog, cart, orders, contact
-src/app/rep/         sales-rep app: stores, cart per store, orders
+src/app/rep/         sales-rep app: stores, cart per store, orders, delivery runs (/rep/delivery)
 src/app/admin/       office: orders, dispatch, shipments, e-Barimt, prices, users…
 src/app/print/       delivery notes and loading lists
-src/lib/orders/      the ONLY place store/rep orders are written (service role)
+src/lib/orders/      the ONLY place store/rep orders are written (service role); correcting
+                     an order after it was placed (correction.ts, correct.ts)
 src/lib/discount.ts  deal engine shared by catalog, cart and server
 src/lib/dispatch.ts  Ulaanbaatar-day helpers (the server runs in UTC)
 src/lib/datetime.ts  date formatting ("2026.11.08", "11.08 13:05")
 src/components/ui/   design-system primitives (Button, Card, Select…)
-scripts/             Mercury mirror/import, e-Barimt agent
+scripts/             Mercury mirror/import (`npm run mercury:refresh`), e-Barimt agent
 ../docs/fixes/       numbered SQL changes for the live database
 ```
 
@@ -78,7 +79,12 @@ scripts/             Mercury mirror/import, e-Barimt agent
 SQL lives in `../docs/fixes/NN-*.sql`, run by hand in the Supabase SQL
 editor in number order. Each file says whether to run it before or after
 deploying the matching code. `42-all-pending-in-one.sql` bundles 39-41
-plus the access-rule speed-up and tests itself before it commits.
+plus the access-rule speed-up and tests itself before it commits;
+`43-mercury-replacement.sql` adds order corrections and the delivery
+person's login the same way.
+
+Moving off Mercury: `../docs/mercury-switchover.md` (the steps) and the
+checklist on `/admin/mercury`.
 
 Try a SQL change locally first: `../docs/sql-tests` rebuilds the schema in
 PGlite (in-process Postgres) and checks what each kind of user can see and

@@ -7,7 +7,10 @@ import { fetchAllStores } from "@/lib/stores";
 import { UserForm } from "@/components/admin/user-form";
 import { DeleteUserButton } from "@/components/admin/delete-user-button";
 import { ResetPasswordPanel } from "@/components/admin/reset-password-panel";
+import { RepTools, type RepDistributor } from "@/components/admin/rep-tools";
+import { FIX_43_HINT } from "@/lib/orders/correct";
 import { updateUser } from "../actions";
+import { mercuryManagers } from "../rep-actions";
 
 type Params = Promise<{ id: string }>;
 
@@ -32,6 +35,31 @@ export default async function EditUserPage({ params }: { params: Params }) {
   const isSelf = session?.userId === id;
   const update = updateUser.bind(null, id);
 
+  // A rep's working setup: their stores and (for the delivery person) the
+  // link to their Түгээгч. Only loaded for reps.
+  let repTools: {
+    assigned: number;
+    managers: { name: string; customers: number }[];
+    distributors: RepDistributor[];
+    setupHint: string | null;
+  } | null = null;
+  if (user.role === "rep") {
+    const [assignedRes, managersRes, distRes] = await Promise.all([
+      supabase.from("supermarkets").select("id", { count: "exact", head: true }).eq("assigned_rep_id", id),
+      mercuryManagers(),
+      supabase.from("distributors").select("id, name, phone, active, profile_id").order("name"),
+    ]);
+    repTools = {
+      assigned: assignedRes.count ?? 0,
+      managers: managersRes.managers ?? [],
+      // The link column comes with fix 43; until then say so instead of failing.
+      distributors: ((distRes.data ?? []) as { id: string; name: string; phone: string | null; active: boolean; profile_id: string | null }[])
+        .filter((d) => d.active !== false || d.profile_id === id)
+        .map((d) => ({ id: d.id, name: d.name, phone: d.phone, linkedTo: d.profile_id })),
+      setupHint: distRes.error ? FIX_43_HINT : null,
+    };
+  }
+
   return (
     <div className="max-w-2xl">
       <Link
@@ -55,6 +83,26 @@ export default async function EditUserPage({ params }: { params: Params }) {
         action={update}
         isSelf={isSelf}
       />
+
+      {repTools && (
+        <div className="mt-10 pt-6 border-t">
+          <div className="mb-3">
+            <h2 className="text-[13px] uppercase tracking-[0.08em] font-bold text-muted-foreground">
+              Төлөөлөгчийн тохиргоо
+            </h2>
+            <p className="text-[12px] text-muted-foreground mt-1">
+              Mercury-н оронд вэбээр ажиллахад хэрэгтэй: хариуцах дэлгүүр, хүргэлт.
+            </p>
+          </div>
+          <RepTools
+            userId={user.id}
+            assignedCount={repTools.assigned}
+            managers={repTools.managers}
+            distributors={repTools.distributors}
+            setupHint={repTools.setupHint}
+          />
+        </div>
+      )}
 
       <div className="mt-10 pt-6 border-t">
         <div className="mb-3">

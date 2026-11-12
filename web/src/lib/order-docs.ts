@@ -74,6 +74,11 @@ export type DocFilter =
   /** Every non-cancelled order planned for or shipped on a delivery day. */
   | { deliveryDate: string }
   /**
+   * Sales: orders that went out (out for delivery or delivered) with a
+   * delivery day in this range, inclusive — what accounting books.
+   */
+  | { soldFrom: string; soldTo: string }
+  /**
    * Orders placed between two UB days (inclusive); cancelled only if asked
    * for. Optionally one status or several, and one store.
    */
@@ -117,6 +122,11 @@ export async function loadDocOrders(
         q = q.eq("shipment_id", filter.shipmentId).neq("status", "cancelled");
       } else if ("deliveryDate" in filter) {
         q = q.eq("delivery_date", filter.deliveryDate).neq("status", "cancelled");
+      } else if ("soldFrom" in filter) {
+        q = q
+          .gte("delivery_date", filter.soldFrom)
+          .lte("delivery_date", filter.soldTo)
+          .in("status", ["shipped", "delivered"]);
       } else {
         q = q
           .gte("created_at", ubDayStart(filter.createdFrom))

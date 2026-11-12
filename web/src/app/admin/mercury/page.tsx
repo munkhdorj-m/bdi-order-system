@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Database } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, CircleAlert, Database, Hourglass } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,8 @@ import {
   formatSyncTime,
 } from "@/lib/mercury";
 import { allMercuryEntityStats, type MercuryEntityStats } from "@/lib/mercury-stats";
+import { loadSwitchoverChecks, type SwitchoverCheck } from "@/lib/switchover";
+import { minutesSince } from "@/lib/dispatch";
 
 type SyncRun = {
   started_at: string;
@@ -35,6 +37,15 @@ const STATUS_LABEL: Record<SyncRun["status"], string> = {
   ok: "Амжилттай",
   partial: "Хэсэгчлэн",
   failed: "Амжилтгүй",
+};
+
+/** A copy still "running" after this long was cut off (window closed, power cut). */
+const STALE_RUN_MINUTES = 180;
+
+const CHECK_ICON: Record<SwitchoverCheck["state"], { icon: typeof CheckCircle2; tone: string; label: string }> = {
+  done: { icon: CheckCircle2, tone: "text-emerald-600 dark:text-emerald-400", label: "Бэлэн" },
+  todo: { icon: CircleAlert, tone: "text-amber-600 dark:text-amber-400", label: "Хийх зүйл" },
+  wait: { icon: Hourglass, tone: "text-slate-500 dark:text-slate-400", label: "Гаднаас хамаарна" },
 };
 
 /**
@@ -67,6 +78,19 @@ export default async function MercuryOverviewPage() {
 
   const runs = (runData as SyncRun[] | null) ?? [];
   const lastRun = runs[0];
+  const lastRunCutOff =
+    lastRun?.status === "running" && minutesSince(lastRun.started_at) > STALE_RUN_MINUTES;
+  // The checklist looks at the last copy that actually finished.
+  const lastCopy = runs.find((r) => r.status === "ok" || r.status === "partial");
+  let checks: SwitchoverCheck[] = [];
+  if (!error) {
+    try {
+      checks = await loadSwitchoverChecks(supabase, lastCopy ? (lastCopy.finished_at ?? lastCopy.started_at) : null);
+    } catch {
+      checks = []; // the checklist is a help, never a reason for the page to fail
+    }
+  }
+  const doneCount = checks.filter((c) => c.state === "done").length;
   const syncedAt = (entity: string) => {
     const run = runs.find((r) => r.status !== "running" && r.stats && entity in r.stats);
     return run ? (run.finished_at ?? run.started_at) : null;
@@ -82,10 +106,10 @@ export default async function MercuryOverviewPage() {
   return (
     <div className="max-w-5xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Mercury өгөгдөл</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Mercury-гаас шилжих</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          app.gps.mn-ээс хуулсан бүх өгөгдөл. Зөвхөн харах зориулалттай — энд юу ч өөрчлөгдөхгүй,
-          Mercury болон манай каталог хэвээрээ.
+          Mercury-г унтраахад юу дутуу байгаа, мөн app.gps.mn-ээс хуулсан бүх өгөгдөл. Хуулбар нь зөвхөн
+          харах зориулалттай — эндээс Mercury-д юу ч өөрчлөгдөхгүй.
         </p>
       </div>
 
@@ -100,6 +124,43 @@ export default async function MercuryOverviewPage() {
         </Card>
       ) : (
         <>
+          {checks.length > 0 && (
+            <Card className="mb-6 gap-0 p-0 overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
+                <h2 className="text-[15px] font-bold tracking-tight">Mercury-г унтраахад бэлэн үү?</h2>
+                <span className="text-[12.5px] text-muted-foreground tabular-nums">
+                  <b className="text-foreground">{doneCount}</b> / {checks.length} бэлэн
+                </span>
+              </div>
+              <ul className="divide-y">
+                {checks.map((c) => {
+                  const { icon: Icon, tone, label } = CHECK_ICON[c.state];
+                  return (
+                    <li key={c.key} className="flex gap-3 px-4 py-3">
+                      <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${tone}`} aria-label={label} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13.5px] font-semibold leading-snug">{c.title}</div>
+                        <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">{c.detail}</p>
+                      </div>
+                      {c.href && c.state !== "done" && (
+                        <Link
+                          href={c.href}
+                          className="inline-flex h-9 shrink-0 items-center gap-1 self-center rounded-xl bg-card px-3 text-[12.5px] font-semibold ring-1 ring-border hover:bg-accent/60"
+                        >
+                          {c.linkLabel ?? "Нээх"}
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </Link>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="border-t bg-muted/40 px-4 py-2.5 text-[12px] text-muted-foreground">
+                Шилжих дараалал, өдөр тутмын ажил алхам алхмаар: <code>docs/mercury-switchover.md</code>
+              </div>
+            </Card>
+          )}
+
           <Card className="p-4 mb-6">
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
               <div className="flex items-center gap-2">
@@ -119,7 +180,7 @@ export default async function MercuryOverviewPage() {
                       <AlertTriangle className="h-4 w-4 text-amber-600" />
                     )}
                     <span>Сүүлд хуулсан: {formatSyncTime(lastRun.finished_at ?? lastRun.started_at)}</span>
-                    <Badge variant="outline">{STATUS_LABEL[lastRun.status]}</Badge>
+                    <Badge variant="outline">{lastRunCutOff ? "Тасарсан" : STATUS_LABEL[lastRun.status]}</Badge>
                   </div>
                   {lastRun.date_from && (
                     <div className="text-muted-foreground tabular-nums">

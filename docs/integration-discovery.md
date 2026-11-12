@@ -178,6 +178,29 @@ Mercury's day-to-day screens, now in the website (tested end to end with one tes
 e-Barimt sending waits on BDI's own PosAPI 3.0 registration (today BTGT's PosAPI sends BDI's receipts).
 The public РД → ТТД lookup (`api.ebarimt.mn/api/info/check/getTinInfo`) was checked and works.
 
+### What was still missing to switch Mercury off (2026-11-12, fix 43)
+
+A look at how BDI really uses Mercury (the copy, Aug–Nov 2026): ~400 orders a month from 153 customers;
+one delivery person (who also takes about half the orders on the phone app), the office takes the rest;
+80% on credit. **In about 1 order in 7 the delivered amount differs from the ordered one** (144 of 1,274
+delivered less, 32 more), returns are rare (6), and Mercury holds **no payments at all** — its "Авлага"
+is just accumulated credit sales, receivables live in Dayansoft. So payment collection is not needed to
+replace Mercury; correcting an order is.
+
+| Gap | Now |
+|---|---|
+| An order's lines couldn't be changed after it was placed | Order page → **Засах** (quantity, take off, add a product, reason); a store's own order has its deals worked out again; history under the order; `orders.ordered_total` keeps what was ordered. One database function writes it all or nothing (`replace_order_lines`, fix 43; logic in `web/src/lib/orders/correction.ts` + `correct.ts`) |
+| No "delivered" step per run | Closed run on `/admin/dispatch`: **Хүргэсэн** per order (with undo), **Бүгд хүргэгдсэн**, **Буцаах** for an order that came back |
+| The delivery person had no screen | `/rep/delivery` for a login linked to a Түгээгч (`distributors.profile_id`, fix 43): his runs, quantities handed over, **Хүргэсэн** / **Хүргэж чадсангүй** |
+| Nobody had a rep account; 1,290 stores had no rep | `/admin/users/[id]` for a rep: assign stores in bulk by Mercury's "Менежер", link to a Түгээгч |
+| Products imported from Mercury had stock 0 = "Дууссан", not orderable (28 visible) | `/admin/products` → **Үлдэгдэлгүй** → one figure for everything in view |
+| Dayansoft gets its sales by pulling Mercury | `/admin/shipments` → **Санхүүд өгөх файл (Dayansoft)**: the sales of a range of delivery days in `SalesBatch.xlsx` layout (`web/src/lib/dayansoft.ts`). Not yet tried against a real import |
+| Refreshing from Mercury was two commands and ~20 minutes; every run ended "partial" | `npm run mercury:refresh` (quick copy + what would change; `-- --apply` to apply). The page BDI's account can't open no longer counts as an error; a run that was killed is closed as failed |
+| No picture of what is left to do | `/admin/mercury`: "Mercury-г унтраахад бэлэн үү?" checklist from live data |
+
+Step-by-step for the switch and the daily routine: `docs/mercury-switchover.md`. Still outside BDI's
+hands: BDI's own PosAPI 3.0 for e-Barimt, and the accountant's test of the Dayansoft file.
+
 ### Categories like Mercury (2026-11-05, fix 38)
 
 The website had 7 long categories from the first xlsx; 82 of 138 products (24 visible) had none, and a

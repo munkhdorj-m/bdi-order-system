@@ -3,17 +3,15 @@
 // that dies half-way, and two sends at the same moment. The rule under
 // test: one checkout makes ONE order with its lines written ONCE.
 //
-// The writer talks to Supabase through a query builder; `fakeAdmin` below
-// answers the handful of calls it makes with real SQL on the local
-// database, so defaults, triggers and constraints are the real ones.
+// ORDER_WRITER=<file> tries another version of the writer against the
+// same checks (used to prove the checks catch a broken one).
 import fs from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { makeDb, DOCS } from "./harness.mjs";
 import { ID, seed } from "./seed.mjs";
-
-const WEB = path.resolve(DOCS, "..", "web");
+import { fakeAdmin, KILLED } from "./fake-supabase.mjs";
+import { loadTs } from "./load-ts.mjs";
 
 let failures = 0;
 function check(name, cond, detail = "") {
@@ -22,177 +20,6 @@ function check(name, cond, detail = "") {
     failures++;
     console.log("  FAIL " + name + (detail ? "  -> " + detail : ""));
   }
-}
-
-// ---------------------------------------------------------------- the writer
-function loadWriter() {
-  const ts = createRequire(path.join(WEB, "package.json"))("typescript");
-  // ORDER_WRITER=<file> tries another version of the writer against the same checks.
-  const file = process.env.ORDER_WRITER ?? path.join(WEB, "src", "lib", "orders", "write.ts");
-  let src = fs.readFileSync(file, "utf8");
-  const swaps = [
-    ['import "server-only";', ""],
-    ['import { createAdminClient } from "@/lib/supabase/admin";', "const createAdminClient = () => globalThis.__bdiAdmin;"],
-  ];
-  for (const [from, to] of swaps) {
-    if (!src.includes(from)) throw new Error("write.ts no longer has: " + from);
-    src = src.replace(from, to);
-  }
-  const js = ts.transpileModule(src, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  const mod = { exports: {} };
-  new Function("exports", "module", "require", js)(mod.exports, mod, createRequire(import.meta.url));
-  return mod.exports;
-}
-
-// ------------------------------------------------- a Supabase-shaped client
-/** Thrown by a hook to play "the server was killed right here". */
-const KILLED = { killed: true };
-
-function fakeAdmin(db, hooks) {
-  const run = async (op, table, exec) => {
-    try {
-      await hooks.before?.(op, table);
-      const data = await exec();
-      await hooks.after?.(op, table);
-      return { data, error: null };
-    } catch (e) {
-      if (e === KILLED) throw e;
-      return { data: null, error: { message: String(e?.message ?? e), code: e?.code ?? "XX000" } };
-    }
-  };
-
-  /** "id, order_number, order_items(count)" -> SQL select list (alias t). */
-  const selectList = (cols) =>
-    cols
-      .split(",")
-      .map((c) => c.trim())
-      .map((c) =>
-        c === "order_items(count)"
-          ? `(select json_build_array(json_build_object('count', count(*)::int)) from public.order_items i where i.order_id = t.id) as order_items`
-          : c === "*"
-            ? "t.*"
-            : `t."${c}"`,
-      )
-      .join(", ");
-
-  class Query {
-    constructor(table) {
-      this.table = table;
-      this.op = "select";
-      this.cols = "*";
-      this.returning = null;
-      this.filters = [];
-      this.mode = "many";
-      this.max = null;
-    }
-    select(cols = "*") {
-      if (this.op === "select") this.cols = cols;
-      else this.returning = cols;
-      return this;
-    }
-    insert(values) {
-      this.op = "insert";
-      this.values = values;
-      return this;
-    }
-    update(values) {
-      this.op = "update";
-      this.values = values;
-      return this;
-    }
-    delete() {
-      this.op = "delete";
-      return this;
-    }
-    eq(col, value) {
-      this.filters.push([col, "=", value]);
-      return this;
-    }
-    lt(col, value) {
-      this.filters.push([col, "<", value]);
-      return this;
-    }
-    limit(n) {
-      this.max = n;
-      return this;
-    }
-    single() {
-      this.mode = "single";
-      return this;
-    }
-    maybeSingle() {
-      this.mode = "maybe";
-      return this;
-    }
-    then(resolve, reject) {
-      return this.exec().then(resolve, reject);
-    }
-
-    where(params) {
-      if (this.filters.length === 0) return "";
-      return (
-        " where " +
-        this.filters
-          .map(([col, op, value]) => {
-            params.push(value);
-            return `t."${col}" ${op} $${params.length}`;
-          })
-          .join(" and ")
-      );
-    }
-
-    async exec() {
-      const t = `public."${this.table}"`;
-      const res = await run(this.op, this.table, async () => {
-        const params = [];
-        let sql;
-        if (this.op === "select") {
-          sql = `select row_to_json(x) as j from (select ${selectList(this.cols)} from ${t} t${this.where(params)}${this.max ? ` limit ${this.max}` : ""}) x`;
-        } else if (this.op === "insert") {
-          // Like the API: only the keys that were sent are written, the rest keep their defaults.
-          const rows = JSON.parse(JSON.stringify(Array.isArray(this.values) ? this.values : [this.values]));
-          const keys = Object.keys(rows[0]).map((k) => `"${k}"`).join(", ");
-          params.push(JSON.stringify(rows));
-          const ins = `insert into ${t} (${keys}) select ${keys} from json_populate_recordset(null::${t}, $1::json) returning *`;
-          sql = this.returning
-            ? `with w as (${ins}) select row_to_json(x) as j from (select ${selectList(this.returning)} from w t) x`
-            : `with w as (${ins}) select count(*) from w`;
-        } else if (this.op === "update") {
-          const row = JSON.parse(JSON.stringify(this.values));
-          const keys = Object.keys(row).map((k) => `"${k}"`).join(", ");
-          params.push(JSON.stringify(row));
-          const upd = `update ${t} t set (${keys}) = (select ${keys} from json_populate_record(null::${t}, $1::json))${this.where(params)} returning *`;
-          sql = this.returning
-            ? `with w as (${upd}) select row_to_json(x) as j from (select ${selectList(this.returning)} from w t) x`
-            : `with w as (${upd}) select count(*) from w`;
-        } else {
-          sql = `delete from ${t} t${this.where(params)}`;
-        }
-        const r = await db.query(sql, params);
-        if (this.op !== "select" && !this.returning) return null;
-        const rows = r.rows.map((x) => x.j);
-        if (this.mode === "many") return rows;
-        if (rows.length > 1 || (rows.length === 0 && this.mode === "single")) {
-          const e = new Error("JSON object requested, multiple (or no) rows returned");
-          e.code = "PGRST116";
-          throw e;
-        }
-        return rows[0] ?? null;
-      });
-      return res;
-    }
-  }
-
-  return {
-    from: (table) => new Query(table),
-    rpc: (fn) =>
-      run("rpc", fn, async () => {
-        const r = await db.query(`select public."${fn}"() as v`);
-        return r.rows[0].v;
-      }),
-  };
 }
 
 // ------------------------------------------------------------------ helpers
@@ -248,7 +75,7 @@ async function scenarios(db, label) {
   console.log(`\n== ${label} ==`);
   const hooks = {};
   globalThis.__bdiAdmin = fakeAdmin(db, hooks);
-  const { writeOrder, duplicateInfo } = loadWriter();
+  const { writeOrder, duplicateInfo } = loadTs(process.env.ORDER_WRITER ?? "lib/orders/write.ts");
   const calm = () => {
     hooks.before = undefined;
     hooks.after = undefined;

@@ -3,12 +3,54 @@
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { adminGuardError } from "@/lib/auth";
+import { adminGuardError, getSession } from "@/lib/auth";
 import { NEXT_STATUS, type OrderStatus } from "@/lib/order-status";
 import { LIVE_STATUSES } from "@/lib/ebarimt";
-import { notifyOrderStatus } from "@/lib/orders/status-notify";
+import { notifyOrderCorrected, notifyOrderStatus } from "@/lib/orders/status-notify";
+import { correctOrder } from "@/lib/orders/correct";
+import type { LineChange } from "@/lib/orders/correction";
 
 type Result = { error?: string };
+
+/**
+ * Correct an order's lines after it was placed — other quantities at
+ * delivery, a product taken off or added (Mercury's "ordered vs
+ * delivered"). Any status but cancelled; an order whose e-Barimt is sent
+ * or waiting must have the receipt returned first. The store is told.
+ */
+export async function correctOrderLines(input: {
+  orderId: string;
+  changes: LineChange[];
+  reason: string | null;
+  expectedUpdatedAt: string | null;
+}): Promise<Result & { changed?: boolean }> {
+  const guardErr = await adminGuardError();
+  if (guardErr) return { error: guardErr };
+  const session = await getSession();
+  if (!session) return { error: "Нэвтэрнэ үү." };
+
+  const r = await correctOrder({
+    orderId: input.orderId,
+    changes: input.changes,
+    reason: input.reason,
+    actorId: session.userId,
+    allowedStatuses: ["pending", "confirmed", "shipped", "delivered"],
+    expectedUpdatedAt: input.expectedUpdatedAt,
+  });
+  if ("error" in r) return { error: r.error };
+  if (r.changed) {
+    after(() => notifyOrderCorrected(input.orderId, r.totalBefore, r.totalAfter));
+    revalidatePath("/admin/orders");
+    revalidatePath(`/admin/orders/${input.orderId}`);
+    revalidatePath("/admin/dispatch");
+    revalidatePath("/admin/shipments");
+    revalidatePath("/admin/ebarimt");
+    revalidatePath("/admin");
+    revalidatePath(`/orders/${input.orderId}`);
+    revalidatePath(`/rep/orders/${input.orderId}`);
+  }
+  return { changed: r.changed };
+}
 
 /**
  * One step forward. Confirmed orders don't go to "shipped" here: they ship

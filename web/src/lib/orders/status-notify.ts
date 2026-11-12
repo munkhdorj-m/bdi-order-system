@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notify } from "@/lib/notify";
+import { formatMnt } from "@/lib/format";
 import { STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
 
 const BODY: Partial<Record<OrderStatus, string>> = {
@@ -11,14 +12,19 @@ const BODY: Partial<Record<OrderStatus, string>> = {
   pending: "Захиалга дахин нээгдлээ.",
 };
 
+type Message = { title: string; body: string };
+
 /**
- * Tell the people an order belongs to that its status changed: every
- * active account of the store (also for orders a rep or the office
- * entered — before, only whoever placed it heard anything) and the rep
- * who entered it. Office staff aren't told about their own changes.
- * Meant for after(); never throws.
+ * Send one message per order to the people it belongs to: every active
+ * account of the store (also for orders a rep or the office entered) and
+ * the rep who entered it. Office staff aren't told about their own
+ * changes. Never throws.
  */
-export async function notifyOrderStatus(orderIds: string[], status: OrderStatus): Promise<void> {
+async function tellOrderPeople(
+  orderIds: string[],
+  message: (order: { id: string; order_number: string }) => Message,
+  label: string,
+): Promise<void> {
   try {
     const ids = [...new Set(orderIds)];
     if (ids.length === 0) return;
@@ -55,15 +61,9 @@ export async function notifyOrderStatus(orderIds: string[], status: OrderStatus)
       const to = new Map<string, string>(); // user → link that opens the order for them
       for (const id of buyersOf.get(o.supermarket_id as string) ?? []) to.set(id, `/orders/${o.id}`);
       if (o.placed_by && roleOf.get(o.placed_by as string) === "rep") to.set(o.placed_by as string, `/rep/orders/${o.id}`);
+      const m = message({ id: o.id as string, order_number: o.order_number as string });
       for (const [user_id, href] of to) {
-        jobs.push({
-          user_id,
-          kind: "order_status",
-          title: `${o.order_number} · ${STATUS_LABELS[status]}`,
-          body: BODY[status] ?? `Шинэ төлөв: ${STATUS_LABELS[status]}`,
-          href,
-          order_id: o.id as string,
-        });
+        jobs.push({ user_id, kind: "order_status", title: m.title, body: m.body, href, order_id: o.id as string });
       }
     }
 
@@ -74,6 +74,40 @@ export async function notifyOrderStatus(orderIds: string[], status: OrderStatus)
     };
     await Promise.all(Array.from({ length: Math.min(6, jobs.length) }, worker));
   } catch (e) {
-    console.error("[notify] order status:", e);
+    console.error(`[notify] ${label}:`, e);
   }
+}
+
+/**
+ * Tell the people an order belongs to that its status changed.
+ * Meant for after(); never throws.
+ */
+export async function notifyOrderStatus(orderIds: string[], status: OrderStatus): Promise<void> {
+  await tellOrderPeople(
+    orderIds,
+    (o) => ({
+      title: `${o.order_number} · ${STATUS_LABELS[status]}`,
+      body: BODY[status] ?? `Шинэ төлөв: ${STATUS_LABELS[status]}`,
+    }),
+    "order status",
+  );
+}
+
+/**
+ * Tell the store that BDI corrected its order (quantities changed at
+ * delivery, a product added or taken off), with the old and new amount.
+ * Meant for after(); never throws.
+ */
+export async function notifyOrderCorrected(orderId: string, totalBefore: number, totalAfter: number): Promise<void> {
+  await tellOrderPeople(
+    [orderId],
+    (o) => ({
+      title: `${o.order_number} · Захиалга шинэчлэгдлээ`,
+      body:
+        Math.round(totalBefore) === Math.round(totalAfter)
+          ? "Барааны жагсаалт өөрчлөгдлөө."
+          : `Төлөх дүн ${formatMnt(totalBefore)} → ${formatMnt(totalAfter)} боллоо.`,
+    }),
+    "order corrected",
+  );
 }

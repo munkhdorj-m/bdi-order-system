@@ -1,9 +1,9 @@
 {
   // Type-check the source only. The main tsconfig also includes Next's
-  // generated files under .next/, which a running dev server rewrites (and
-  // can leave half-written), making `tsc` fail for reasons unrelated to the
-  // code. Use: npm run typecheck
+  // generated files under .next/ (next-env.d.ts imports one of them), which
+  // a running dev server rewrites and can leave half-written — `tsc` then
+  // fails for reasons unrelated to the code. Use: npm run typecheck
   "extends": "./tsconfig.json",
-  "include": ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx"],
+  "include": ["typecheck-env.d.ts", "src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", ".next"]
 }

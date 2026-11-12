@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ImageOff, Plus, Search, Settings2 } from "lucide-react";
+import { ImageOff, PackageX, Plus, Search, Settings2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { getCategories, type CategoryRow } from "@/lib/categories";
@@ -15,6 +15,7 @@ import { formatMnt } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ProductCategorySelect } from "@/components/admin/product-category-select";
+import { StockFillBar } from "@/components/admin/stock-fill-bar";
 import { cn } from "@/lib/utils";
 
 type SearchParams = Promise<{
@@ -22,6 +23,7 @@ type SearchParams = Promise<{
   category?: string;
   status?: string;
   photo?: string;
+  stock?: string;
 }>;
 
 type ProductRow = {
@@ -39,7 +41,7 @@ type ProductRow = {
 
 type Status = "all" | "visible" | "hidden";
 
-type Filters = { q: string; category: string; status: Status; photo: boolean };
+type Filters = { q: string; category: string; status: Status; photo: boolean; noStock: boolean };
 
 function buildHref(f: Partial<Filters>) {
   const sp = new URLSearchParams();
@@ -47,6 +49,7 @@ function buildHref(f: Partial<Filters>) {
   if (f.category) sp.set("category", f.category);
   if (f.status && f.status !== "all") sp.set("status", f.status);
   if (f.photo) sp.set("photo", "missing");
+  if (f.noStock) sp.set("stock", "out");
   const qs = sp.toString();
   return qs ? `/admin/products?${qs}` : "/admin/products";
 }
@@ -55,8 +58,9 @@ const nameCollator = new Intl.Collator("mn", { numeric: true, sensitivity: "base
 
 /**
  * Products grouped by category — the same grouping stores see. Filter by
- * category, visibility or missing photo; move a product to another
- * category straight from its card.
+ * category, visibility, missing photo or no stock (with one stock figure
+ * for everything in view); move a product to another category straight
+ * from its card.
  */
 export default async function AdminProductsPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
@@ -65,6 +69,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
     category: sp.category ?? "",
     status: sp.status === "visible" || sp.status === "hidden" ? sp.status : "all",
     photo: sp.photo === "missing",
+    noStock: sp.stock === "out",
   };
 
   const supabase = await createClient();
@@ -95,7 +100,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
     const hay = searchNormalize(`${p.name} ${p.brand ?? ""} ${p.sku} ${p.internal_code ?? ""}`);
     return tokens.every((t) => hay.includes(t));
   };
-  const matchesPhoto = (p: ProductRow) => !filters.photo || !p.image_url;
+  const matchesPhoto = (p: ProductRow) => (!filters.photo || !p.image_url) && (!filters.noStock || p.stock <= 0);
   const matchesCategory = (p: ProductRow) =>
     !filters.category ||
     (filters.category === "none" ? !p.category_id || !catById.has(p.category_id) : p.category_id === filters.category);
@@ -111,6 +116,8 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
     hidden: forStatusChips.filter((p) => !p.active).length,
   };
   const missingPhotos = all.filter((p) => p.active && !p.image_url).length;
+  // Visible to stores but not orderable: stock 0 reads "Дууссан" in the catalog.
+  const outOfStock = all.filter((p) => p.active && p.stock <= 0).length;
   const countIn = (id: string) => forCategoryChips.filter((p) => p.category_id === id).length;
   const uncategorized = forCategoryChips.filter((p) => !p.category_id || !catById.has(p.category_id)).length;
 
@@ -126,7 +133,9 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
     s.items.sort((a, b) => Number(b.active) - Number(a.active) || nameCollator.compare(a.name, b.name));
   }
 
-  const filtered = Boolean(filters.q || filters.category || filters.status !== "all" || filters.photo);
+  const filtered = Boolean(
+    filters.q || filters.category || filters.status !== "all" || filters.photo || filters.noStock,
+  );
 
   return (
     <div className="w-full">
@@ -167,6 +176,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
           {filters.category && <input type="hidden" name="category" value={filters.category} />}
           {filters.status !== "all" && <input type="hidden" name="status" value={filters.status} />}
           {filters.photo && <input type="hidden" name="photo" value="missing" />}
+          {filters.noStock && <input type="hidden" name="stock" value="out" />}
         </form>
 
         <div className="flex flex-wrap items-center gap-1.5">
@@ -185,6 +195,10 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
           <Chip href={buildHref({ ...filters, photo: !filters.photo })} active={filters.photo} tone="amber">
             <ImageOff className="h-3.5 w-3.5" />
             Зураггүй <Count n={missingPhotos} />
+          </Chip>
+          <Chip href={buildHref({ ...filters, noStock: !filters.noStock })} active={filters.noStock} tone="amber">
+            <PackageX className="h-3.5 w-3.5" />
+            Үлдэгдэлгүй <Count n={outOfStock} />
           </Chip>
         </div>
 
@@ -215,6 +229,10 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
 
       {error && (
         <Card className="mb-4 border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">{error.message}</Card>
+      )}
+
+      {filters.noStock && rows.length > 0 && (
+        <StockFillBar productIds={rows.map((p) => p.id)} visibleToStores={rows.filter((p) => p.active).length} />
       )}
 
       {rows.length === 0 ? (

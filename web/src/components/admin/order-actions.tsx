@@ -60,7 +60,7 @@ export function OrderActions({ orderId, status, deliveryDate }: Props) {
   if (status === "delivered") {
     return (
       <p className="text-sm text-muted-foreground">
-        Энэ захиалга хүргэгдсэн, өөрчлөх боломжгүй.
+        Хүргэгдсэн. Тоо зөрсөн эсвэл буцаалт гарсан бол барааны «Засах»-аар засна.
       </p>
     );
   }
@@ -125,7 +125,7 @@ export function OrderActions({ orderId, status, deliveryDate }: Props) {
               open={confirming === "deliver"}
               onOpenChange={(o) => setConfirming(o ? "deliver" : null)}
               title="Хүргэгдсэн гэж тэмдэглэх үү?"
-              description="Дэлгүүрт мэдэгдэл очно. Хүргэгдсэн захиалгыг дараа нь өөрчлөх боломжгүй."
+              description="Дэлгүүрт мэдэгдэл очно. Хүргэсэн тоо захиалснаас зөрсөн бол эхлээд барааг «Засах»-аар засна уу."
               confirmLabel="Хүргэгдсэн"
               pending={pending}
               onConfirm={() => run(() => advanceOrderStatus(orderId, status), `${STATUS_LABELS[next]} боллоо`)}

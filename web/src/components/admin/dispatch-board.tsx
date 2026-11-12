@@ -5,14 +5,17 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
+  CheckCheck,
   FileSpreadsheet,
   Loader2,
   Lock,
   LockOpen,
+  PackageCheck,
   Plus,
   Printer,
   Trash2,
   Truck,
+  Undo2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -33,9 +36,13 @@ import {
   closeShipment,
   createShipment,
   deleteShipment,
+  markDelivered,
+  markShipmentDelivered,
   reopenShipment,
+  returnToQueue,
   setShipmentDistributor,
   unassignOrders,
+  undoDelivered,
 } from "@/app/admin/dispatch/actions";
 import { addDays, formatDateTimeUb, SHIPMENT_STATUS_LABELS, ubDayOf, type ShipmentStatus } from "@/lib/dispatch";
 import { WEEKDAY_LABELS_MN, type Weekday } from "@/lib/delivery";
@@ -94,9 +101,10 @@ export type BoardDistributor = { id: string; name: string; phone: string | null;
 type ActionResult = { error?: string; count?: number; id?: string };
 
 type Confirm =
-  | { kind: "close" | "reopen" | "delete" }
+  | { kind: "close" | "reopen" | "delete" | "deliverAll" }
   | { kind: "assignAll"; ids: string[] }
   | { kind: "unassign"; ids: string[] }
+  | { kind: "return"; ids: string[]; store: string }
   | null;
 
 const NEW_DISTRIBUTOR = "__new__";
@@ -135,6 +143,8 @@ function OrderLine({
   checked,
   onCheck,
   onRemove,
+  onDelivered,
+  onReturn,
   busy,
 }: {
   o: BoardOrder;
@@ -142,6 +152,10 @@ function OrderLine({
   checked?: boolean;
   onCheck?: (v: boolean) => void;
   onRemove?: () => void;
+  /** The run has left: this order reached the store. */
+  onDelivered?: () => void;
+  /** The run has left: this order came back undelivered. */
+  onReturn?: () => void;
   busy: boolean;
 }) {
   const planned = o.delivery_date;
@@ -202,6 +216,26 @@ function OrderLine({
           >
             <X className="h-3.5 w-3.5" />
             Хасах
+          </Button>
+        )}
+        {onDelivered && (
+          <Button type="button" size="sm" className="h-10 px-2.5 sm:h-8" onClick={onDelivered} disabled={busy}>
+            <PackageCheck className="h-3.5 w-3.5" />
+            Хүргэсэн
+          </Button>
+        )}
+        {onReturn && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-10 px-2.5 text-muted-foreground sm:h-8"
+            onClick={onReturn}
+            disabled={busy}
+            title="Хүргэж чадаагүй — дараагийн ачилтад оруулахаар буцаах"
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+            Буцаах
           </Button>
         )}
       </div>
@@ -277,6 +311,10 @@ export function DispatchBoard({
   const pickedRunOrders = selectedOrders.filter((o) => pickedOnRun.has(o.id));
   const filtered = dayFilter !== ALL || districtFilter !== ALL;
 
+  // Once the run has left: what is still on the road, and what has arrived.
+  const outForDelivery = selectedOrders.filter((o) => o.status === "shipped");
+  const deliveredCount = selectedOrders.filter((o) => o.status === "delivered").length;
+
   function href(next: { date?: string; shipment?: string | null }) {
     const q = new URLSearchParams({ date: next.date ?? date });
     const sh = next.shipment === undefined ? selectedId : next.shipment;
@@ -336,9 +374,33 @@ export function DispatchBoard({
     );
   }
 
+  function delivered(ids: string[]) {
+    run(
+      () => markDelivered(ids),
+      (r) =>
+        // One tap, no question asked — so a slip can be taken straight back.
+        toast.success(r.count === 1 ? "Хүргэгдсэн гэж тэмдэглэлээ" : `${r.count} захиалга хүргэгдсэн боллоо`, {
+          action: {
+            label: "Буцаах",
+            onClick: () => run(() => undoDelivered(ids), () => toast.success("Буцаалаа — хүргэлтэнд яваа хэвээр")),
+          },
+        }),
+    );
+  }
+
   function confirmNow() {
     if (!confirm || !selected) return;
     switch (confirm.kind) {
+      case "deliverAll":
+        return run(
+          () => markShipmentDelivered(selected.id),
+          (r) => toast.success(`${r.count} захиалга хүргэгдсэн боллоо`),
+        );
+      case "return":
+        return run(
+          () => returnToQueue(confirm.ids),
+          () => toast.success("Захиалга «Хуваарлагдаагүй» жагсаалтад буцлаа"),
+        );
       case "close":
         return run(
           () => closeShipment(selected.id),
@@ -383,6 +445,18 @@ export function DispatchBoard({
       title: `${confirm && "ids" in confirm ? confirm.ids.length : 0} захиалгыг ачилтаас хасах уу?`,
       description: "Захиалгууд «Хуваарлагдаагүй» жагсаалт руу буцна.",
       label: "Тийм, хасах",
+    },
+    deliverAll: {
+      title: `Ачилт №${selected?.shipment_no ?? ""}-ийн ${outForDelivery.length} захиалгыг хүргэгдсэн болгох уу?`,
+      description:
+        "Дэлгүүрүүдэд мэдэгдэл очно. Хүргэж чадаагүй захиалга байвал эхлээд түүнийг «Буцаах» дарна уу. Тоо зөрсөн бол захиалгаа нээж «Засах»-аар засна.",
+      label: "Тийм, бүгд хүргэгдсэн",
+    },
+    return: {
+      title: `«${confirm && "store" in confirm ? confirm.store : ""}» захиалгыг буцаах уу?`,
+      description:
+        "Хүргэж чадаагүй захиалга «Хуваарлагдаагүй» жагсаалтад буцаж, дараагийн ачилтад оруулах боломжтой болно.",
+      label: "Тийм, буцаах",
     },
   };
   const dialog = confirm ? confirmText[confirm.kind] : null;
@@ -664,6 +738,14 @@ export function DispatchBoard({
                   <span>
                     <b className="text-foreground">{formatMnt(selected.amount)}</b>
                   </span>
+                  {!open && hasOrders && (
+                    <span>
+                      <b className="text-foreground">
+                        {deliveredCount}/{selectedOrders.length}
+                      </b>{" "}
+                      хүргэгдсэн
+                    </span>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {hasOrders ? (
@@ -728,10 +810,18 @@ export function DispatchBoard({
                         </Button>
                       </>
                     ) : (
-                      <Button type="button" size="sm" variant="outline" onClick={() => setConfirm({ kind: "reopen" })}>
-                        <LockOpen className="h-4 w-4" />
-                        Буцааж нээх
-                      </Button>
+                      <>
+                        <Button type="button" size="sm" variant="outline" onClick={() => setConfirm({ kind: "reopen" })}>
+                          <LockOpen className="h-4 w-4" />
+                          Буцааж нээх
+                        </Button>
+                        {outForDelivery.length > 0 && (
+                          <Button type="button" size="sm" disabled={busy} onClick={() => setConfirm({ kind: "deliverAll" })}>
+                            <CheckCheck className="h-4 w-4" />
+                            Бүгд хүргэгдсэн
+                          </Button>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -762,6 +852,12 @@ export function DispatchBoard({
                           : undefined
                       }
                       onRemove={open ? () => unassign([o.id]) : undefined}
+                      onDelivered={!open && o.status === "shipped" ? () => delivered([o.id]) : undefined}
+                      onReturn={
+                        !open && o.status === "shipped"
+                          ? () => setConfirm({ kind: "return", ids: [o.id], store: o.store.name })
+                          : undefined
+                      }
                     />
                   ))}
                 </ul>

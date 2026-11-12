@@ -22,6 +22,7 @@ import {
   type ShipmentStatus,
 } from "@/lib/dispatch";
 import { formatMnt } from "@/lib/format";
+import { DayansoftExport } from "@/components/admin/dayansoft-export";
 
 type SearchParams = Promise<{ from?: string; to?: string }>;
 
@@ -135,6 +136,11 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Se
           </Button>
         </form>
       </Card>
+
+      {/* The sales file the accountant imports into Dayansoft (instead of its pull from Mercury). */}
+      <div className="mb-4">
+        <DayansoftExport key={`${from}:${to}`} from={from} to={to} />
+      </div>
 
       {error || ordersError ? (
         <Card className="p-6 text-sm">
