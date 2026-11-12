@@ -434,17 +434,23 @@ const PAGE_SIZE = 100;
 const MAX_ROWS = 500;
 
 /**
- * One order = one <tr>, laid out twice by CSS: a stacked card on phones
- * (the row becomes a small grid), a normal table row from `sm` up — so
- * columns size themselves and line up. (Rendering a card list AND a table
- * and hiding one of them doubled the page for every order.)
+ * One order = one <tr>, laid out twice by CSS: a stacked card where the
+ * list is narrow (the row becomes a small grid), a normal table row where
+ * it is at least 59rem wide — the 800px of fixed columns plus a store name
+ * that is still readable — so columns size themselves and line up. (Rendering a card list AND a table and hiding one of them doubled
+ * the page for every order.)
+ *
+ * The switch follows the LIST's width, not the screen's: the table's fixed
+ * columns add up to 800px, and the sidebar takes 240px on wide screens. At
+ * the `sm` screen breakpoint the table was wider than its box on anything
+ * between a tablet and a small laptop, and its last column was cut off.
  */
 const ROW =
   "relative grid grid-cols-[2.75rem_minmax(0,1fr)_auto] gap-x-2 gap-y-1 border-b border-border px-1.5 py-2.5 " +
-  "transition-colors last:border-b-0 even:bg-muted/45 hover:bg-accent/70 sm:table-row sm:p-0";
+  "transition-colors last:border-b-0 even:bg-muted/45 hover:bg-accent/70 @min-[59rem]:table-row @min-[59rem]:p-0";
 const TH =
   "h-10 px-3 text-left align-middle text-[11px] font-bold uppercase tracking-[0.08em] whitespace-nowrap text-foreground/70";
-const TD = "block sm:table-cell sm:px-3 sm:py-2 sm:align-middle";
+const TD = "block @min-[59rem]:table-cell @min-[59rem]:px-3 @min-[59rem]:py-2 @min-[59rem]:align-middle";
 
 async function OrderList({
   status,
@@ -598,7 +604,7 @@ async function OrderList({
 
       {/* Day-grouped list: a heading per day (label, count, total), then
           its orders. */}
-      <div className="space-y-5">
+      <div className="@container space-y-5">
         {groups.map((g, gi) => (
           <section key={g.key}>
             <div className="mb-2 flex items-center gap-2 px-1">
@@ -614,8 +620,8 @@ async function OrderList({
             <div className="overflow-hidden rounded-2xl bg-card shadow-card ring-1 ring-border/80 dark:ring-border">
               {/* Fixed column widths, so the columns line up from one day's
                   table to the next; the store name takes what is left. */}
-              <table className="block w-full text-sm sm:table sm:table-fixed">
-                <colgroup className="hidden sm:table-column-group">
+              <table className="block w-full text-sm @min-[59rem]:table @min-[59rem]:table-fixed">
+                <colgroup className="hidden @min-[59rem]:table-column-group">
                   <col className="w-11" />
                   <col className="w-[9.75rem]" />
                   <col />
@@ -627,7 +633,7 @@ async function OrderList({
                 {/* Column titles once, on the first day; the columns below
                     line up with them. */}
                 {gi === 0 && (
-                  <thead className="hidden bg-muted sm:table-header-group">
+                  <thead className="hidden bg-muted @min-[59rem]:table-header-group">
                     <tr className="border-b border-border">
                       <th />
                       <th className={TH}>Дугаар</th>
@@ -639,12 +645,12 @@ async function OrderList({
                     </tr>
                   </thead>
                 )}
-                <tbody className="block sm:table-row-group">
+                <tbody className="block @min-[59rem]:table-row-group">
                   {g.rows.map((o) => {
                     const isCancelled = o.status === "cancelled";
                     return (
                       <tr key={o.id} className={`${ROW} ${isCancelled ? "opacity-70" : ""}`}>
-                        <td className={`${TD} relative z-[1] col-start-1 row-span-4 row-start-1 sm:w-11 sm:py-0.5 sm:pl-2 sm:pr-0`}>
+                        <td className={`${TD} relative z-[1] col-start-1 row-span-4 row-start-1 @min-[59rem]:w-11 @min-[59rem]:py-0.5 @min-[59rem]:pl-2 @min-[59rem]:pr-0`}>
                           <SelectOrderCheckbox id={o.id} label={`${o.order_number} сонгох`} />
                         </td>
                         <td className={`${TD} col-start-2 row-start-1 whitespace-nowrap`}>
@@ -653,7 +659,7 @@ async function OrderList({
                               the number does. */}
                           <Link
                             href={`/admin/orders/${o.id}`}
-                            className="font-mono text-sm font-medium after:absolute after:inset-0 hover:underline sm:after:hidden"
+                            className="font-mono text-sm font-medium after:absolute after:inset-0 hover:underline @min-[59rem]:after:hidden"
                           >
                             {o.order_number}
                           </Link>
@@ -671,14 +677,14 @@ async function OrderList({
                           <OrderStatusPill status={o.status} />
                         </td>
                         <td
-                          className={`${TD} col-start-3 row-start-1 justify-self-end whitespace-nowrap font-semibold tabular-nums sm:text-right sm:font-medium ${isCancelled ? "line-through text-muted-foreground" : ""}`}
+                          className={`${TD} col-start-3 row-start-1 justify-self-end whitespace-nowrap font-semibold tabular-nums @min-[59rem]:text-right @min-[59rem]:font-medium ${isCancelled ? "line-through text-muted-foreground" : ""}`}
                         >
                           {formatMnt(amountOf(o))}
                         </td>
-                        <td className={`${TD} col-start-2 row-start-4 whitespace-nowrap text-xs text-muted-foreground tabular-nums sm:text-[13px]`}>
+                        <td className={`${TD} col-start-2 row-start-4 whitespace-nowrap text-xs text-muted-foreground tabular-nums @min-[59rem]:text-[13px]`}>
                           {formatShortDate(o.created_at)}
                         </td>
-                        <td className={`${TD} relative z-[1] col-start-3 row-span-3 row-start-2 self-end justify-self-end sm:py-1 sm:text-right`}>
+                        <td className={`${TD} relative z-[1] col-start-3 row-span-3 row-start-2 self-end justify-self-end @min-[59rem]:py-1 @min-[59rem]:text-right`}>
                           <QuickAdvanceButton
                             orderId={o.id}
                             orderNumber={o.order_number}

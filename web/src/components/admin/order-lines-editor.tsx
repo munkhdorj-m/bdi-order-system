@@ -34,6 +34,90 @@ type Draft = {
 const REASONS = ["Хүргэлтээр дутуу", "Дэлгүүр өөрчилсөн", "Нөөц дууссан", "Буцаалт", "Алдаа зассан"];
 
 /**
+ * − [n] + and take-off / put-back for one line. `roomy` is the phone
+ * size: 44px targets, on a row of their own under the product's name.
+ */
+function QtyStepper({
+  row,
+  onChange,
+  disabled,
+  roomy = false,
+}: {
+  row: Draft;
+  onChange: (productId: string, qty: number) => void;
+  disabled: boolean;
+  roomy?: boolean;
+}) {
+  const box = roomy ? "size-11" : "h-9 w-9";
+  const off = row.qty === 0;
+  return (
+    <div className={cn("flex items-center gap-1", roomy ? "justify-start gap-1.5" : "justify-center")}>
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className={box}
+        onClick={() => onChange(row.product_id, row.qty - 1)}
+        disabled={disabled || row.qty <= 0}
+        aria-label={`${row.name} нэгээр хасах`}
+      >
+        <Minus className="h-3.5 w-3.5" />
+      </Button>
+      <Input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        step={1}
+        value={off ? "" : row.qty}
+        placeholder="0"
+        onChange={(e) => onChange(row.product_id, Number(e.target.value))}
+        disabled={disabled}
+        className={cn("text-center tabular-nums", roomy ? "h-11 w-20 font-semibold" : "h-9 w-16")}
+        aria-label={`${row.name} тоо`}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className={box}
+        onClick={() => onChange(row.product_id, row.qty + 1)}
+        disabled={disabled}
+        aria-label={`${row.name} нэгээр нэмэх`}
+      >
+        <Plus className="h-3.5 w-3.5" />
+      </Button>
+      {off ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={cn(box, "text-muted-foreground")}
+          onClick={() => onChange(row.product_id, row.was)}
+          disabled={disabled}
+          aria-label={`${row.name} буцааж оруулах`}
+          title="Буцааж оруулах"
+        >
+          <Undo2 className="h-4 w-4" />
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={cn(box, "text-muted-foreground")}
+          onClick={() => onChange(row.product_id, 0)}
+          disabled={disabled}
+          aria-label={`${row.name} хасах`}
+          title="Захиалгаас хасах"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
  * The order's lines, with "Засах": change quantities, take a product off
  * or add one after the order was placed (Mercury's delivered-vs-ordered).
  * Saved in one step by the server, which also keeps the history.
@@ -166,7 +250,7 @@ export function OrderLinesEditor({
 
   return (
     <div className="rounded-2xl bg-card ring-1 ring-border overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-border flex flex-wrap items-center justify-between gap-2">
+      <div className="px-4 py-3.5 border-b border-border flex flex-wrap items-center justify-between gap-2 sm:px-5">
         <h2 className="text-[15px] font-bold tracking-tight">Бараа</h2>
         <div className="flex items-center gap-3">
           <span className="text-[12px] text-muted-foreground">
@@ -188,10 +272,107 @@ export function OrderLinesEditor({
       </div>
 
       {!editing && lockedReason && (
-        <div className="border-b border-border bg-muted/40 px-5 py-2 text-[12px] text-muted-foreground">{lockedReason}</div>
+        <div className="border-b border-border bg-muted/40 px-4 py-2 text-[12px] text-muted-foreground sm:px-5">{lockedReason}</div>
       )}
 
-      <div className="overflow-x-auto">
+      {/* Phones: one line per product, quantity controls on a row of their own —
+          four columns don't fit 360px, and a table that scrolls sideways is no way to edit. */}
+      <div className="sm:hidden">
+        <ul className="divide-y divide-border">
+          {!editing &&
+            lines.map((item) => (
+              <li key={item.id} className="flex items-start gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-semibold leading-snug">{item.name}</div>
+                  <div className="mt-0.5 text-[12px] text-muted-foreground tabular-nums">
+                    {item.qty} × {formatMnt(item.unit_price)}
+                  </div>
+                </div>
+                <div className="shrink-0 text-[13.5px] font-bold tabular-nums">{formatMnt(item.line_total)}</div>
+              </li>
+            ))}
+
+          {editing &&
+            (draft ?? []).map((r) => {
+              const off = r.qty === 0;
+              return (
+                <li key={r.product_id} className={cn("px-4 py-3", r.qty !== r.was && "bg-primary/5")}>
+                  <div className="flex items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className={cn("text-[13px] font-semibold leading-snug", off && "line-through text-muted-foreground")}>
+                        {r.name}
+                      </div>
+                      <div className="mt-0.5 text-[12px] text-muted-foreground tabular-nums">
+                        {formatMnt(r.unit_price)}
+                        {r.was === 0 ? (
+                          <span className="ml-1.5 font-semibold text-primary">· шинээр нэмсэн</span>
+                        ) : r.qty !== r.was ? (
+                          <span className="ml-1.5 font-semibold text-primary">
+                            · {off ? "хасагдана" : `өмнө нь ${r.was}`}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className={cn("shrink-0 text-[13.5px] font-bold tabular-nums", off && "text-muted-foreground")}>
+                      {formatMnt(r.qty * r.unit_price)}
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <QtyStepper row={r} onChange={setQty} disabled={saving} roomy />
+                  </div>
+                </li>
+              );
+            })}
+
+          {editing &&
+            gifts.map((g) => (
+              <li key={g.id} className="flex items-start gap-3 px-4 py-3 text-muted-foreground">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] leading-snug">{g.name}</div>
+                  <div className="text-[11.5px]">{hasDeals ? "Бэлэг — хадгалахад дахин бодогдоно" : "Бэлэг"}</div>
+                </div>
+                <div className="shrink-0 text-[13.5px] font-semibold tabular-nums">{g.qty}ш</div>
+              </li>
+            ))}
+        </ul>
+
+        {!editing && (
+          <div className="space-y-1.5 border-t border-border bg-muted/40 px-4 py-3 text-[13px]">
+            <div className="flex justify-between text-muted-foreground">
+              <span>Дэд дүн</span>
+              <span className="tabular-nums">{formatMnt(subtotal)}</span>
+            </div>
+            {discountTotal > 0 && (
+              <div className="flex justify-between text-emerald-700 dark:text-emerald-400">
+                <span>
+                  Хямдрал
+                  {paymentMethod === "cash" && " · Бэлэн 2%"}
+                </span>
+                <span className="tabular-nums">−{formatMnt(discountTotal)}</span>
+              </div>
+            )}
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="font-semibold">
+                Нийт төлөх
+                {paymentMethod && (
+                  <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10.5px] font-bold text-muted-foreground ring-1 ring-border">
+                    {PAYMENT_METHOD_LABELS[paymentMethod] ?? paymentMethod}
+                  </span>
+                )}
+              </span>
+              <span className="text-[16px] font-bold tabular-nums">{formatMnt(total)}</span>
+            </div>
+            {orderedTotal !== null && Math.round(orderedTotal) !== Math.round(total) && (
+              <div className="flex justify-between text-[12px] text-muted-foreground">
+                <span>Анх захиалсан дүн</span>
+                <span className="tabular-nums line-through">{formatMnt(orderedTotal)}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="hidden overflow-x-auto sm:block">
         <table className="w-full text-[13px] [&_tbody_tr:nth-child(even)]:bg-muted/45">
           <thead className="bg-muted text-[11px] uppercase tracking-[0.08em] font-bold text-foreground/70">
             <tr>
@@ -233,69 +414,7 @@ export function OrderLinesEditor({
                       ) : null}
                     </td>
                     <td className="px-3 py-2.5">
-                      <div className="flex items-center justify-center gap-1">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-9 w-9"
-                          onClick={() => setQty(r.product_id, r.qty - 1)}
-                          disabled={saving || r.qty <= 0}
-                          aria-label={`${r.name} нэгээр хасах`}
-                        >
-                          <Minus className="h-3.5 w-3.5" />
-                        </Button>
-                        <Input
-                          type="number"
-                          inputMode="numeric"
-                          min={0}
-                          step={1}
-                          value={r.qty === 0 ? "" : r.qty}
-                          placeholder="0"
-                          onChange={(e) => setQty(r.product_id, Number(e.target.value))}
-                          disabled={saving}
-                          className="h-9 w-16 text-center tabular-nums"
-                          aria-label={`${r.name} тоо`}
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-9 w-9"
-                          onClick={() => setQty(r.product_id, r.qty + 1)}
-                          disabled={saving}
-                          aria-label={`${r.name} нэгээр нэмэх`}
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </Button>
-                        {off ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-9 w-9 text-muted-foreground"
-                            onClick={() => setQty(r.product_id, r.was)}
-                            disabled={saving}
-                            aria-label={`${r.name} буцааж оруулах`}
-                            title="Буцааж оруулах"
-                          >
-                            <Undo2 className="h-4 w-4" />
-                          </Button>
-                        ) : (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-9 w-9 text-muted-foreground"
-                            onClick={() => setQty(r.product_id, 0)}
-                            disabled={saving}
-                            aria-label={`${r.name} хасах`}
-                            title="Захиалгаас хасах"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
+                      <QtyStepper row={r} onChange={setQty} disabled={saving} />
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{formatMnt(r.unit_price)}</td>
                     <td className={cn("px-5 py-2.5 text-right font-bold tabular-nums", off && "text-muted-foreground")}>
@@ -373,7 +492,7 @@ export function OrderLinesEditor({
       {editing && (
         <div className="border-t border-border">
           {/* Add a product from the store's price list. */}
-          <div className="px-5 py-3">
+          <div className="px-4 py-3 sm:px-5">
             {!picker ? (
               <Button type="button" variant="outline" size="sm" onClick={openPicker} disabled={saving}>
                 <Plus className="h-3.5 w-3.5" />
@@ -436,7 +555,7 @@ export function OrderLinesEditor({
           </div>
 
           {/* Why — shown in the order's history. */}
-          <div className="border-t border-border px-5 py-3">
+          <div className="border-t border-border px-4 py-3 sm:px-5">
             <div className="mb-1.5 text-[12px] font-semibold">Шалтгаан</div>
             <div className="flex flex-wrap gap-1.5">
               {REASONS.map((r) => (
@@ -460,7 +579,7 @@ export function OrderLinesEditor({
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 border-t border-border bg-muted/40 px-5 py-3">
+          <div className="flex flex-wrap items-center gap-3 border-t border-border bg-muted/40 px-4 py-3 sm:px-5">
             <div className="mr-auto min-w-0">
               <div className="text-[11.5px] text-muted-foreground">
                 {changes.length === 0 ? "Өөрчлөлт алга" : `${changes.length} бараа өөрчлөгдөнө`}
